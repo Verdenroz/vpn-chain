@@ -36,6 +36,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.verdenroz.vpnchain.core.common.currentTimeMillis
+import com.verdenroz.vpnchain.core.common.formatBytes
+import com.verdenroz.vpnchain.core.common.formatDuration
+import com.verdenroz.vpnchain.core.common.formatRate
 import com.verdenroz.vpnchain.core.designsystem.component.IndicatorLamp
 import com.verdenroz.vpnchain.core.designsystem.component.PanelButton
 import com.verdenroz.vpnchain.core.designsystem.component.RouteDisplay
@@ -50,13 +54,9 @@ import com.verdenroz.vpnchain.core.domain.ChainHop
 import com.verdenroz.vpnchain.core.domain.ChainRoute
 import com.verdenroz.vpnchain.core.domain.HopEvidence
 import com.verdenroz.vpnchain.core.domain.HopRole
-import com.verdenroz.vpnchain.core.common.currentTimeMillis
-import com.verdenroz.vpnchain.core.common.formatBytes
-import com.verdenroz.vpnchain.core.common.formatDuration
-import com.verdenroz.vpnchain.core.common.formatRate
 import com.verdenroz.vpnchain.core.model.ChainStatus
-import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.KillSwitchState
+import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.ui.SectionLabel
 import com.verdenroz.vpnchain.core.ui.asString
