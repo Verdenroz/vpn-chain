@@ -51,6 +51,9 @@ import com.verdenroz.vpnchain.core.domain.ChainRoute
 import com.verdenroz.vpnchain.core.domain.HopEvidence
 import com.verdenroz.vpnchain.core.domain.HopRole
 import com.verdenroz.vpnchain.core.common.currentTimeMillis
+import com.verdenroz.vpnchain.core.common.formatBytes
+import com.verdenroz.vpnchain.core.common.formatDuration
+import com.verdenroz.vpnchain.core.common.formatRate
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.KillSwitchState

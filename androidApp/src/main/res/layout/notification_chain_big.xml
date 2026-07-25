@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/notification_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:singleLine="true"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification.Title" />
+
+    <TextView
+        android:id="@+id/notification_metrics"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:singleLine="true"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+
+    <TextView
+        android:id="@+id/notification_traffic"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:singleLine="true"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+
+    <Chronometer
+        android:id="@+id/notification_uptime"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:singleLine="true"
+        android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+
+    <TextView
+        android:id="@+id/notification_disconnect"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="10dp"
+        android:padding="6dp"
+        android:text="@string/notification_disconnect"
+        android:textAllCaps="true"
+        android:textColor="@color/notification_disconnect"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+</LinearLayout>

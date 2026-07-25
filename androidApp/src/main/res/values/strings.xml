@@ -12,7 +12,7 @@
     <string name="widget_toggle_label">Chain toggle</string>
     <string name="widget_toggle_description">Connect or disconnect the chain with one tap</string>
     <string name="widget_controls_label">Chain controls</string>
-    <string name="widget_controls_description">Toggle the chain and import a profile by QR</string>
+    <string name="widget_controls_description">Toggle the chain and scan a profile QR; resize taller for live metrics</string>
     <string name="widget_scan_qr">Scan QR</string>
 
     <string name="notification_disconnect">Disconnect</string>
@@ -21,4 +21,6 @@
     <string name="notification_measuring">Measuring…</string>
     <string name="notification_evidence_configured">configured</string>
     <string name="notification_evidence_recalled">recalled</string>
+    <string name="notification_uptime_format">Up %s</string>
+    <string name="notification_traffic">↓ %1$s · ↑ %2$s · %3$s total</string>
 </resources>

@@ -5,14 +5,21 @@ import androidx.glance.appwidget.updateAll
 import com.verdenroz.vpnchain.app.di.appModules
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
+import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.notification.ChainNotificationUpdater
 import com.verdenroz.vpnchain.widget.ChainControlsWidget
 import com.verdenroz.vpnchain.widget.ChainToggleWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
@@ -39,6 +46,7 @@ class VpnChainApplication : Application() {
      * state transitions out to them. The service runs in this process, meaning
      * every transition happens with this collector alive.
      */
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun pushChainStateToWidgets() {
         val chainRepository = get<ChainRepository>()
         val profileRepository = get<ProfileRepository>()
@@ -52,5 +60,27 @@ class VpnChainApplication : Application() {
                     ChainControlsWidget().updateAll(this@VpnChainApplication)
                 }
         }
+        // Slow tick while connected so the controls widget's metrics readout
+        // ages by seconds, not by whenever state last changed.
+        appScope.launch {
+            chainRepository.status.map { it.state == TunnelState.Connected }.distinctUntilChanged()
+                .flatMapLatest { connected ->
+                    if (connected) {
+                        flow {
+                            while (true) {
+                                delay(WIDGET_METRICS_REFRESH_MS)
+                                emit(Unit)
+                            }
+                        }
+                    } else {
+                        emptyFlow()
+                    }
+                }
+                .collect { ChainControlsWidget().updateAll(this@VpnChainApplication) }
+        }
+    }
+
+    private companion object {
+        const val WIDGET_METRICS_REFRESH_MS = 30_000L
     }
 }
