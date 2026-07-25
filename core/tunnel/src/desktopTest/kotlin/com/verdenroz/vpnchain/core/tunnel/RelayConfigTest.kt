@@ -13,6 +13,48 @@ private val TUN_WITH_ENTRY = """
                 "type": "tun",
                 "tag": "tun-in",
                 "address": [
+                    "10.19.19.1/30",
+                    "fdfe:dcba:9876::1/126"
+                ],
+                "mtu": 1280
+            }
+        ],
+        "endpoints": [
+            {
+                "type": "wireguard",
+                "tag": "proton-entry",
+                "peers": [
+                    {
+                        "address": "146.70.198.34",
+                        "port": 51820
+                    }
+                ]
+            }
+        ],
+        "outbounds": [
+            {
+                "type": "vless",
+                "server": "89.127.235.38",
+                "server_port": 443
+            }
+        ]
+    }
+""".trimIndent()
+
+/** A NetShield DNS server also has a bare "server": "<ip>" field, and — being
+ *  in the "dns" block — renders before "outbounds" in the real config. */
+private val TUN_WITH_NETSHIELD_DNS = """
+    {
+        "dns": {
+            "servers": [
+                { "type": "udp", "tag": "dns-proton", "server": "10.2.0.1", "detour": "proton-entry" }
+            ]
+        },
+        "inbounds": [
+            {
+                "type": "tun",
+                "tag": "tun-in",
+                "address": [
                     "10.19.19.1/30"
                 ],
                 "mtu": 1280
@@ -107,6 +149,17 @@ class RelayConfigTest {
     @Test
     fun `returns nothing when the config names no addresses`() {
         assertTrue(RelayConfig.exemptIps("""{"outbounds":[]}""").isEmpty())
+    }
+
+    /** Regression: a NetShield DNS server's bare "server" field rendering
+     *  ahead of the real outbound must not steal the VPS's exemption slot —
+     *  that strands the machine with the actual relay firewalled off. */
+    @Test
+    fun `exempts the vps, not the netshield dns server, when both are present`() {
+        val exempt = RelayConfig.exemptIps(TUN_WITH_NETSHIELD_DNS)
+
+        assertEquals(listOf("89.127.235.38", "146.70.198.34"), exempt)
+        assertFalse("10.2.0.1" in exempt)
     }
 }
 

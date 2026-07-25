@@ -37,6 +37,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_fiel
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_vless_uuid
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_vps_ip
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_address
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_dns
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_endpoint_host
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_endpoint_port
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_peer_public_key
@@ -75,6 +76,7 @@ fun ProfileForm(
             (initial?.protonEntry?.endpointPort ?: ProtonWireGuardEntry.DEFAULT_ENDPOINT_PORT).toString(),
         )
     }
+    var wgDns by remember(initial) { mutableStateOf(initial?.protonEntry?.dns ?: "") }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -127,6 +129,7 @@ fun ProfileForm(
             wgPort,
             numeric = true,
         ) { wgPort = it }
+        PanelField(stringResource(Res.string.settings_field_wg_dns), wgDns) { wgDns = it }
 
         val valid = vpsIp.isNotBlank() && uuid.isNotBlank() &&
             pubKey.isNotBlank() && shortId.isNotBlank()
@@ -149,6 +152,7 @@ fun ProfileForm(
                             endpointHost = wgHost.trim(),
                             endpointPort = wgPort.toIntOrNull()
                                 ?: ProtonWireGuardEntry.DEFAULT_ENDPOINT_PORT,
+                            dns = wgDns.trim().ifBlank { null },
                         )
                     } else {
                         null

@@ -55,25 +55,17 @@ object SingBoxConfigFactory {
         val entry = profile.protonEntry
         return render {
             putInfoLog()
-            putJsonObject("dns") {
-                putJsonArray("servers") {
-                    addJsonObject {
-                        put("type", "https")
-                        put("tag", "dns-remote")
-                        put("server", "1.1.1.1")
-                        put("detour", VLESS_TAG)
-                    }
-                }
-                put("final", "dns-remote")
-                put("strategy", "ipv4_only")
-            }
+            putJsonObject("dns") { putDnsServers(entry) }
             putJsonArray("inbounds") {
                 addJsonObject {
                     put("type", "tun")
                     put("tag", "tun-in")
                     // 10.19.19.1/30 avoids the common Docker 172.16/12 bridge range
                     // (sing-box's usual 172.19.0.1 default collides with br-* bridges).
-                    putJsonArray("address") { add("10.19.19.1/30") }
+                    // The ULA address is required too: without it auto_route only
+                    // programs an IPv4 default route, so IPv6 traffic skips the tun
+                    // entirely and leaks straight out the real interface.
+                    putJsonArray("address") { add("10.19.19.1/30"); add("fdfe:dcba:9876::1/126") }
                     // Default TUN MTU is 9000; capped at 1280 to nest inside the Proton
                     // WG tunnel (also 1280), else 1400 for VLESS/TLS headroom under 1500.
                     put("mtu", if (entry != null) 1280 else 1400)
@@ -122,6 +114,33 @@ object SingBoxConfigFactory {
     // info (not warn) so the Logs screen shows connection/handshake activity.
     private fun JsonObjectBuilder.putInfoLog() =
         putJsonObject("log") { put("level", "info"); put("timestamp", true) }
+
+    /**
+     * A Proton NetShield DNS IP must be dialed through the Proton peer itself
+     * (it's Proton's own internal resolver) — routing it via the relay like the
+     * public fallback would just make it unreachable, not merely unfiltered.
+     */
+    private fun JsonObjectBuilder.putDnsServers(entry: ProtonWireGuardEntry?) {
+        putJsonArray("servers") {
+            if (entry?.dns != null) {
+                addJsonObject {
+                    put("type", "udp")
+                    put("tag", "dns-proton")
+                    put("server", entry.dns)
+                    put("detour", PROTON_ENTRY_TAG)
+                }
+            } else {
+                addJsonObject {
+                    put("type", "https")
+                    put("tag", "dns-remote")
+                    put("server", "1.1.1.1")
+                    put("detour", VLESS_TAG)
+                }
+            }
+        }
+        put("final", if (entry?.dns != null) "dns-proton" else "dns-remote")
+        put("strategy", "ipv4_only")
+    }
 
     private fun JsonArrayBuilder.addDirectOutbound() =
         addJsonObject { put("type", "direct"); put("tag", "direct") }

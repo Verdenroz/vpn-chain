@@ -83,6 +83,37 @@ class SecretsEnvParserTest {
         assertEquals(ProtonWireGuardEntry.DEFAULT_ENDPOINT_PORT, entry.endpointPort)
     }
 
+    @Test
+    fun `carries the netshield dns line when present`() {
+        val withDns = SecretsEnvParser.parse(
+            """
+            $RELAY_ONLY
+            PROTON_ENTRY_PRIVKEY=priv
+            PROTON_ENTRY_ADDRESS=10.2.0.2/32
+            PROTON_ENTRY_PEER_PUBKEY=peer
+            PROTON_ENTRY_HOST=146.70.198.34
+            PROTON_ENTRY_DNS=10.2.0.1
+            """.trimIndent(),
+        ).getOrThrow()
+
+        assertEquals("10.2.0.1", assertNotNull(withDns.protonEntry).dns)
+    }
+
+    @Test
+    fun `dns stays null when the wireguard config had no dns line`() {
+        val complete = SecretsEnvParser.parse(
+            """
+            $RELAY_ONLY
+            PROTON_ENTRY_PRIVKEY=priv
+            PROTON_ENTRY_ADDRESS=10.2.0.2/32
+            PROTON_ENTRY_PEER_PUBKEY=peer
+            PROTON_ENTRY_HOST=146.70.198.34
+            """.trimIndent(),
+        ).getOrThrow()
+
+        assertNull(assertNotNull(complete.protonEntry).dns)
+    }
+
     /** A half-filled entry hop must not silently become a partial tunnel. */
     @Test
     fun `drops the entry hop when a wireguard key is missing`() {
@@ -102,6 +133,26 @@ class SecretsEnvParserTest {
         val profile = SecretsEnvParser.parse("$RELAY_ONLY\nSERVER_PORT=https").getOrThrow()
 
         assertEquals(ChainProfile.DEFAULT_SERVER_PORT, profile.serverPort)
+    }
+
+    /** format() feeds the QR pairing payload, so a NetShield DNS entry must
+     *  survive the round trip onto the paired device too. */
+    @Test
+    fun `format round-trips the netshield dns line through parse`() {
+        val original = SecretsEnvParser.parse(
+            """
+            $RELAY_ONLY
+            PROTON_ENTRY_PRIVKEY=priv
+            PROTON_ENTRY_ADDRESS=10.2.0.2/32
+            PROTON_ENTRY_PEER_PUBKEY=peer
+            PROTON_ENTRY_HOST=146.70.198.34
+            PROTON_ENTRY_DNS=10.2.0.1
+            """.trimIndent(),
+        ).getOrThrow()
+
+        val roundTripped = SecretsEnvParser.parse(SecretsEnvParser.format(original)).getOrThrow()
+
+        assertEquals("10.2.0.1", roundTripped.protonEntry?.dns)
     }
 
     @Test

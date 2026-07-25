@@ -43,6 +43,7 @@
     <string name="settings_field_wg_peer_public_key">wg peer public key</string>
     <string name="settings_field_wg_endpoint_host">wg endpoint host</string>
     <string name="settings_field_wg_endpoint_port">wg endpoint port</string>
+    <string name="settings_field_wg_dns">wg dns (netshield, optional)</string>
     <string name="settings_save">save</string>
     <string name="settings_clear">clear</string>
     <string name="settings_theme_system">system</string>

@@ -25,11 +25,12 @@ private fun profile(entry: ProtonWireGuardEntry? = null) = ChainProfile(
     protonEntry = entry,
 )
 
-private fun entry() = ProtonWireGuardEntry(
+private fun entry(dns: String? = null) = ProtonWireGuardEntry(
     privateKey = "priv",
     address = "10.2.0.2/32",
     peerPublicKey = "peer",
     endpointHost = "146.70.198.34",
+    dns = dns,
 )
 
 private fun parse(raw: String): JsonObject = Json.parseToJsonElement(raw).jsonObject
@@ -78,9 +79,20 @@ class SingBoxConfigFactoryTest {
         val config = parse(SingBoxConfigFactory.androidChainConfig(profile()))
 
         val tun = config.array("inbounds").single().jsonObject
-        val address = tun.array("address").single().jsonPrimitive.content
-        assertEquals("10.19.19.1/30", address)
-        assertFalse(address.startsWith("172."))
+        val addresses = tun.array("address").map { it.jsonPrimitive.content }
+        assertEquals("10.19.19.1/30", addresses.first())
+        assertFalse(addresses.first().startsWith("172."))
+    }
+
+    /** Without an IPv6 tun address, auto_route only installs an IPv4 default
+     *  route, so IPv6 traffic silently skips the tunnel instead of failing shut. */
+    @Test
+    fun `tun carries an ipv6 address so auto_route can't skip that family`() {
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile()))
+
+        val addresses = config.array("inbounds").single().jsonObject.array("address")
+            .map { it.jsonPrimitive.content }
+        assertTrue(addresses.any { ":" in it }, "expected an IPv6 CIDR alongside the IPv4 one: $addresses")
     }
 
     @Test
@@ -128,12 +140,36 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `dns is resolved through the relay, never on the local network`() {
+    fun `dns is resolved through the relay when no netshield dns is configured`() {
         val config = parse(SingBoxConfigFactory.androidChainConfig(profile(entry())))
+
+        val dns = config.getValue("dns").jsonObject
+        val server = dns.array("servers").single().jsonObject
+        assertEquals("vless-proxy", server.getValue("detour").jsonPrimitive.content)
+        assertEquals("dns-remote", dns.getValue("final").jsonPrimitive.content)
+        assertEquals("ipv4_only", dns.getValue("strategy").jsonPrimitive.content)
+    }
+
+    /** NetShield's filtering only works if its DNS IP is reachable — that IP
+     *  lives on Proton's internal network, so it must dial through the peer. */
+    @Test
+    fun `netshield dns is resolved through the proton peer, not the relay`() {
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(entry(dns = "10.2.0.1"))))
+
+        val dns = config.getValue("dns").jsonObject
+        val server = dns.array("servers").single().jsonObject
+        assertEquals("10.2.0.1", server.getValue("server").jsonPrimitive.content)
+        assertEquals("proton-entry", server.getValue("detour").jsonPrimitive.content)
+        assertEquals("udp", server.getValue("type").jsonPrimitive.content)
+        assertEquals("dns-proton", dns.getValue("final").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `dns falls back to the relay when there is no entry hop at all`() {
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile()))
 
         val server = config.getValue("dns").jsonObject.array("servers").single().jsonObject
         assertEquals("vless-proxy", server.getValue("detour").jsonPrimitive.content)
-        assertEquals("ipv4_only", config.getValue("dns").jsonObject.getValue("strategy").jsonPrimitive.content)
     }
 
     @Test

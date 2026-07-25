@@ -69,6 +69,6 @@ internal object RelayConfig {
     private val LISTEN_PORT = Regex("\"listen_port\"\\s*:\\s*(\\d+)")
     private val TUN_INBOUND = Regex("\"type\"\\s*:\\s*\"tun\"")
     private val WIREGUARD = Regex("\"type\"\\s*:\\s*\"wireguard\"")
-    private val SERVER_IP = Regex("\"server\"\\s*:\\s*\"([0-9.]+)\"")
+    private val SERVER_IP = Regex("\"server\"\\s*:\\s*\"([0-9.]+)\"\\s*,\\s*\"server_port\"")
     private val PEER_ADDRESS = Regex("\"address\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"port\"")
 }

@@ -13,7 +13,7 @@ set -euo pipefail
 
 SECRETS_FILE="${VPN_CHAIN_SECRETS:-$HOME/.config/vpn-chain/secrets.env}"
 
-c_cyan=$'\033[1;36m'; c_red=$'\033[1;31m'; c_grn=$'\033[1;32m'; c_off=$'\033[0m'
+c_cyan=$'\033[1;36m'; c_red=$'\033[1;31m'; c_grn=$'\033[1;32m'; c_yel=$'\033[1;33m'; c_off=$'\033[0m'
 log()  { printf '%s[import]%s %s\n' "$c_cyan" "$c_off" "$*"; }
 die()  { printf '%s[import]%s %s\n' "$c_red"  "$c_off" "$*" >&2; exit 1; }
 
@@ -37,10 +37,13 @@ PRIVKEY="$(kv PrivateKey)"
 PEER_PUBKEY="$(kv PublicKey)"     # only [Peer] carries PublicKey
 RAW_ADDRESS="$(kv Address)"
 RAW_ENDPOINT="$(kv Endpoint)"
+DNS="$(kv DNS)"
 
 # First IPv4 CIDR from the (possibly comma-separated) Address line.
 ADDRESS="$(printf '%s' "$RAW_ADDRESS" | tr ',' '\n' \
   | grep -E '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+' | head -n1 | tr -d '[:space:]' || true)"
+# First DNS entry, in case the line lists a fallback after the primary.
+DNS="$(printf '%s' "$DNS" | tr ',' '\n' | head -n1 | tr -d '[:space:]' || true)"
 
 # Split host:port; strip [] from an IPv6 host.
 HOST="${RAW_ENDPOINT%:*}"
@@ -64,7 +67,7 @@ trap 'rm -f "$tmp"' EXIT
 
 # Carry over everything except any prior PROTON_ENTRY_* keys.
 if [ -f "$SECRETS_FILE" ]; then
-  grep -vE '^(PROTON_ENTRY_PRIVKEY|PROTON_ENTRY_ADDRESS|PROTON_ENTRY_PEER_PUBKEY|PROTON_ENTRY_HOST|PROTON_ENTRY_PORT)=' \
+  grep -vE '^(PROTON_ENTRY_PRIVKEY|PROTON_ENTRY_ADDRESS|PROTON_ENTRY_PEER_PUBKEY|PROTON_ENTRY_HOST|PROTON_ENTRY_PORT|PROTON_ENTRY_DNS)=' \
     "$SECRETS_FILE" > "$tmp" || true
 fi
 {
@@ -73,6 +76,7 @@ fi
   printf 'PROTON_ENTRY_PEER_PUBKEY=%s\n' "$PEER_PUBKEY"
   printf 'PROTON_ENTRY_HOST=%s\n'       "$HOST"
   printf 'PROTON_ENTRY_PORT=%s\n'       "$PORT"
+  if [ -n "$DNS" ]; then printf 'PROTON_ENTRY_DNS=%s\n' "$DNS"; fi
 } >> "$tmp"
 
 mv "$tmp" "$SECRETS_FILE"
@@ -86,4 +90,9 @@ log "  PROTON_ENTRY_ADDRESS     = $ADDRESS"
 log "  PROTON_ENTRY_PEER_PUBKEY = $PEER_PUBKEY"
 log "  PROTON_ENTRY_HOST        = $HOST"
 log "  PROTON_ENTRY_PORT        = $PORT"
+if [ -n "$DNS" ]; then
+  log "  PROTON_ENTRY_DNS         = $DNS (NetShield preserved)"
+else
+  log "  PROTON_ENTRY_DNS         = ${c_yel}(none — this .conf has no DNS line, NetShield won't apply)${c_off}"
+fi
 log "Now: in the app, Settings → Import ~/.config/vpn-chain/secrets.env"
