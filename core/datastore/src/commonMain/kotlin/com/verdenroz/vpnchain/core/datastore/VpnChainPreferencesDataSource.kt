@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
 import kotlinx.coroutines.flow.Flow
@@ -22,10 +23,37 @@ class VpnChainPreferencesDataSource(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
+    val profiles: Flow<List<SavedProfile>> = dataStore.data.map(::readProfiles)
+
+    /** The selected profile, or the first one when the selection is stale. */
     val profile: Flow<ChainProfile?> = dataStore.data.map { prefs ->
-        prefs[PROFILE_KEY]?.let { raw ->
-            runCatching { json.decodeFromString<ChainProfile>(raw) }.getOrNull()
+        val saved = readProfiles(prefs)
+        val activeId = prefs[ACTIVE_PROFILE_ID_KEY]
+        (saved.firstOrNull { it.id == activeId } ?: saved.firstOrNull())?.profile
+    }
+
+    val activeProfileId: Flow<String?> = dataStore.data.map { prefs ->
+        val saved = readProfiles(prefs)
+        val activeId = prefs[ACTIVE_PROFILE_ID_KEY]
+        (saved.firstOrNull { it.id == activeId } ?: saved.firstOrNull())?.id
+    }
+
+    /**
+     * Migration is read-time and non-destructive: an install predating the
+     * profile list is surfaced as its single profile, and the legacy key is
+     * only retired once something writes the new shape. An upgrade that goes
+     * wrong therefore looks like nothing happened, not like a wiped config.
+     */
+    private fun readProfiles(prefs: Preferences): List<SavedProfile> {
+        prefs[PROFILES_KEY]?.let { raw ->
+            runCatching { json.decodeFromString<List<SavedProfile>>(raw) }
+                .getOrNull()
+                ?.let { return it }
         }
+        val legacy = prefs[PROFILE_KEY]
+            ?.let { raw -> runCatching { json.decodeFromString<ChainProfile>(raw) }.getOrNull() }
+            ?: return emptyList()
+        return listOf(SavedProfile(id = LEGACY_PROFILE_ID, name = legacy.vpsIp, profile = legacy))
     }
 
     val settings: Flow<UserSettings> = dataStore.data.map { prefs ->
@@ -62,12 +90,25 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { it[LAST_ORIGIN_IP_KEY] = ip }
     }
 
-    suspend fun setProfile(profile: ChainProfile) {
-        dataStore.edit { it[PROFILE_KEY] = json.encodeToString(profile) }
+    suspend fun setProfiles(profiles: List<SavedProfile>) {
+        dataStore.edit { prefs ->
+            prefs[PROFILES_KEY] = json.encodeToString(profiles)
+            // The single-slot key has been folded into the list by now; leaving
+            // it would resurrect a stale profile if the list ever failed to parse.
+            prefs.remove(PROFILE_KEY)
+        }
+    }
+
+    suspend fun setActiveProfileId(id: String) {
+        dataStore.edit { it[ACTIVE_PROFILE_ID_KEY] = id }
     }
 
     suspend fun clearProfile() {
-        dataStore.edit { it.remove(PROFILE_KEY) }
+        dataStore.edit {
+            it.remove(PROFILE_KEY)
+            it.remove(PROFILES_KEY)
+            it.remove(ACTIVE_PROFILE_ID_KEY)
+        }
     }
 
     suspend fun setThemeConfig(themeConfig: ThemeConfig) {
@@ -100,6 +141,9 @@ class VpnChainPreferencesDataSource(
 
     private companion object {
         val PROFILE_KEY = stringPreferencesKey("chain_profile_json")
+        val PROFILES_KEY = stringPreferencesKey("chain_profiles_json")
+        val ACTIVE_PROFILE_ID_KEY = stringPreferencesKey("active_profile_id")
+        const val LEGACY_PROFILE_ID = "legacy"
         val THEME_KEY = stringPreferencesKey("theme_config")
         val SYSTEM_WIDE_TUN_KEY = booleanPreferencesKey("system_wide_tun")
         val KILL_SWITCH_ENABLED_KEY = booleanPreferencesKey("kill_switch_enabled")

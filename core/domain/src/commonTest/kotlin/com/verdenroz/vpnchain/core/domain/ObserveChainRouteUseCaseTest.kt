@@ -9,6 +9,7 @@ import com.verdenroz.vpnchain.core.geoip.PublicIpSample
 import com.verdenroz.vpnchain.core.geoip.RouteGeolocator
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
 import com.verdenroz.vpnchain.core.model.TunnelState
@@ -235,7 +236,13 @@ private class FakeOrigins(initial: String?) : OriginRepository {
 
 private class FakeProfiles(profile: ChainProfile?) : ProfileRepository {
     override val profile: Flow<ChainProfile?> = MutableStateFlow(profile)
+    override val profiles: Flow<List<SavedProfile>> = MutableStateFlow(emptyList())
+    override val activeProfileId: Flow<String?> = MutableStateFlow(null)
     override suspend fun save(profile: ChainProfile) = Unit
+    override suspend fun add(name: String, profile: ChainProfile) = "id"
+    override suspend fun rename(id: String, name: String) = Unit
+    override suspend fun delete(id: String) = Unit
+    override suspend fun setActive(id: String) = Unit
     override suspend fun clear() = Unit
     override suspend fun importFromSecretsEnv(text: String) = Result.failure<ChainProfile>(
         UnsupportedOperationException("not used in these tests"),
