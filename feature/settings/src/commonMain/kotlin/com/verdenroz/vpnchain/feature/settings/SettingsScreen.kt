@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.verdenroz.vpnchain.core.common.Platform
@@ -374,7 +375,10 @@ private fun QrPairingPanel(profile: ChainProfile) {
             Image(
                 bitmap = it,
                 contentDescription = null,
-                modifier = Modifier.size(220.dp),
+                // Nearest-neighbor, not the default bilinear: the QR is a phone
+                // camera's target, so blurred module edges hurt scan reliability.
+                filterQuality = FilterQuality.None,
+                modifier = Modifier.size(280.dp),
             )
         }
     }
