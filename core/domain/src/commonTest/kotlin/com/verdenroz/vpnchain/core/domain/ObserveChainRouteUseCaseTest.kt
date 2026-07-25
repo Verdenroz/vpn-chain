@@ -243,7 +243,9 @@ private class FakeProfiles(profile: ChainProfile?) : ProfileRepository {
 
 private class FakeChain(override val status: Flow<ChainStatus>) : ChainRepository {
     override suspend fun connect() = Result.success(Unit)
+    override suspend fun reconnect() = Result.success(Unit)
     override suspend fun disconnect() = Unit
+    override val connectionIntent: Flow<Boolean> = MutableStateFlow(false)
     override val killSwitchGuidanceSupported = false
     override val alwaysOnDetected: Flow<Boolean> = MutableStateFlow(false)
     override fun openSystemVpnSettings() = Unit

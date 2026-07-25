@@ -22,4 +22,15 @@ data class UserSettings(
      * — relay-only mode relies on Proton's own kill switch, Android on Always-on VPN.
      */
     val killSwitchEnabled: Boolean = true,
+    /**
+     * Bring the chain up on app start when a profile exists. Off by default:
+     * connecting without being asked is a surprise, not a convenience.
+     */
+    val autoConnectOnLaunch: Boolean = false,
+    /**
+     * Re-establish the chain after an unexpected drop or a network change.
+     * On by default — a tunnel that dies silently is the failure mode this
+     * whole app exists to avoid.
+     */
+    val autoReconnect: Boolean = true,
 )

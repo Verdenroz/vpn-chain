@@ -35,7 +35,21 @@ class VpnChainPreferencesDataSource(
                 ?: ThemeConfig.FOLLOW_SYSTEM,
             systemWideTun = prefs[SYSTEM_WIDE_TUN_KEY] ?: true,
             killSwitchEnabled = prefs[KILL_SWITCH_ENABLED_KEY] ?: true,
+            autoConnectOnLaunch = prefs[AUTO_CONNECT_ON_LAUNCH_KEY] ?: false,
+            autoReconnect = prefs[AUTO_RECONNECT_KEY] ?: true,
         )
+    }
+
+    /**
+     * Whether the user last asked to be connected. Survives restarts so a
+     * relaunch or a reboot can tell "they turned it off" apart from "it died",
+     * which is the difference between resuming and staying down.
+     */
+    val connectionIntent: Flow<Boolean> =
+        dataStore.data.map { prefs -> prefs[CONNECTION_INTENT_KEY] ?: false }
+
+    suspend fun setConnectionIntent(wanted: Boolean) {
+        dataStore.edit { it[CONNECTION_INTENT_KEY] = wanted }
     }
 
     /** Last public IP observed while untunnelled. Sensitive (it is the user's
@@ -66,11 +80,22 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { it[KILL_SWITCH_ENABLED_KEY] = enabled }
     }
 
+    suspend fun setAutoConnectOnLaunch(enabled: Boolean) {
+        dataStore.edit { it[AUTO_CONNECT_ON_LAUNCH_KEY] = enabled }
+    }
+
+    suspend fun setAutoReconnect(enabled: Boolean) {
+        dataStore.edit { it[AUTO_RECONNECT_KEY] = enabled }
+    }
+
     private companion object {
         val PROFILE_KEY = stringPreferencesKey("chain_profile_json")
         val THEME_KEY = stringPreferencesKey("theme_config")
         val SYSTEM_WIDE_TUN_KEY = booleanPreferencesKey("system_wide_tun")
         val KILL_SWITCH_ENABLED_KEY = booleanPreferencesKey("kill_switch_enabled")
         val LAST_ORIGIN_IP_KEY = stringPreferencesKey("last_origin_ip")
+        val AUTO_CONNECT_ON_LAUNCH_KEY = booleanPreferencesKey("auto_connect_on_launch")
+        val AUTO_RECONNECT_KEY = booleanPreferencesKey("auto_reconnect")
+        val CONNECTION_INTENT_KEY = booleanPreferencesKey("connection_intent")
     }
 }
