@@ -38,4 +38,9 @@ data class UserSettings(
      * Persisted only once the OS-level entry is actually written.
      */
     val autoStartOnLogin: Boolean = false,
+    /**
+     * Desktop only: closing the window hides it to the tray instead of quitting.
+     * On by default — a VPN you dismissed is not a VPN you meant to turn off.
+     */
+    val closeToTray: Boolean = true,
 )

@@ -13,6 +13,7 @@ interface SettingsRepository {
     suspend fun setKillSwitchEnabled(enabled: Boolean)
     suspend fun setAutoConnectOnLaunch(enabled: Boolean)
     suspend fun setAutoReconnect(enabled: Boolean)
+    suspend fun setCloseToTray(enabled: Boolean)
 
     /** False where the OS offers no per-user login item (Android, unpackaged runs). */
     val autostartSupported: Boolean
@@ -44,4 +45,6 @@ internal class DefaultSettingsRepository(
         preferences.setAutoConnectOnLaunch(enabled)
     override suspend fun setAutoReconnect(enabled: Boolean) =
         preferences.setAutoReconnect(enabled)
+    override suspend fun setCloseToTray(enabled: Boolean) =
+        preferences.setCloseToTray(enabled)
 }

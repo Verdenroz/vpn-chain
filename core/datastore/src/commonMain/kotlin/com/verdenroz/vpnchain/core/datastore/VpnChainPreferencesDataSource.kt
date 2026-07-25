@@ -38,6 +38,7 @@ class VpnChainPreferencesDataSource(
             autoConnectOnLaunch = prefs[AUTO_CONNECT_ON_LAUNCH_KEY] ?: false,
             autoReconnect = prefs[AUTO_RECONNECT_KEY] ?: true,
             autoStartOnLogin = prefs[AUTO_START_ON_LOGIN_KEY] ?: false,
+            closeToTray = prefs[CLOSE_TO_TRAY_KEY] ?: true,
         )
     }
 
@@ -93,6 +94,10 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { it[AUTO_START_ON_LOGIN_KEY] = enabled }
     }
 
+    suspend fun setCloseToTray(enabled: Boolean) {
+        dataStore.edit { it[CLOSE_TO_TRAY_KEY] = enabled }
+    }
+
     private companion object {
         val PROFILE_KEY = stringPreferencesKey("chain_profile_json")
         val THEME_KEY = stringPreferencesKey("theme_config")
@@ -103,5 +108,6 @@ class VpnChainPreferencesDataSource(
         val AUTO_RECONNECT_KEY = booleanPreferencesKey("auto_reconnect")
         val CONNECTION_INTENT_KEY = booleanPreferencesKey("connection_intent")
         val AUTO_START_ON_LOGIN_KEY = booleanPreferencesKey("auto_start_on_login")
+        val CLOSE_TO_TRAY_KEY = booleanPreferencesKey("close_to_tray")
     }
 }

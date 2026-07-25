@@ -88,6 +88,10 @@ class SettingsViewModel(
         settingsRepository.setAutoReconnect(enabled)
     }
 
+    fun setCloseToTray(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setCloseToTray(enabled)
+    }
+
     fun setAutoStartOnLogin(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setAutoStartOnLogin(enabled).onFailure { failure ->
             _message.value = SettingsMessage.Error(
