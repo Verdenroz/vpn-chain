@@ -57,6 +57,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_reconnect_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_reconnect_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_automation_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_chain_identity_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_configured_for
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_edit_fields
@@ -133,6 +135,7 @@ fun SettingsRoute(
         onToggleKillSwitch = viewModel::setKillSwitchEnabled,
         onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
         onToggleAutoReconnect = viewModel::setAutoReconnect,
+        onToggleAutoStart = viewModel::setAutoStartOnLogin,
         onOpenSystemVpnSettings = viewModel::openSystemVpnSettings,
         modifier = modifier,
     )
@@ -152,6 +155,7 @@ fun SettingsScreen(
     onToggleKillSwitch: (Boolean) -> Unit,
     onToggleAutoConnect: (Boolean) -> Unit,
     onToggleAutoReconnect: (Boolean) -> Unit,
+    onToggleAutoStart: (Boolean) -> Unit,
     onOpenSystemVpnSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -260,6 +264,17 @@ fun SettingsScreen(
                     checked = uiState.settings.autoReconnect,
                     onCheckedChange = onToggleAutoReconnect,
                 )
+                // Hidden rather than disabled where there is no login item to
+                // write: an unpackaged run has nothing meaningful to register.
+                if (uiState.autostartSupported) {
+                    Spacer(Modifier.height(16.dp))
+                    SettingRow(
+                        title = stringResource(Res.string.settings_auto_start_title),
+                        detail = stringResource(Res.string.settings_auto_start_detail),
+                        checked = uiState.settings.autoStartOnLogin,
+                        onCheckedChange = onToggleAutoStart,
+                    )
+                }
             }
 
             // Android has no proxy-only mode — the tunnel is always TUN — so this

@@ -26,7 +26,7 @@ val dataModule = module {
 
     single<ProfileRepository> { DefaultProfileRepository(get()) }
     single<OriginRepository> { DefaultOriginRepository(get()) }
-    single<SettingsRepository> { DefaultSettingsRepository(get()) }
+    single<SettingsRepository> { DefaultSettingsRepository(get(), get()) }
     single<ConnectivityRepository> { DefaultConnectivityRepository(get()) }
     // Named rather than positional: every collaborator here is resolved by a
     // bare get(), so a reordered parameter would bind silently and wrongly.

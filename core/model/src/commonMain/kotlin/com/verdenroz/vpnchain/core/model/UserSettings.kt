@@ -33,4 +33,9 @@ data class UserSettings(
      * whole app exists to avoid.
      */
     val autoReconnect: Boolean = true,
+    /**
+     * Desktop only: register a login item so the app starts with the session.
+     * Persisted only once the OS-level entry is actually written.
+     */
+    val autoStartOnLogin: Boolean = false,
 )

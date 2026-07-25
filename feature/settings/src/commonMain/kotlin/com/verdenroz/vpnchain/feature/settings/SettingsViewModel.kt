@@ -11,6 +11,7 @@ import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_imported_profile
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_secrets_env_found
@@ -29,6 +30,7 @@ data class SettingsUiState(
     val profile: ChainProfile? = null,
     val killSwitchGuidanceSupported: Boolean = false,
     val alwaysOnDetected: Boolean = false,
+    val autostartSupported: Boolean = false,
 )
 
 /** One-shot user feedback (import result), consumed by the UI. */
@@ -55,6 +57,7 @@ class SettingsViewModel(
                 profile = profile,
                 killSwitchGuidanceSupported = chainRepository.killSwitchGuidanceSupported,
                 alwaysOnDetected = alwaysOnDetected,
+                autostartSupported = settingsRepository.autostartSupported,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -83,6 +86,15 @@ class SettingsViewModel(
 
     fun setAutoReconnect(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setAutoReconnect(enabled)
+    }
+
+    fun setAutoStartOnLogin(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setAutoStartOnLogin(enabled).onFailure { failure ->
+            _message.value = SettingsMessage.Error(
+                failure.message?.let(UiText::Dynamic)
+                    ?: UiText.Resource(Res.string.settings_auto_start_failed),
+            )
+        }
     }
 
     fun saveProfile(profile: ChainProfile) = viewModelScope.launch {

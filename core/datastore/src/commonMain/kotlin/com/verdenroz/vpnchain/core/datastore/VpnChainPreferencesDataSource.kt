@@ -37,6 +37,7 @@ class VpnChainPreferencesDataSource(
             killSwitchEnabled = prefs[KILL_SWITCH_ENABLED_KEY] ?: true,
             autoConnectOnLaunch = prefs[AUTO_CONNECT_ON_LAUNCH_KEY] ?: false,
             autoReconnect = prefs[AUTO_RECONNECT_KEY] ?: true,
+            autoStartOnLogin = prefs[AUTO_START_ON_LOGIN_KEY] ?: false,
         )
     }
 
@@ -88,6 +89,10 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { it[AUTO_RECONNECT_KEY] = enabled }
     }
 
+    suspend fun setAutoStartOnLogin(enabled: Boolean) {
+        dataStore.edit { it[AUTO_START_ON_LOGIN_KEY] = enabled }
+    }
+
     private companion object {
         val PROFILE_KEY = stringPreferencesKey("chain_profile_json")
         val THEME_KEY = stringPreferencesKey("theme_config")
@@ -97,5 +102,6 @@ class VpnChainPreferencesDataSource(
         val AUTO_CONNECT_ON_LAUNCH_KEY = booleanPreferencesKey("auto_connect_on_launch")
         val AUTO_RECONNECT_KEY = booleanPreferencesKey("auto_reconnect")
         val CONNECTION_INTENT_KEY = booleanPreferencesKey("connection_intent")
+        val AUTO_START_ON_LOGIN_KEY = booleanPreferencesKey("auto_start_on_login")
     }
 }
