@@ -280,6 +280,8 @@ private class FakeSettingsRepository(value: UserSettings) : SettingsRepository {
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
+    override val autostartSupported = false
+    override suspend fun setAutoStartOnLogin(enabled: Boolean) = Result.success(Unit)
 }
 
 private class FakeConnectivity : ConnectivityRepository {

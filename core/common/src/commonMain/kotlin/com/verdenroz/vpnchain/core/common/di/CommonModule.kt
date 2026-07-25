@@ -1,5 +1,7 @@
 package com.verdenroz.vpnchain.core.common.di
 
+import com.verdenroz.vpnchain.core.common.autostart.LoginAutostart
+import com.verdenroz.vpnchain.core.common.autostart.createLoginAutostart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,4 +19,5 @@ val commonModule = module {
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
     }
     single(ioDispatcherQualifier) { Dispatchers.IO }
+    single<LoginAutostart> { createLoginAutostart() }
 }

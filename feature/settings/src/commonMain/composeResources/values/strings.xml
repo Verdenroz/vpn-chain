@@ -14,6 +14,9 @@
     <string name="settings_auto_connect_detail">Bring the chain up automatically when the app starts, if a profile is configured.</string>
     <string name="settings_auto_reconnect_title">Reconnect automatically</string>
     <string name="settings_auto_reconnect_detail">Rebuild the chain after an unexpected drop or a network change. Does nothing after you disconnect on purpose.</string>
+    <string name="settings_auto_start_title">Start at login</string>
+    <string name="settings_auto_start_detail">Launch VPN Chain automatically when you sign in to this computer.</string>
+    <string name="settings_auto_start_failed">Could not register the login item.</string>
     <string name="settings_routing_title">routing</string>
     <string name="settings_route_entire_system_title">Route entire system</string>
     <string name="settings_route_entire_system_detail">Send all system traffic through sing-box instead of a local proxy. Needs elevated privileges on the sing-box binary.</string>
