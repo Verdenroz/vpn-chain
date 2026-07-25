@@ -10,6 +10,8 @@ interface SettingsRepository {
     suspend fun setThemeConfig(themeConfig: ThemeConfig)
     suspend fun setSystemWideTun(enabled: Boolean)
     suspend fun setKillSwitchEnabled(enabled: Boolean)
+    suspend fun setAutoConnectOnLaunch(enabled: Boolean)
+    suspend fun setAutoReconnect(enabled: Boolean)
 }
 
 internal class DefaultSettingsRepository(
@@ -22,4 +24,8 @@ internal class DefaultSettingsRepository(
         preferences.setSystemWideTun(enabled)
     override suspend fun setKillSwitchEnabled(enabled: Boolean) =
         preferences.setKillSwitchEnabled(enabled)
+    override suspend fun setAutoConnectOnLaunch(enabled: Boolean) =
+        preferences.setAutoConnectOnLaunch(enabled)
+    override suspend fun setAutoReconnect(enabled: Boolean) =
+        preferences.setAutoReconnect(enabled)
 }

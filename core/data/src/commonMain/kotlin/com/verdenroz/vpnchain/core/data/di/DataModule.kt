@@ -4,7 +4,9 @@ import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.common.di.applicationScopeQualifier
 import com.verdenroz.vpnchain.core.common.di.commonModule
 import com.verdenroz.vpnchain.core.data.ChainRepository
+import com.verdenroz.vpnchain.core.data.ConnectivityRepository
 import com.verdenroz.vpnchain.core.data.DefaultChainRepository
+import com.verdenroz.vpnchain.core.data.DefaultConnectivityRepository
 import com.verdenroz.vpnchain.core.data.DefaultLogRepository
 import com.verdenroz.vpnchain.core.data.DefaultOriginRepository
 import com.verdenroz.vpnchain.core.data.DefaultProfileRepository
@@ -25,7 +27,18 @@ val dataModule = module {
     single<ProfileRepository> { DefaultProfileRepository(get()) }
     single<OriginRepository> { DefaultOriginRepository(get()) }
     single<SettingsRepository> { DefaultSettingsRepository(get()) }
-    single<ChainRepository> { DefaultChainRepository(get(), get(), get(), get()) }
+    single<ConnectivityRepository> { DefaultConnectivityRepository(get()) }
+    // Named rather than positional: every collaborator here is resolved by a
+    // bare get(), so a reordered parameter would bind silently and wrongly.
+    single<ChainRepository> {
+        DefaultChainRepository(
+            controller = get(),
+            profileRepository = get(),
+            settingsRepository = get(),
+            preferences = get(),
+            logger = get(),
+        )
+    }
     single<LogRepository>(createdAtStart = true) {
         DefaultLogRepository(
             controller = get(),
