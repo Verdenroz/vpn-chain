@@ -17,8 +17,8 @@ kotlin {
             implementation(projects.core.common)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.koin.core)
-            implementation(compose.runtime)
-            implementation(compose.components.resources)
+            implementation(libs.compose.runtime)
+            implementation(libs.compose.components.resources)
         }
         androidMain.dependencies {
             implementation(libs.libbox)

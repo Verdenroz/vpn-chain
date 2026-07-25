@@ -12,7 +12,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(projects.core.data)
-            implementation(compose.components.resources)
+            implementation(libs.compose.components.resources)
         }
     }
 }

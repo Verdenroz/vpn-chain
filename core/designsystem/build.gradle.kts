@@ -13,12 +13,12 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(projects.core.model)
-            api(compose.runtime)
-            api(compose.foundation)
-            api(compose.material3)
-            api(compose.materialIconsExtended)
-            implementation(compose.ui)
-            implementation(compose.components.resources)
+            api(libs.compose.runtime)
+            api(libs.compose.foundation)
+            api(libs.compose.material3)
+            api(libs.compose.materialIconsExtended)
+            implementation(libs.compose.ui)
+            implementation(libs.compose.components.resources)
         }
     }
 }
