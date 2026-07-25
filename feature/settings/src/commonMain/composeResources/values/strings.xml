@@ -18,6 +18,8 @@
     <string name="settings_auto_reconnect_title">Reconnect automatically</string>
     <string name="settings_auto_reconnect_detail">Rebuild the chain after an unexpected drop or a network change. Does nothing after you disconnect on purpose.</string>
     <string name="settings_auto_start_title">Start at login</string>
+    <string name="settings_auto_start_title_android">Start on boot</string>
+    <string name="settings_auto_start_detail_android">Bring the chain up once the device finishes starting. Only works if you have already granted VPN permission.</string>
     <string name="settings_auto_start_detail">Launch VPN Chain automatically when you sign in to this computer.</string>
     <string name="settings_auto_start_failed">Could not register the login item.</string>
     <string name="settings_window_title">window</string>
