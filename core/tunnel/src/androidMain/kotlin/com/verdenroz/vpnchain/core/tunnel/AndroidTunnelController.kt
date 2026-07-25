@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.Res
@@ -27,6 +28,7 @@ class AndroidTunnelController(
 
     override val status: StateFlow<ChainStatus> = TunnelBridge.status.asStateFlow()
     override val logs: SharedFlow<String> = TunnelBridge.logs
+    override val stats: StateFlow<SessionStats> = TunnelBridge.stats.asStateFlow()
 
     override val killSwitchGuidanceSupported: Boolean = true
     override val alwaysOnDetected: StateFlow<Boolean> = TunnelBridge.alwaysOnDetected.asStateFlow()

@@ -42,7 +42,7 @@ android {
 dependencies {
     implementation(projects.appCommon)
     implementation(projects.core.tunnel)
-    // Tile/widget surfaces drive the chain through the same use cases the UI does.
+    implementation(projects.core.common)
     implementation(projects.core.data)
     implementation(projects.core.domain)
     implementation(projects.feature.settings)

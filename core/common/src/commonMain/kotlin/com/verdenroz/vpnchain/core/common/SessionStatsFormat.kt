@@ -1,4 +1,4 @@
-package com.verdenroz.vpnchain.feature.chain
+package com.verdenroz.vpnchain.core.common
 
 import kotlin.math.abs
 
@@ -9,7 +9,7 @@ import kotlin.math.abs
  * last digit while traffic flows — a readout that never settles is harder to
  * read than one that rounds.
  */
-internal fun formatBytes(bytes: Long): String {
+fun formatBytes(bytes: Long): String {
     if (bytes < KILO) return "$bytes B"
     var value = bytes.toDouble()
     var unitIndex = -1
@@ -20,13 +20,13 @@ internal fun formatBytes(bytes: Long): String {
     return "${oneDecimal(value)} ${UNITS[unitIndex]}"
 }
 
-internal fun formatRate(bytesPerSecond: Long): String = "${formatBytes(bytesPerSecond)}/s"
+fun formatRate(bytesPerSecond: Long): String = "${formatBytes(bytesPerSecond)}/s"
 
 /**
  * `h:mm:ss` once past an hour, `mm:ss` below it — a leading `0:` on a
  * two-minute session is noise.
  */
-internal fun formatDuration(millis: Long): String {
+fun formatDuration(millis: Long): String {
     val totalSeconds = (millis.coerceAtLeast(0)) / 1_000
     val hours = totalSeconds / 3_600
     val minutes = (totalSeconds % 3_600) / 60

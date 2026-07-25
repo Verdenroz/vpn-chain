@@ -43,6 +43,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
     private val platformInterface = VpnPlatformInterface(this)
     private var commandServer: CommandServer? = null
     private var logClient: CommandClient? = null
+    private var statusClient: CommandClient? = null
     private var tunDescriptor: ParcelFileDescriptor? = null
     private var worker: Thread? = null
 
@@ -107,6 +108,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 commandServer = server
                 server.startOrReloadService(config, OverrideOptions())
                 startLogClient()
+                startStatusClient()
                 TunnelBridge.setState(TunnelState.Connected)
                 updateNotification(getString(R.string.tunnel_notification_connected))
             } catch (t: Throwable) {
@@ -132,6 +134,8 @@ class VpnChainService : VpnService(), CommandServerHandler {
         lockdownPoller.removeCallbacks(lockdownCheck)
         runCatching { logClient?.disconnect() }
         logClient = null
+        runCatching { statusClient?.disconnect() }
+        statusClient = null
         runCatching { commandServer?.closeService() }
         runCatching { commandServer?.close() }
         commandServer = null
@@ -162,6 +166,19 @@ class VpnChainService : VpnService(), CommandServerHandler {
         runCatching { client.connect() }
             .onSuccess { logClient = client }
             .onFailure { TunnelBridge.log("log stream unavailable: ${it.message}") }
+    }
+
+    private fun startStatusClient() {
+        val client = CommandClient(
+            StatusHandler(),
+            CommandClientOptions().apply {
+                addCommand(Libbox.CommandStatus)
+                statusInterval = STATUS_INTERVAL_NS
+            },
+        )
+        runCatching { client.connect() }
+            .onSuccess { statusClient = client }
+            .onFailure { TunnelBridge.log("status stream unavailable: ${it.message}") }
     }
 
     override fun onDestroy() {
@@ -263,6 +280,29 @@ class VpnChainService : VpnService(), CommandServerHandler {
         }
     }
 
+    /** Forwards the engine's periodic traffic counters onto the shared bridge. */
+    private inner class StatusHandler : CommandClientHandler {
+        override fun writeStatus(message: StatusMessage) {
+            if (message.trafficAvailable) {
+                TunnelBridge.updateTraffic(
+                    message.uplinkTotal,
+                    message.downlinkTotal,
+                    message.uplink,
+                    message.downlink,
+                )
+            }
+        }
+        override fun connected() = Unit
+        override fun disconnected(message: String?) = Unit
+        override fun writeLogs(messageList: LogIterator) = Unit
+        override fun clearLogs() = Unit
+        override fun setDefaultLogLevel(level: Int) = Unit
+        override fun initializeClashMode(modeList: StringIterator, currentMode: String) = Unit
+        override fun updateClashMode(newMode: String) = Unit
+        override fun writeConnectionEvents(message: ConnectionEvents) = Unit
+        override fun writeGroups(message: OutboundGroupIterator) = Unit
+    }
+
     /** Forwards engine log lines onto the shared bridge for the Logs screen. */
     private inner class LogHandler : CommandClientHandler {
         override fun writeLogs(messageList: LogIterator) {
@@ -288,6 +328,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         const val NOTIFICATION_ID = 1
         private const val LEGACY_CHANNEL_ID = "vpn-chain"
         private const val LOCKDOWN_POLL_MS = 3_000L
+        private const val STATUS_INTERVAL_NS = 1_000_000_000L
 
         @Volatile
         private var didSetup = false

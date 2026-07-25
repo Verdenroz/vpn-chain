@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.core.tunnel
 import android.content.Context
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.KillSwitchState
+import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -41,9 +42,30 @@ internal object TunnelBridge {
         status.update { it.copy(killSwitch = if (enabled) KillSwitchState.Active else KillSwitchState.Disabled) }
     }
 
+    /** Session traffic/uptime, reset on every connect (see [SessionStats]). */
+    val stats = MutableStateFlow(SessionStats())
+
     // replacement here would silently reset kill-switch status on every state change.
     fun setState(state: TunnelState, detail: UiText? = null) {
+        val wasConnected = status.value.state == TunnelState.Connected
         status.update { it.copy(state = state, detail = detail) }
+        if (state == TunnelState.Connected && !wasConnected) {
+            stats.value = SessionStats(connectedSinceMillis = System.currentTimeMillis())
+        } else if (state != TunnelState.Connected) {
+            stats.value = SessionStats()
+        }
+    }
+
+    /** Fed by the service's libbox status stream while the engine runs. */
+    fun updateTraffic(uplinkTotal: Long, downlinkTotal: Long, uplink: Long, downlink: Long) {
+        stats.update {
+            it.copy(
+                uplinkBytes = uplinkTotal,
+                downlinkBytes = downlinkTotal,
+                uplinkBytesPerSecond = uplink,
+                downlinkBytesPerSecond = downlink,
+            )
+        }
     }
 
     fun log(line: String) {

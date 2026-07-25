@@ -1,4 +1,4 @@
-package com.verdenroz.vpnchain.feature.chain
+package com.verdenroz.vpnchain.core.common
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
