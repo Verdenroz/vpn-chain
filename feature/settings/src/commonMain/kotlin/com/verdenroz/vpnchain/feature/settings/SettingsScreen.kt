@@ -59,7 +59,9 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_reconnect_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_automation_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_detail_android
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_title_android
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_close_to_tray_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_close_to_tray_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_chain_identity_title
@@ -292,9 +294,22 @@ fun SettingsScreen(
                 // write: an unpackaged run has nothing meaningful to register.
                 if (uiState.autostartSupported) {
                     Spacer(Modifier.height(16.dp))
+                    val onAndroid = currentPlatform == Platform.Android
                     SettingRow(
-                        title = stringResource(Res.string.settings_auto_start_title),
-                        detail = stringResource(Res.string.settings_auto_start_detail),
+                        title = stringResource(
+                            if (onAndroid) {
+                                Res.string.settings_auto_start_title_android
+                            } else {
+                                Res.string.settings_auto_start_title
+                            },
+                        ),
+                        detail = stringResource(
+                            if (onAndroid) {
+                                Res.string.settings_auto_start_detail_android
+                            } else {
+                                Res.string.settings_auto_start_detail
+                            },
+                        ),
                         checked = uiState.settings.autoStartOnLogin,
                         onCheckedChange = onToggleAutoStart,
                     )
