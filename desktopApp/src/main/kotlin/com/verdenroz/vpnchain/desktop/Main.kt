@@ -12,6 +12,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberTrayState
 import com.verdenroz.vpnchain.app.VpnChainApp
 import com.verdenroz.vpnchain.app.di.appModules
+import com.verdenroz.vpnchain.core.common.systemTrayAvailable
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.model.ChainStatus
@@ -50,8 +51,11 @@ fun main() {
         var windowVisible by remember { mutableStateOf(true) }
         val trayState = rememberTrayState()
         val connected = status.state == TunnelState.Connected
+        // Hiding the window without a tray to restore it from would leave a
+        // running VPN with no way to reach it.
+        val hideOnClose = settings.closeToTray && systemTrayAvailable
 
-        Tray(
+        if (systemTrayAvailable) Tray(
             state = trayState,
             icon = remember(status.state) { TrayLamp(status.state) },
             tooltip = stringResource(
@@ -83,7 +87,7 @@ fun main() {
         if (windowVisible) {
             Window(
                 onCloseRequest = {
-                    if (settings.closeToTray) windowVisible = false else exitApplication()
+                    if (hideOnClose) windowVisible = false else exitApplication()
                 },
                 title = stringResource(Res.string.window_title),
                 icon = painterResource(Res.drawable.app_icon),

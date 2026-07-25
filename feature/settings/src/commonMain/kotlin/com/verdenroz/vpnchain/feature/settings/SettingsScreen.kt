@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.verdenroz.vpnchain.core.common.Platform
 import com.verdenroz.vpnchain.core.common.currentPlatform
+import com.verdenroz.vpnchain.core.common.systemTrayAvailable
 import com.verdenroz.vpnchain.core.config.SecretsEnvParser
 import com.verdenroz.vpnchain.core.designsystem.component.IndicatorLamp
 import com.verdenroz.vpnchain.core.designsystem.component.PanelButton
@@ -316,9 +317,9 @@ fun SettingsScreen(
                 }
             }
 
-            // The tray only exists on desktop; Android's equivalent is the
-            // ongoing notification.
-            if (currentPlatform == Platform.Desktop) {
+            // Desktop-only, and only where a tray actually exists — many
+            // Wayland bars speak SNI, which AWT cannot talk to.
+            if (currentPlatform == Platform.Desktop && systemTrayAvailable) {
                 SectionCard(title = stringResource(Res.string.settings_window_title)) {
                     SettingRow(
                         title = stringResource(Res.string.settings_close_to_tray_title),
