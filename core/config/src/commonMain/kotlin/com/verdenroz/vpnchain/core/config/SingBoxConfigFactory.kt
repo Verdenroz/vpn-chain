@@ -25,8 +25,9 @@ object SingBoxConfigFactory {
     private val json = Json { prettyPrint = true }
 
     /** Relay-only config for desktop/CLI (mixed inbound → VLESS). */
-    fun mixedProxyConfig(profile: ChainProfile): String = render {
+    fun mixedProxyConfig(profile: ChainProfile, clashApi: ClashApi? = null): String = render {
         putInfoLog()
+        putClashApi(clashApi)
         putJsonArray("inbounds") {
             addJsonObject {
                 put("type", "mixed")
@@ -51,10 +52,11 @@ object SingBoxConfigFactory {
      * When [ChainProfile.protonEntry] is null the chain is relay-only (VLESS
      * dialed directly), which is simpler but exposes the device's IP to the VPS.
      */
-    fun androidChainConfig(profile: ChainProfile): String {
+    fun androidChainConfig(profile: ChainProfile, clashApi: ClashApi? = null): String {
         val entry = profile.protonEntry
         return render {
             putInfoLog()
+            putClashApi(clashApi)
             putJsonObject("dns") { putDnsServers(entry) }
             putJsonArray("inbounds") {
                 addJsonObject {
@@ -112,6 +114,20 @@ object SingBoxConfigFactory {
         json.encodeToString(JsonElement.serializer(), buildJsonObject(build))
 
     // info (not warn) so the Logs screen shows connection/handshake activity.
+    /**
+     * Read-only on our side, but the same API can close connections and switch
+     * outbounds — hence the secret, and the loopback-only bind.
+     */
+    private fun JsonObjectBuilder.putClashApi(clashApi: ClashApi?) {
+        if (clashApi == null) return
+        putJsonObject("experimental") {
+            putJsonObject("clash_api") {
+                put("external_controller", clashApi.externalController)
+                put("secret", clashApi.secret)
+            }
+        }
+    }
+
     private fun JsonObjectBuilder.putInfoLog() =
         putJsonObject("log") { put("level", "info"); put("timestamp", true) }
 

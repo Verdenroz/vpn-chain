@@ -9,6 +9,7 @@ import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.ObserveChainRouteUseCase
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.SessionStats
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -20,6 +21,7 @@ data class ChainUiState(
     val status: ChainStatus = ChainStatus(),
     val hasProfile: Boolean = false,
     val route: ChainRoute = ChainRoute(),
+    val stats: SessionStats = SessionStats(),
 )
 
 class ChainViewModel(
@@ -37,8 +39,9 @@ class ChainViewModel(
             // Re-resolves on every state change and on its own tick, so the
             // panel reads live rather than replaying the profile.
             observeChainRoute(),
-        ) { status, hasProfile, route ->
-            ChainUiState(status = status, hasProfile = hasProfile, route = route)
+            chainRepository.stats,
+        ) { status, hasProfile, route, stats ->
+            ChainUiState(status = status, hasProfile = hasProfile, route = route, stats = stats)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),

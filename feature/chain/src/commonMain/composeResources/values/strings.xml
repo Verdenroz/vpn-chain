@@ -8,6 +8,10 @@
     <string name="chain_row_rtt">path time</string>
     <string name="chain_row_rtt_value">%1$d ms</string>
     <string name="chain_row_mode">mode</string>
+    <string name="chain_row_uptime">uptime</string>
+    <string name="chain_row_sent">sent</string>
+    <string name="chain_row_received">received</string>
+    <string name="chain_row_rate">%1$s ↑ %2$s ↓</string>
     <string name="chain_hop_origin">origin</string>
     <string name="chain_hop_entry">entry</string>
     <string name="chain_hop_exit">exit</string>

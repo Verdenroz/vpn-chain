@@ -9,6 +9,7 @@ import com.verdenroz.vpnchain.core.geoip.PublicIpSample
 import com.verdenroz.vpnchain.core.geoip.RouteGeolocator
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
 import com.verdenroz.vpnchain.core.model.TunnelState
 import kotlin.test.Test
@@ -246,6 +247,7 @@ private class FakeChain(override val status: Flow<ChainStatus>) : ChainRepositor
     override suspend fun reconnect() = Result.success(Unit)
     override suspend fun disconnect() = Unit
     override val connectionIntent: Flow<Boolean> = MutableStateFlow(false)
+    override val stats: Flow<SessionStats> = MutableStateFlow(SessionStats())
     override val killSwitchGuidanceSupported = false
     override val alwaysOnDetected: Flow<Boolean> = MutableStateFlow(false)
     override fun openSystemVpnSettings() = Unit

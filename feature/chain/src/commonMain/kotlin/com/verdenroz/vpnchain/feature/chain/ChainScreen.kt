@@ -21,6 +21,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +50,9 @@ import com.verdenroz.vpnchain.core.domain.ChainHop
 import com.verdenroz.vpnchain.core.domain.ChainRoute
 import com.verdenroz.vpnchain.core.domain.HopEvidence
 import com.verdenroz.vpnchain.core.domain.HopRole
+import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.KillSwitchState
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.ui.SectionLabel
@@ -70,6 +77,10 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_path_title
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_route_title
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_kill_switch
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_mode
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_uptime
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_sent
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_received
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_rate
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_placeholder
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_rtt
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_rtt_value
@@ -144,6 +155,10 @@ fun ChainScreen(
             // are what you check as you reach for the switch.
             Spacer(Modifier.height(16.dp))
             StatusStrip(status = uiState.status, rttMs = uiState.route.throughRttMs)
+            SessionStrip(
+                stats = uiState.stats,
+                connected = uiState.status.state == TunnelState.Connected,
+            )
             Spacer(Modifier.height(14.dp))
 
             if (uiState.hasProfile) {
@@ -297,6 +312,84 @@ private fun HopRow(hop: ChainHop, lamp: Color, isFirst: Boolean, isLast: Boolean
 }
 
 /** Three readouts across the panel: protection, latency, and what mode is live. */
+/**
+ * Uptime and traffic, in a strip of its own rather than crammed in beside the
+ * existing three readouts — that row already overlaps once the panel is narrow.
+ * Collapses away entirely when the chain is down, where every value is a dash.
+ */
+@Composable
+private fun SessionStrip(stats: SessionStats, connected: Boolean) {
+    val colors = PanelTheme.colors
+    val since = stats.connectedSinceMillis
+
+    // Ticks the uptime independently of the stats flow, which only updates when
+    // traffic is sampled — a silent tunnel would otherwise show a frozen clock.
+    var nowMillis by remember { mutableStateOf(currentTimeMillis()) }
+    LaunchedEffect(connected, since) {
+        while (connected && since != null) {
+            nowMillis = currentTimeMillis()
+            delay(1_000)
+        }
+    }
+
+    AnimatedVisibility(
+        visible = connected,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically(),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .machinedSurface(colors, corner = 2.dp, recessed = true, fill = colors.shellDeep)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Readout(label = stringResource(Res.string.chain_row_uptime), modifier = Modifier.weight(1f)) {
+                StatValue(since?.let { formatDuration(nowMillis - it) })
+            }
+            Readout(label = stringResource(Res.string.chain_row_sent), modifier = Modifier.weight(1f)) {
+                StatValue(if (stats.hasTraffic) formatBytes(stats.uplinkBytes) else null)
+            }
+            Readout(label = stringResource(Res.string.chain_row_received), modifier = Modifier.weight(1f)) {
+                StatValue(if (stats.hasTraffic) formatBytes(stats.downlinkBytes) else null)
+            }
+            Readout(
+                label = stringResource(Res.string.chain_row_mode),
+                alignEnd = true,
+                modifier = Modifier.weight(1.3f),
+            ) {
+                StatValue(
+                    if (stats.hasTraffic) {
+                        stringResource(
+                            Res.string.chain_row_rate,
+                            formatRate(stats.uplinkBytesPerSecond),
+                            formatRate(stats.downlinkBytesPerSecond),
+                        )
+                    } else {
+                        null
+                    },
+                    alignEnd = true,
+                )
+            }
+        }
+    }
+}
+
+/** A measured value, or the panel's dash when there is nothing to report. */
+@Composable
+private fun StatValue(value: String?, alignEnd: Boolean = false) {
+    val colors = PanelTheme.colors
+    Text(
+        value ?: stringResource(Res.string.chain_row_placeholder),
+        style = MaterialTheme.typography.bodySmall,
+        color = if (value != null) colors.readout else colors.muted,
+        textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
+        maxLines = 1,
+    )
+}
+
 @Composable
 private fun StatusStrip(status: ChainStatus, rttMs: Int?) {
     val colors = PanelTheme.colors

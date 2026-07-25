@@ -11,6 +11,8 @@ compose.resources {
 kotlin {
     sourceSets {
         commonMain.dependencies {
+            // currentTimeMillis, for the ticking uptime readout.
+            implementation(projects.core.common)
             implementation(libs.compose.components.resources)
         }
     }

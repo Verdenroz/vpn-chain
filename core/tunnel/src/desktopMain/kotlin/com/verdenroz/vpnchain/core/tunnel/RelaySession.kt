@@ -1,5 +1,7 @@
 package com.verdenroz.vpnchain.core.tunnel
 
+import com.verdenroz.vpnchain.core.config.ClashApi
+
 /**
  * A relay running outside this controller: our own leftover, another GUI run,
  * or the CLI's. Persisted beside the pidfile so a restarted app adopts the
@@ -48,6 +50,8 @@ internal data class RelaySession(
  */
 internal object RelayConfig {
 
+    // ClashApi is defined in core:config alongside the factory that renders it.
+
     fun isTun(configJson: String): Boolean = TUN_INBOUND.containsMatchIn(configJson)
 
     fun hasWireGuardEntry(configJson: String): Boolean = WIREGUARD.containsMatchIn(configJson)
@@ -66,7 +70,19 @@ internal object RelayConfig {
             PEER_ADDRESS.find(configJson)?.groupValues?.get(1),
         ).distinct()
 
+    /**
+     * The clash API this config exposes, if any. A relay adopted from the CLI
+     * renders no such block, so absence is normal and simply means no stats.
+     */
+    fun clashApi(configJson: String): ClashApi? {
+        val port = CLASH_CONTROLLER.find(configJson)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        val secret = CLASH_SECRET.find(configJson)?.groupValues?.get(1) ?: return null
+        return ClashApi(port = port, secret = secret)
+    }
+
     private val LISTEN_PORT = Regex("\"listen_port\"\\s*:\\s*(\\d+)")
+    private val CLASH_CONTROLLER = Regex("\"external_controller\"\\s*:\\s*\"127\\.0\\.0\\.1:(\\d+)\"")
+    private val CLASH_SECRET = Regex("\"secret\"\\s*:\\s*\"([^\"]+)\"")
     private val TUN_INBOUND = Regex("\"type\"\\s*:\\s*\"tun\"")
     private val WIREGUARD = Regex("\"type\"\\s*:\\s*\"wireguard\"")
     private val SERVER_IP = Regex("\"server\"\\s*:\\s*\"([0-9.]+)\"\\s*,\\s*\"server_port\"")
