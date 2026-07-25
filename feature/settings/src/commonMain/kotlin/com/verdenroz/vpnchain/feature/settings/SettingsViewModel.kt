@@ -7,6 +7,8 @@ import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.SavedProfile
+import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.model.UserSettings
@@ -17,11 +19,13 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_secrets_env_found
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_cleared
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_saved
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_switched
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -31,6 +35,8 @@ data class SettingsUiState(
     val killSwitchGuidanceSupported: Boolean = false,
     val alwaysOnDetected: Boolean = false,
     val autostartSupported: Boolean = false,
+    val profiles: List<SavedProfile> = emptyList(),
+    val activeProfileId: String? = null,
 )
 
 /** One-shot user feedback (import result), consumed by the UI. */
@@ -51,13 +57,17 @@ class SettingsViewModel(
             settingsRepository.settings,
             profileRepository.profile,
             chainRepository.alwaysOnDetected,
-        ) { settings, profile, alwaysOnDetected ->
+            profileRepository.profiles,
+            profileRepository.activeProfileId,
+        ) { settings, profile, alwaysOnDetected, profiles, activeProfileId ->
             SettingsUiState(
                 settings = settings,
                 profile = profile,
                 killSwitchGuidanceSupported = chainRepository.killSwitchGuidanceSupported,
                 alwaysOnDetected = alwaysOnDetected,
                 autostartSupported = settingsRepository.autostartSupported,
+                profiles = profiles,
+                activeProfileId = activeProfileId,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -99,6 +109,29 @@ class SettingsViewModel(
                     ?: UiText.Resource(Res.string.settings_auto_start_failed),
             )
         }
+    }
+
+    /**
+     * A live tunnel is still running the old chain, so switching means taking
+     * it down and bringing it back up rather than reconfiguring in place.
+     */
+    fun selectProfile(id: String) = viewModelScope.launch {
+        if (id == profileRepository.activeProfileId.first()) return@launch
+        val wasConnected = chainRepository.status.first().state == TunnelState.Connected
+        profileRepository.setActive(id)
+        if (wasConnected) {
+            chainRepository.disconnect()
+            chainRepository.connect()
+        }
+        profileRepository.profiles.first().firstOrNull { it.id == id }?.let { switched ->
+            _message.value = SettingsMessage.Info(
+                UiText.Resource(Res.string.settings_profile_switched, listOf(switched.name)),
+            )
+        }
+    }
+
+    fun deleteProfile(id: String) = viewModelScope.launch {
+        profileRepository.delete(id)
     }
 
     fun saveProfile(profile: ChainProfile) = viewModelScope.launch {

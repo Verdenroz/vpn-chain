@@ -2,6 +2,9 @@
 <resources>
     <string name="settings_title">settings</string>
     <string name="settings_chain_identity_title">chain identity</string>
+    <string name="settings_profiles_title">profiles</string>
+    <string name="settings_profile_delete">delete</string>
+    <string name="settings_profile_switched">Switched to %1$s</string>
     <string name="settings_configured_for">Configured for %1$s</string>
     <string name="settings_no_profile_yet">No profile yet. Import a secrets.env to fit the chain.</string>
     <string name="settings_hide_import">hide import</string>
