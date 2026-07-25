@@ -52,6 +52,11 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_always_on_active
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_always_on_not_armed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_appearance_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_connect_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_connect_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_reconnect_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_reconnect_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_automation_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_chain_identity_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_configured_for
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_edit_fields
@@ -126,6 +131,8 @@ fun SettingsRoute(
         onScanQr = scanQr,
         onToggleSystemWide = viewModel::setSystemWideTun,
         onToggleKillSwitch = viewModel::setKillSwitchEnabled,
+        onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
+        onToggleAutoReconnect = viewModel::setAutoReconnect,
         onOpenSystemVpnSettings = viewModel::openSystemVpnSettings,
         modifier = modifier,
     )
@@ -143,6 +150,8 @@ fun SettingsScreen(
     onScanQr: () -> Unit,
     onToggleSystemWide: (Boolean) -> Unit,
     onToggleKillSwitch: (Boolean) -> Unit,
+    onToggleAutoConnect: (Boolean) -> Unit,
+    onToggleAutoReconnect: (Boolean) -> Unit,
     onOpenSystemVpnSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -235,6 +244,22 @@ fun SettingsScreen(
                     Spacer(Modifier.height(16.dp))
                     uiState.profile?.let { QrPairingPanel(it) }
                 }
+            }
+
+            SectionCard(title = stringResource(Res.string.settings_automation_title)) {
+                SettingRow(
+                    title = stringResource(Res.string.settings_auto_connect_title),
+                    detail = stringResource(Res.string.settings_auto_connect_detail),
+                    checked = uiState.settings.autoConnectOnLaunch,
+                    onCheckedChange = onToggleAutoConnect,
+                )
+                Spacer(Modifier.height(16.dp))
+                SettingRow(
+                    title = stringResource(Res.string.settings_auto_reconnect_title),
+                    detail = stringResource(Res.string.settings_auto_reconnect_detail),
+                    checked = uiState.settings.autoReconnect,
+                    onCheckedChange = onToggleAutoReconnect,
+                )
             }
 
             // Android has no proxy-only mode — the tunnel is always TUN — so this

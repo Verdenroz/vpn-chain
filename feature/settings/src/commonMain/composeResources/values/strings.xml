@@ -9,6 +9,11 @@
     <string name="settings_hide_fields">hide fields</string>
     <string name="settings_edit_fields">edit fields</string>
     <string name="settings_enter_manually">enter manually</string>
+    <string name="settings_automation_title">automation</string>
+    <string name="settings_auto_connect_title">Connect on launch</string>
+    <string name="settings_auto_connect_detail">Bring the chain up automatically when the app starts, if a profile is configured.</string>
+    <string name="settings_auto_reconnect_title">Reconnect automatically</string>
+    <string name="settings_auto_reconnect_detail">Rebuild the chain after an unexpected drop or a network change. Does nothing after you disconnect on purpose.</string>
     <string name="settings_routing_title">routing</string>
     <string name="settings_route_entire_system_title">Route entire system</string>
     <string name="settings_route_entire_system_detail">Send all system traffic through sing-box instead of a local proxy. Needs elevated privileges on the sing-box binary.</string>
