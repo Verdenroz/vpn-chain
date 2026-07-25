@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="window_title">vpn-chain</string>
+    <string name="tray_open">Open VPN Chain</string>
+    <string name="tray_connect">Connect</string>
+    <string name="tray_disconnect">Disconnect</string>
+    <string name="tray_quit">Quit</string>
+    <string name="tray_tooltip_connected">VPN Chain Connected</string>
+    <string name="tray_tooltip_connecting">VPN Chain Connecting…</string>
+    <string name="tray_tooltip_disconnected">VPN Chain Disconnected</string>
+    <string name="tray_tooltip_error">VPN Chain — error</string>
 </resources>

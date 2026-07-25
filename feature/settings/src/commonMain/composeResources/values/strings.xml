@@ -17,6 +17,9 @@
     <string name="settings_auto_start_title">Start at login</string>
     <string name="settings_auto_start_detail">Launch VPN Chain automatically when you sign in to this computer.</string>
     <string name="settings_auto_start_failed">Could not register the login item.</string>
+    <string name="settings_window_title">window</string>
+    <string name="settings_close_to_tray_title">Close to tray</string>
+    <string name="settings_close_to_tray_detail">Closing the window keeps the chain running and leaves the app in the system tray. Quit from the tray menu to stop it.</string>
     <string name="settings_routing_title">routing</string>
     <string name="settings_route_entire_system_title">Route entire system</string>
     <string name="settings_route_entire_system_detail">Send all system traffic through sing-box instead of a local proxy. Needs elevated privileges on the sing-box binary.</string>

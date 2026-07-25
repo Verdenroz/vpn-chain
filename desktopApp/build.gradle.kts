@@ -7,6 +7,9 @@ plugins {
 
 dependencies {
     implementation(projects.appCommon)
+    // The tray drives and reflects the tunnel from outside the Compose UI tree.
+    implementation(projects.core.data)
+    implementation(projects.core.model)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.swing)
     implementation(libs.koin.core)

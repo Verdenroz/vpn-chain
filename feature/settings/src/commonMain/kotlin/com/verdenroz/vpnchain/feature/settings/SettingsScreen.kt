@@ -59,6 +59,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_automation_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_close_to_tray_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_close_to_tray_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_chain_identity_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_configured_for
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_edit_fields
@@ -83,6 +85,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_secrets_env_label
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_show_qr
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_window_title
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -136,6 +139,7 @@ fun SettingsRoute(
         onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
         onToggleAutoReconnect = viewModel::setAutoReconnect,
         onToggleAutoStart = viewModel::setAutoStartOnLogin,
+        onToggleCloseToTray = viewModel::setCloseToTray,
         onOpenSystemVpnSettings = viewModel::openSystemVpnSettings,
         modifier = modifier,
     )
@@ -156,6 +160,7 @@ fun SettingsScreen(
     onToggleAutoConnect: (Boolean) -> Unit,
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleAutoStart: (Boolean) -> Unit,
+    onToggleCloseToTray: (Boolean) -> Unit,
     onOpenSystemVpnSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -273,6 +278,19 @@ fun SettingsScreen(
                         detail = stringResource(Res.string.settings_auto_start_detail),
                         checked = uiState.settings.autoStartOnLogin,
                         onCheckedChange = onToggleAutoStart,
+                    )
+                }
+            }
+
+            // The tray only exists on desktop; Android's equivalent is the
+            // ongoing notification.
+            if (currentPlatform == Platform.Desktop) {
+                SectionCard(title = stringResource(Res.string.settings_window_title)) {
+                    SettingRow(
+                        title = stringResource(Res.string.settings_close_to_tray_title),
+                        detail = stringResource(Res.string.settings_close_to_tray_detail),
+                        checked = uiState.settings.closeToTray,
+                        onCheckedChange = onToggleCloseToTray,
                     )
                 }
             }
