@@ -233,14 +233,14 @@ class VpnChainService : VpnService(), CommandServerHandler {
             flags,
         )
         val disconnectAction = Notification.Action.Builder(
-            Icon.createWithResource(this, R.drawable.ic_vpn_chain_link),
+            Icon.createWithResource(this, R.drawable.ic_vpn_chain_logo),
             getString(R.string.tunnel_notification_action_disconnect),
             disconnect,
         ).build()
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.tunnel_notification_title))
             .setContentText(text)
-            .setSmallIcon(R.drawable.ic_vpn_chain_link)
+            .setSmallIcon(R.drawable.ic_vpn_chain_logo)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
@@ -282,9 +282,11 @@ class VpnChainService : VpnService(), CommandServerHandler {
     companion object {
         const val ACTION_START = "com.verdenroz.vpnchain.action.START"
         const val ACTION_STOP = "com.verdenroz.vpnchain.action.STOP"
-        private const val CHANNEL_ID = "vpn-chain-status"
+        // Shared with androidApp's ChainNotificationUpdater, which enriches the
+        // connected notification with route data the service can't reach.
+        const val CHANNEL_ID = "vpn-chain-status"
+        const val NOTIFICATION_ID = 1
         private const val LEGACY_CHANNEL_ID = "vpn-chain"
-        private const val NOTIFICATION_ID = 1
         private const val LOCKDOWN_POLL_MS = 3_000L
 
         @Volatile

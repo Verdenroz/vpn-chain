@@ -9,17 +9,16 @@
     <string name="tile_subtitle_error">Error</string>
     <string name="tile_subtitle_no_profile">No profile</string>
 
-    <string name="widget_title">VPN CHAIN</string>
     <string name="widget_toggle_label">Chain toggle</string>
     <string name="widget_toggle_description">Connect or disconnect the chain with one tap</string>
-    <string name="widget_status_label">Chain status</string>
-    <string name="widget_status_description">Chain status with connect and QR-import shortcuts</string>
-    <string name="widget_state_connected">Connected</string>
-    <string name="widget_state_connecting">Connecting…</string>
-    <string name="widget_state_disconnected">Disconnected</string>
-    <string name="widget_state_error">Error</string>
-    <string name="widget_state_no_profile">No profile — tap to set up</string>
-    <string name="widget_connect">Connect</string>
-    <string name="widget_disconnect">Disconnect</string>
+    <string name="widget_controls_label">Chain controls</string>
+    <string name="widget_controls_description">Toggle the chain and import a profile by QR</string>
     <string name="widget_scan_qr">Scan QR</string>
+
+    <string name="notification_disconnect">Disconnect</string>
+    <string name="notification_exit_resolving">Resolving exit…</string>
+    <string name="notification_rtt">RTT %1$d ms</string>
+    <string name="notification_measuring">Measuring…</string>
+    <string name="notification_evidence_configured">configured</string>
+    <string name="notification_evidence_recalled">recalled</string>
 </resources>

@@ -5,10 +5,10 @@ import android.net.VpnService
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.graphics.Color
 import androidx.glance.action.Action
-import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.unit.ColorProvider
 import com.verdenroz.vpnchain.MainActivity
 import com.verdenroz.vpnchain.control.ChainQuickControl
 import com.verdenroz.vpnchain.core.data.ChainRepository
@@ -24,20 +24,18 @@ internal data class ChainWidgetState(
 ) {
     val running: Boolean get() = state == TunnelState.Connected || state == TunnelState.Connecting
 
-    val lampColor: Color
-        get() = when {
-            !hasProfile -> WidgetPalette.muted
-            state == TunnelState.Connected -> WidgetPalette.lampGreen
-            state == TunnelState.Connecting -> WidgetPalette.lampAmber
-            state == TunnelState.Error -> WidgetPalette.lampRed
-            else -> WidgetPalette.muted
+    /** The logo mark doubles as the lamp: green up, amber in transit, red down. */
+    val stateColor: ColorProvider
+        get() = when (state) {
+            TunnelState.Connected -> WidgetPalette.green
+            TunnelState.Connecting -> WidgetPalette.amber
+            else -> WidgetPalette.red
         }
 
     /**
-     * Consent and profile setup can only happen in the app, and activity
-     * launches from a widget must ride a PendingIntent (`actionStartActivity`)
-     * to satisfy background-launch rules — so those cases pre-route to
-     * MainActivity instead of the background callback.
+     * Consent and profile setup need the app, and widget activity launches
+     * must ride a PendingIntent (`actionStartActivity`) — so those cases
+     * pre-route to MainActivity instead of the background callback.
      */
     fun toggleAction(context: Context): Action = when {
         !hasProfile -> actionStartActivity(ChainQuickControl.openAppIntent(context, null))
