@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -38,6 +39,7 @@ import com.verdenroz.vpnchain.core.ui.shouldUseDarkTheme
 import com.verdenroz.vpnchain.feature.chain.navigation.CHAIN_ROUTE
 import com.verdenroz.vpnchain.feature.chain.navigation.chainScreen
 import com.verdenroz.vpnchain.feature.logs.navigation.logsScreen
+import com.verdenroz.vpnchain.feature.settings.QrScanRequest
 import com.verdenroz.vpnchain.feature.settings.navigation.SETTINGS_ROUTE
 import com.verdenroz.vpnchain.feature.settings.navigation.settingsScreen
 import org.jetbrains.compose.resources.stringResource
@@ -51,6 +53,13 @@ fun VpnChainApp(appViewModel: AppViewModel = koinViewModel()) {
         val navController = rememberNavController()
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = backStackEntry?.destination
+
+        // Consumed by SettingsRoute once it's on screen; here we only make sure
+        // it gets on screen.
+        val scanRequested by QrScanRequest.pending.collectAsStateWithLifecycle()
+        LaunchedEffect(scanRequested) {
+            if (scanRequested) navController.switchTo(TopLevelDestination.SETTINGS)
+        }
 
         Scaffold(
             containerColor = PanelTheme.colors.shellDeep,
