@@ -67,7 +67,6 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switc
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_protected
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_open_settings
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_path_title
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_route_attribution
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_route_title
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_kill_switch
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_mode
@@ -133,12 +132,6 @@ fun ChainScreen(
                 SectionLabel(stringResource(Res.string.chain_route_title))
                 Spacer(Modifier.height(10.dp))
                 RouteDisplay(points = uiState.route.toPoints(colors), live = connected)
-                Spacer(Modifier.height(7.dp))
-                Text(
-                    stringResource(Res.string.chain_route_attribution),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.muted,
-                )
 
                 Spacer(Modifier.height(22.dp))
 
