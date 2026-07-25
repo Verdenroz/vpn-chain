@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tunnel_notification_channel_name">vpn-chain</string>
+    <string name="tunnel_notification_title">vpn-chain</string>
+    <string name="tunnel_notification_text">Tunnel active</string>
+</resources>

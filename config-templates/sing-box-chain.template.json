@@ -1,0 +1,35 @@
+{
+  "log": { "level": "warn", "timestamp": true },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "proxy-in",
+      "listen": "127.0.0.1",
+      "listen_port": 1080
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "${VPS_IP}",
+      "server_port": 443,
+      "uuid": "${VLESS_UUID}",
+      "flow": "xtls-rprx-vision",
+      "network": "tcp",
+      "tls": {
+        "enabled": true,
+        "server_name": "${SNI}",
+        "utls": { "enabled": true, "fingerprint": "chrome" },
+        "reality": { "enabled": true, "public_key": "${REALITY_PUBKEY}", "short_id": "${SHORT_ID}" }
+      },
+      "packet_encoding": "xudp"
+    },
+    { "type": "direct", "tag": "direct" }
+  ],
+  "route": {
+    "auto_detect_interface": false,
+    "rules": [ { "action": "sniff" } ],
+    "final": "proxy"
+  }
+}

@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+# vpn-chain — bring up the layered VPN chain with one command.
+#
+#   you (real IP hidden)
+#     -> local ProtonVPN            (entry hop, hides you from the VPS)
+#        -> your VLESS+REALITY VPS  (disguised as HTTPS to your SNI; exits
+#                                     directly from the VPS's own IP)
+#           -> internet
+#
+# Secrets live OUTSIDE this repo in ~/.config/vpn-chain/secrets.env (chmod 600);
+# the sing-box config is rendered from a committed template at runtime into an
+# ephemeral file under $XDG_RUNTIME_DIR, so no credentials ever touch the repo.
+#
+# Local apps reach the chain via a SOCKS5/HTTP proxy at 127.0.0.1:1080.
+#
+# Usage:
+#   vpn-chain up [protonvpn connect args...]   e.g. `vpn-chain up --country US`
+#   vpn-chain down [--disconnect-proton]       stop relay (Proton stays up by
+#                                              default; flag also drops Proton)
+#   vpn-chain status                           show state, exit IP, entry path
+#   vpn-chain render                           re-render the config and exit
+set -euo pipefail
+
+# --- paths ----------------------------------------------------------------
+SELF="$(readlink -f "$0")"
+REPO="$(cd "$(dirname "$SELF")/.." && pwd)"
+SECRETS_FILE="${VPN_CHAIN_SECRETS:-$HOME/.config/vpn-chain/secrets.env}"
+TEMPLATE="${VPN_CHAIN_TEMPLATE:-$REPO/config-templates/sing-box-chain.template.json}"
+SINGBOX_BIN="${SINGBOX_BIN:-/usr/bin/sing-box}"
+INSTALL_DIR="${VPN_CHAIN_BIN_DIR:-$HOME/.local/bin}"
+RUNDIR="${XDG_RUNTIME_DIR:-/tmp}/vpn-chain"
+RENDERED="$RUNDIR/sing-box.json"
+PIDFILE="$RUNDIR/relay.pid"
+STATEFILE="$RUNDIR/relay.state"                       # written by the GUI, cleared here
+LOGFILE="$RUNDIR/relay.log"
+KILLSWITCH_BIN="${VPN_CHAIN_KILLSWITCH_BIN:-vpn-chain-killswitch}"
+PROXY="127.0.0.1:1080"
+ENTRY_IF="proton0"                                   # local Proton interface
+
+c_cyan=$'\033[1;36m'; c_yel=$'\033[1;33m'; c_red=$'\033[1;31m'; c_grn=$'\033[1;32m'; c_off=$'\033[0m'
+log()  { printf '%s[vpn-chain]%s %s\n' "$c_cyan" "$c_off" "$*"; }
+warn() { printf '%s[vpn-chain]%s %s\n' "$c_yel"  "$c_off" "$*" >&2; }
+die()  { printf '%s[vpn-chain]%s %s\n' "$c_red"  "$c_off" "$*" >&2; exit 1; }
+
+# Load secrets into the environment (best-effort for status/down; required for up/render).
+load_secrets() {
+  [ -f "$SECRETS_FILE" ] || return 1
+  set -a; . "$SECRETS_FILE"; set +a
+}
+
+render() {
+  load_secrets || die "secrets not found: $SECRETS_FILE (copy examples/secrets.env.example there)"
+  : "${VLESS_UUID:?set in $SECRETS_FILE}" "${VPS_IP:?}" "${REALITY_PUBKEY:?}" "${SHORT_ID:?}" "${SNI:?}"
+  [ -f "$TEMPLATE" ] || die "template not found: $TEMPLATE"
+  mkdir -p "$RUNDIR"; chmod 700 "$RUNDIR"
+  ( umask 077
+    envsubst '$VLESS_UUID $VPS_IP $REALITY_PUBKEY $SHORT_ID $SNI' < "$TEMPLATE" > "$RENDERED" )
+  "$SINGBOX_BIN" check -c "$RENDERED" >/dev/null || die "rendered config invalid"
+}
+
+proton_up() { protonvpn status 2>/dev/null | grep -q '^Status: Connected'; }
+relay_up()  { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
+
+# The point of the entry hop: sing-box's connection to the VPS must leave via
+# proton0 (src 10.2.0.x), never the real LAN interface. Returns the src IP.
+entry_src() {
+  local ip="${VPS_IP:-}"; [ -n "$ip" ] || return 0
+  curl -s --max-time 8 --socks5-hostname "$PROXY" https://api.ipify.org -o /dev/null 2>/dev/null &
+  local probe=$!
+  local src=""
+  for _ in 1 2 3 4 5 6; do
+    src="$(ss -tnH 2>/dev/null | grep "$ip:443" \
+          | grep -oE '10\.2\.0\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.[0-9]+\.[0-9]+\.[0-9]+|10\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"
+    [ -n "$src" ] && break
+    sleep 0.4
+  done
+  wait "$probe" 2>/dev/null || true
+  printf '%s' "$src"
+}
+
+cmd_up() {
+  command -v protonvpn >/dev/null || die "protonvpn CLI not found"
+  [ -x "$SINGBOX_BIN" ]           || die "sing-box not found at $SINGBOX_BIN"
+
+  render                                                   # secrets -> rendered config
+
+  if proton_up; then
+    log "Local ProtonVPN already connected (entry hop up)."
+  else
+    log "Connecting local ProtonVPN (entry hop)..."
+    protonvpn connect "$@" || die "protonvpn connect failed"
+    for _ in $(seq 1 20); do proton_up && break; sleep 1; done
+    proton_up || die "ProtonVPN never reached Connected state"
+  fi
+  ip link show "$ENTRY_IF" >/dev/null 2>&1 || die "$ENTRY_IF is not up — Proton not routing?"
+
+  if relay_up; then
+    log "Relay already running (pid $(cat "$PIDFILE"))."
+  else
+    log "Starting relay (sing-box)..."
+    nohup "$SINGBOX_BIN" run -c "$RENDERED" >"$LOGFILE" 2>&1 &
+    echo $! > "$PIDFILE"
+    sleep 2
+    relay_up || { warn "relay failed to start; last log lines:"; tail -n 15 "$LOGFILE" >&2; rm -f "$PIDFILE"; die "startup failed"; }
+  fi
+  echo
+  cmd_status
+}
+
+cmd_down() {
+  local keep_proton=1                                # Proton stays up by default
+  for arg in "$@"; do
+    case "$arg" in
+      --keep-proton)              keep_proton=1 ;;    # accepted for muscle memory
+      --disconnect-proton|--full) keep_proton=0 ;;
+      *) die "unknown option for down: $arg" ;;
+    esac
+  done
+
+  if relay_up; then
+    log "Stopping relay..."
+    kill "$(cat "$PIDFILE")" 2>/dev/null || true
+    rm -f "$PIDFILE"
+  else
+    log "Relay not running."
+    rm -f "$PIDFILE"
+  fi
+  rm -f "$RENDERED" "$STATEFILE"                     # drop the rendered secrets file
+  # The GUI may have installed the nftables kill switch, and a machine left
+  # fail-closed has no internet until it goes away. Idempotent, so always run it.
+  if command -v "$KILLSWITCH_BIN" >/dev/null 2>&1; then
+    "$KILLSWITCH_BIN" down >/dev/null 2>&1 || warn "kill switch teardown returned non-zero"
+  fi
+
+  if [ "$keep_proton" -eq 1 ]; then
+    log "Leaving local ProtonVPN connected (use --disconnect-proton to drop it)."
+  elif proton_up; then
+    log "Disconnecting local ProtonVPN..."
+    protonvpn disconnect >/dev/null 2>&1 || warn "protonvpn disconnect returned non-zero"
+  fi
+  log "Chain down."
+}
+
+# The GUI's kill switch fails silently when the helper is unbuilt or missing its
+# capability — both look identical from the app, so report them here.
+killswitch_status() {
+  local bin; bin="$(command -v "$KILLSWITCH_BIN" 2>/dev/null || true)"
+  if [ -z "$bin" ]; then
+    printf '  kill switch: %shelper not installed%s (run cli/killswitch/build.sh)\n' "$c_red" "$c_off"
+  elif getcap "$bin" 2>/dev/null | grep -q cap_net_admin; then
+    printf '  kill switch: %shelper ready%s (%s)\n' "$c_grn" "$c_off" "$bin"
+  else
+    printf '  kill switch: %shelper not privileged%s (sudo setcap cap_net_admin=eip %s)\n' "$c_yel" "$c_off" "$bin"
+  fi
+}
+
+cmd_status() {
+  load_secrets || true
+  killswitch_status
+  if proton_up; then
+    local srv; srv="$(protonvpn status 2>/dev/null | sed -n 's/^Server: //p')"
+    printf '  entry hop  : %sProtonVPN connected%s (%s)\n' "$c_grn" "$c_off" "${srv:-unknown}"
+  else
+    printf '  entry hop  : %sProtonVPN NOT connected%s\n' "$c_red" "$c_off"
+  fi
+
+  if relay_up; then
+    printf '  relay      : %srunning%s (pid %s, proxy socks5/http %s)\n' "$c_grn" "$c_off" "$(cat "$PIDFILE")" "$PROXY"
+  else
+    printf '  relay      : %snot running%s\n' "$c_red" "$c_off"
+    return 0
+  fi
+
+  local src; src="$(entry_src)"
+  case "$src" in
+    10.2.0.*) printf '  entry path : %svia %s (%s) — real IP hidden from VPS%s\n' "$c_grn" "$ENTRY_IF" "$src" "$c_off" ;;
+    "")       printf '  entry path : %scould not sample (no active connection)%s\n' "$c_yel" "$c_off" ;;
+    *)        printf '  entry path : %sLEAK — egressing via %s, NOT Proton%s\n' "$c_red" "$src" "$c_off" ;;
+  esac
+
+  local exit_ip; exit_ip="$(curl -s --max-time 15 --socks5-hostname "$PROXY" https://api.ipify.org 2>/dev/null || true)"
+  if [ -n "$exit_ip" ]; then
+    printf '  exit IP    : %s%s%s (what sites see)\n' "$c_grn" "$exit_ip" "$c_off"
+  else
+    printf '  exit IP    : %sunreachable through proxy%s\n' "$c_red" "$c_off"
+  fi
+}
+
+# Symlink this script into a PATH dir so `vpn-chain` works from anywhere.
+# readlink -f resolves the symlink back to the repo, so config paths still work.
+cmd_install() {
+    mkdir -p "$INSTALL_DIR"
+    ln -sf "$SELF" "$INSTALL_DIR/vpn-chain"
+    log "Installed: $INSTALL_DIR/vpn-chain -> $SELF"
+    case ":$PATH:" in
+        *":$INSTALL_DIR:"*)
+            log "$INSTALL_DIR is on PATH — run 'vpn-chain status' from anywhere." ;;
+        *)
+            warn "$INSTALL_DIR is not on PATH yet. Add it:"
+            printf '  fish:      fish_add_path %s\n' "$INSTALL_DIR" >&2
+            printf '  bash/zsh:  echo '\''export PATH="%s:$PATH"'\'' >> ~/.profile && exec $SHELL\n' "$INSTALL_DIR" >&2 ;;
+    esac
+}
+
+cmd_uninstall() {
+    local link="$INSTALL_DIR/vpn-chain"
+    if [ -L "$link" ]; then rm -f "$link"; log "Removed $link"; else log "Not installed at $link"; fi
+}
+
+case "${1:-}" in
+  up)        shift; cmd_up "$@" ;;
+  down)      shift; cmd_down "$@" ;;
+  status)    cmd_status ;;
+  render)    render; log "Rendered config -> $RENDERED" ;;
+  install)   cmd_install ;;
+  uninstall) cmd_uninstall ;;
+  *) printf 'usage: %s {up [connect-args] | down [--disconnect-proton] | status | render | install | uninstall}\n' "${0##*/}" >&2; exit 2 ;;
+esac

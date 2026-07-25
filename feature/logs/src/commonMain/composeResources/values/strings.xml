@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="logs_screen_title">logs</string>
+    <string name="logs_output_label">sing-box output</string>
+    <string name="logs_line_count">%1$d lines</string>
+    <string name="logs_no_lines">no lines</string>
+    <string name="logs_clear">clear</string>
+    <string name="logs_empty_title">Nothing printed yet.</string>
+    <string name="logs_empty_body">Throw the switch on the Chain panel and sing-box's output lands here: handshakes, route decisions, and the reason for any failure.</string>
+</resources>

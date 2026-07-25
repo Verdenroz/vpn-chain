@@ -1,0 +1,28 @@
+// vpn-chain: let the locally-present, active user manage per-link DNS
+// without a password prompt. sing-box's TUN mode (auto_route/strict_route)
+// asks systemd-resolved to set DNS on the tunnel interface on connect, and
+// to revert it on disconnect — both go through polkit by default, which
+// otherwise prompts for every single connect/disconnect.
+//
+// Deliberately narrow: only these four resolve1 actions, and only for a
+// session that's both active (foreground) and local (not remote/SSH) — the
+// same pattern systemd's own built-in polkit rules use for physically-
+// present-user checks. Does not touch any other polkit action.
+//
+// One-time install:
+//   sudo cp cli/polkit/10-vpn-chain-resolve1.rules /etc/polkit-1/rules.d/
+//   sudo chown root:polkitd /etc/polkit-1/rules.d/10-vpn-chain-resolve1.rules
+//   sudo chmod 640 /etc/polkit-1/rules.d/10-vpn-chain-resolve1.rules
+// polkitd picks up rule changes automatically (no restart needed on modern
+// polkit); if prompts persist, `sudo systemctl restart polkit` to be sure.
+polkit.addRule(function(action, subject) {
+    const RESOLVE1_DNS_ACTIONS = [
+        "org.freedesktop.resolve1.set-dns-servers",
+        "org.freedesktop.resolve1.set-domains",
+        "org.freedesktop.resolve1.set-default-route",
+        "org.freedesktop.resolve1.revert",
+    ];
+    if (RESOLVE1_DNS_ACTIONS.indexOf(action.id) !== -1 && subject.active && subject.local) {
+        return polkit.Result.YES;
+    }
+});

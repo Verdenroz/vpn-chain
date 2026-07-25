@@ -1,0 +1,4 @@
+world_landmass.svg is traced from Natural Earth's 1:110m Land polygons
+(naturalearthdata.com), which are public domain — no permission or
+attribution required. Re-projected here as a plain equirectangular
+silhouette (lon 0-360 -> x, lat 90..-90 -> y, in a 360x180 viewBox).
