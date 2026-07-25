@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="tunnel_notification_channel_name">vpn-chain</string>
+    <string name="tunnel_notification_channel_name">Chain status</string>
     <string name="tunnel_notification_title">vpn-chain</string>
-    <string name="tunnel_notification_text">Tunnel active</string>
+    <string name="tunnel_notification_connecting">Bringing the chain up…</string>
+    <string name="tunnel_notification_connected">Chain connected</string>
+    <string name="tunnel_notification_action_disconnect">Disconnect</string>
 </resources>

@@ -3,8 +3,10 @@ package com.verdenroz.vpnchain.core.tunnel
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.net.VpnService
 import android.os.Build
 import android.os.Handler
@@ -106,6 +108,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 server.startOrReloadService(config, OverrideOptions())
                 startLogClient()
                 TunnelBridge.setState(TunnelState.Connected)
+                updateNotification(getString(R.string.tunnel_notification_connected))
             } catch (t: Throwable) {
                 TunnelBridge.log("start failed: ${t.message}")
                 TunnelBridge.setState(
@@ -191,23 +194,64 @@ class VpnChainService : VpnService(), CommandServerHandler {
     private fun startForegroundNotification() {
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channelName = getString(R.string.tunnel_notification_channel_name)
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_LOW),
-            )
+            // DEFAULT importance (muted) so the shade doesn't demote it to the
+            // silent section; the old LOW channel is dropped because a channel's
+            // importance can't be raised in place on existing installs.
+            manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.tunnel_notification_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                setSound(null, null)
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(channel)
         }
-        val notification: Notification = Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.tunnel_notification_title))
-            .setContentText(getString(R.string.tunnel_notification_text))
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setOngoing(true)
-            .build()
+        val notification = buildNotification(getString(R.string.tunnel_notification_connecting))
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
+    }
+
+    private fun buildNotification(text: String): Notification {
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        // Launch intent rather than an Activity class: keeps core:tunnel from
+        // depending on the app module that hosts the UI.
+        val openApp = packageManager.getLaunchIntentForPackage(packageName)?.let {
+            PendingIntent.getActivity(this, 0, it, flags)
+        }
+        // Safe from the shade: while this foreground service runs, the app is
+        // exempt from background startService restrictions.
+        val disconnect = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, VpnChainService::class.java).setAction(ACTION_STOP),
+            flags,
+        )
+        val disconnectAction = Notification.Action.Builder(
+            Icon.createWithResource(this, R.drawable.ic_vpn_chain_link),
+            getString(R.string.tunnel_notification_action_disconnect),
+            disconnect,
+        ).build()
+        return Notification.Builder(this, CHANNEL_ID)
+            .setContentTitle(getString(R.string.tunnel_notification_title))
+            .setContentText(text)
+            .setSmallIcon(R.drawable.ic_vpn_chain_link)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(Notification.CATEGORY_SERVICE)
+            .apply { openApp?.let(::setContentIntent) }
+            .addAction(disconnectAction)
+            .build()
+    }
+
+    private fun updateNotification(text: String) {
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID, buildNotification(text))
     }
 
     private fun stopForegroundCompat() {
@@ -238,7 +282,8 @@ class VpnChainService : VpnService(), CommandServerHandler {
     companion object {
         const val ACTION_START = "com.verdenroz.vpnchain.action.START"
         const val ACTION_STOP = "com.verdenroz.vpnchain.action.STOP"
-        private const val CHANNEL_ID = "vpn-chain"
+        private const val CHANNEL_ID = "vpn-chain-status"
+        private const val LEGACY_CHANNEL_ID = "vpn-chain"
         private const val NOTIFICATION_ID = 1
         private const val LOCKDOWN_POLL_MS = 3_000L
 
