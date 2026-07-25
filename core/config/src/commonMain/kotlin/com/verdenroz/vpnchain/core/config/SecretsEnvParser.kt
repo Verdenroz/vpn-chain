@@ -53,6 +53,7 @@ object SecretsEnvParser {
             endpointHost = values.getValue("PROTON_ENTRY_HOST"),
             endpointPort = values["PROTON_ENTRY_PORT"]?.toIntOrNull()
                 ?: ProtonWireGuardEntry.DEFAULT_ENDPOINT_PORT,
+            dns = values["PROTON_ENTRY_DNS"]?.takeIf(String::isNotBlank),
         )
     }
 
@@ -71,6 +72,7 @@ object SecretsEnvParser {
             appendLine("PROTON_ENTRY_PEER_PUBKEY=${entry.peerPublicKey}")
             appendLine("PROTON_ENTRY_HOST=${entry.endpointHost}")
             appendLine("PROTON_ENTRY_PORT=${entry.endpointPort}")
+            entry.dns?.let { appendLine("PROTON_ENTRY_DNS=$it") }
         }
     }
 

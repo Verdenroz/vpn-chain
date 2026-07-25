@@ -28,6 +28,7 @@ phone
 |-------------|--------|
 | `VPS_IP`, `VLESS_UUID`, `REALITY_PUBKEY`, `SHORT_ID`, `SNI` | same relay identity as the desktop chain (`~/.config/vpn-chain/secrets.env`) |
 | `PROTON_ENTRY_*` (private key, address, peer pubkey, endpoint host/port) | a **dedicated** Proton WireGuard config for this device — generate a *separate* one at account.protonvpn.com so it can be revoked independently |
+| `PROTON_ENTRY_DNS` (optional) | the `.conf`'s `DNS =` line — only present if you generated the config with NetShield on; copying it over is what keeps NetShield's ad/malware/tracker filtering working, since it's Proton's own resolver and only reachable through this same peer |
 
 ## Two tiers
 

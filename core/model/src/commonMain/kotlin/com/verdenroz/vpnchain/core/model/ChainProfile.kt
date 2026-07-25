@@ -16,6 +16,7 @@ data class ProtonWireGuardEntry(
     val peerPublicKey: String,
     val endpointHost: String,
     val endpointPort: Int = DEFAULT_ENDPOINT_PORT,
+    val dns: String? = null,
 ) {
     companion object {
         const val DEFAULT_ENDPOINT_PORT = 51820
