@@ -47,6 +47,7 @@ import com.verdenroz.vpnchain.core.ui.ScreenNameplate
 import com.verdenroz.vpnchain.core.ui.SectionCard
 import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.settings.component.ProfileForm
+import com.verdenroz.vpnchain.feature.settings.component.ProfilePicker
 import com.verdenroz.vpnchain.feature.settings.component.ThemePicker
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_always_on_active
@@ -77,6 +78,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_pasted
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_kill_switch_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_profile_yet
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profiles_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_qr_warning
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_route_entire_system_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_route_entire_system_title
@@ -140,6 +142,8 @@ fun SettingsRoute(
         onToggleAutoReconnect = viewModel::setAutoReconnect,
         onToggleAutoStart = viewModel::setAutoStartOnLogin,
         onToggleCloseToTray = viewModel::setCloseToTray,
+        onSelectProfile = viewModel::selectProfile,
+        onDeleteProfile = viewModel::deleteProfile,
         onOpenSystemVpnSettings = viewModel::openSystemVpnSettings,
         modifier = modifier,
     )
@@ -161,6 +165,8 @@ fun SettingsScreen(
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleAutoStart: (Boolean) -> Unit,
     onToggleCloseToTray: (Boolean) -> Unit,
+    onSelectProfile: (String) -> Unit,
+    onDeleteProfile: (String) -> Unit,
     onOpenSystemVpnSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -190,6 +196,19 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
+            // Only worth a card once there is a choice to make; a single
+            // profile is fully described by the identity card below.
+            if (uiState.profiles.size > 1) {
+                SectionCard(title = stringResource(Res.string.settings_profiles_title)) {
+                    ProfilePicker(
+                        profiles = uiState.profiles,
+                        activeProfileId = uiState.activeProfileId,
+                        onSelect = onSelectProfile,
+                        onDelete = onDeleteProfile,
+                    )
+                }
+            }
+
             SectionCard(title = stringResource(Res.string.settings_chain_identity_title)) {
                 Text(
                     if (hasProfile) {
