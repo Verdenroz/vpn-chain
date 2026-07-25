@@ -147,10 +147,16 @@ killswitch_status() {
   local bin; bin="$(command -v "$KILLSWITCH_BIN" 2>/dev/null || true)"
   if [ -z "$bin" ]; then
     printf '  kill switch: %shelper not installed%s (run cli/killswitch/build.sh)\n' "$c_red" "$c_off"
-  elif getcap "$bin" 2>/dev/null | grep -q cap_net_admin; then
+    return
+  fi
+  # Capabilities live on the inode, and getcap does not follow symlinks — a
+  # helper installed as a ~/.local/bin symlink reads as unprivileged while
+  # working perfectly, sending you to re-run a setcap that already succeeded.
+  local real; real="$(readlink -f "$bin" 2>/dev/null || printf '%s' "$bin")"
+  if getcap "$real" 2>/dev/null | grep -q cap_net_admin; then
     printf '  kill switch: %shelper ready%s (%s)\n' "$c_grn" "$c_off" "$bin"
   else
-    printf '  kill switch: %shelper not privileged%s (sudo setcap cap_net_admin=eip %s)\n' "$c_yel" "$c_off" "$bin"
+    printf '  kill switch: %shelper not privileged%s (sudo setcap cap_net_admin=eip %s)\n' "$c_yel" "$c_off" "$real"
   fi
 }
 
