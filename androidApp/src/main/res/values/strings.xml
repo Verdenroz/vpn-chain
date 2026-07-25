@@ -14,6 +14,13 @@
     <string name="widget_controls_label">Chain controls</string>
     <string name="widget_controls_description">Toggle the chain and scan a profile QR; resize taller for live metrics</string>
     <string name="widget_scan_qr">Scan QR</string>
+    <string name="widget_label_exit">EXIT</string>
+    <string name="widget_label_rtt">RTT</string>
+    <string name="widget_label_rate">RATE</string>
+    <string name="widget_label_session">SESSION</string>
+    <string name="widget_uptime_minutes">up %1$d min</string>
+    <string name="widget_uptime_hours">up %1$d h %2$d min</string>
+    <string name="widget_uptime_now">up &lt;1 min</string>
 
     <string name="notification_disconnect">Disconnect</string>
     <string name="notification_exit_resolving">Resolving exit…</string>
