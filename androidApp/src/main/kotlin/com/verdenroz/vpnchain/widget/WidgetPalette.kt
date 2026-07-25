@@ -1,18 +1,18 @@
 package com.verdenroz.vpnchain.widget
 
 import androidx.compose.ui.graphics.Color
+import androidx.glance.color.ColorProvider
 
 /**
- * Frozen dark-panel palette from core/designsystem's PanelTheme. Widgets can't
- * read the Compose theme (RemoteViews surface), so the instrument look is
- * restated here; dark-first matches the design direction in `.impeccable.md`.
+ * PanelTheme's light/dark tokens as day/night providers — widgets can't read
+ * the Compose theme, so both alloys are restated here from theme/Color.kt.
  */
 internal object WidgetPalette {
-    val shellFace = Color(0xFF1E1B17)
-    val shellRaised = Color(0xFF2A2722)
-    val readout = Color(0xFFEAE8E3)
-    val muted = Color(0xFF868480)
-    val lampGreen = Color(0xFF80D677)
-    val lampAmber = Color(0xFFFAAB35)
-    val lampRed = Color(0xFFEB4F3D)
+    val shellFace = ColorProvider(day = Color(0xFFD7D6D2), night = Color(0xFF1E1B17))
+    // Machined edge tones doubling as key outline and divider.
+    val outline = ColorProvider(day = Color(0xFF93908B), night = Color(0xFF4B4740))
+    val engraved = ColorProvider(day = Color(0xFF413E39), night = Color(0xFFA7A49F))
+    val green = ColorProvider(day = Color(0xFF196912), night = Color(0xFF80D677))
+    val amber = ColorProvider(day = Color(0xFF8D5200), night = Color(0xFFFAAB35))
+    val red = ColorProvider(day = Color(0xFFAE170A), night = Color(0xFFEB4F3D))
 }

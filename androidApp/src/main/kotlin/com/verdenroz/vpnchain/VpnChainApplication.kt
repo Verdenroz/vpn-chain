@@ -5,7 +5,8 @@ import androidx.glance.appwidget.updateAll
 import com.verdenroz.vpnchain.app.di.appModules
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
-import com.verdenroz.vpnchain.widget.ChainStatusWidget
+import com.verdenroz.vpnchain.notification.ChainNotificationUpdater
+import com.verdenroz.vpnchain.widget.ChainControlsWidget
 import com.verdenroz.vpnchain.widget.ChainToggleWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,7 @@ class VpnChainApplication : Application() {
             modules(appModules)
         }
         pushChainStateToWidgets()
+        ChainNotificationUpdater(this, get(), get()).start(appScope)
     }
 
     /**
@@ -47,7 +49,7 @@ class VpnChainApplication : Application() {
                 .distinctUntilChanged()
                 .collect {
                     ChainToggleWidget().updateAll(this@VpnChainApplication)
-                    ChainStatusWidget().updateAll(this@VpnChainApplication)
+                    ChainControlsWidget().updateAll(this@VpnChainApplication)
                 }
         }
     }

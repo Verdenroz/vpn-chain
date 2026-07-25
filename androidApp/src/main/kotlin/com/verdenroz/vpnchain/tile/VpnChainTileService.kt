@@ -2,6 +2,7 @@ package com.verdenroz.vpnchain.tile
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import com.verdenroz.vpnchain.core.tunnel.R as TunnelR
 
 /**
  * Quick Settings toggle for the chain. Passive tile: state is pushed while the
@@ -89,6 +91,7 @@ class VpnChainTileService : TileService(), KoinComponent {
             else -> Tile.STATE_INACTIVE
         }
         tile.label = getString(R.string.tile_label)
+        tile.icon = Icon.createWithResource(this, TunnelR.drawable.ic_vpn_chain_logo)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.subtitle = getString(
                 when {

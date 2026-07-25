@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome app mark for tinted-surface icons (QS tile, notification).
+     Same geometry as the launcher's themed-icon layer, minus its safe-zone
+     inset: the content spans [68,444] and centers itself in a 512 viewport. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512"
+    android:tint="?android:attr/colorControlNormal">
+    <path
+        android:pathData="M270,186 L338,186 A84,84 0 0 1 422,270 L422,338 A84,84 0 0 1 338,422 L270,422 A84,84 0 0 1 186,338 L186,270 A84,84 0 0 1 270,186 Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="44" />
+    <path
+        android:pathData="M174,90 L242,90 A84,84 0 0 1 326,174 L326,242 A84,84 0 0 1 242,326 L174,326 A84,84 0 0 1 90,242 L90,174 A84,84 0 0 1 174,90 Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="44" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M142,160 a18,18 0 1 1 36,0 a18,18 0 1 1 -36,0 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M230,256 a26,26 0 1 1 52,0 a26,26 0 1 1 -52,0 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M334,352 a18,18 0 1 1 36,0 a18,18 0 1 1 -36,0 Z" />
+</vector>

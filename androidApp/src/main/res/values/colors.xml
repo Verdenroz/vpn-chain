@@ -2,4 +2,6 @@
 <resources>
     <!-- Near-black with a green cast so the emerald mark pops on the launcher. -->
     <color name="ic_launcher_background">#0A1411</color>
+    <!-- PanelTheme's light-alloy lamp red; values-night carries the dark one. -->
+    <color name="notification_disconnect">#AE170A</color>
 </resources>

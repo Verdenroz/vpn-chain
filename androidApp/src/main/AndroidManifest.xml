@@ -32,7 +32,7 @@
         <service
             android:name=".tile.VpnChainTileService"
             android:exported="true"
-            android:icon="@drawable/ic_vpn_chain_link"
+            android:icon="@drawable/ic_vpn_chain_logo"
             android:label="@string/tile_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
@@ -56,15 +56,15 @@
         </receiver>
 
         <receiver
-            android:name=".widget.ChainStatusWidgetReceiver"
+            android:name=".widget.ChainControlsWidgetReceiver"
             android:exported="false"
-            android:label="@string/widget_status_label">
+            android:label="@string/widget_controls_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_chain_status" />
+                android:resource="@xml/widget_chain_controls" />
         </receiver>
 
         <!-- sing-box runs inside this VpnService via the libbox AAR (core:tunnel). -->
