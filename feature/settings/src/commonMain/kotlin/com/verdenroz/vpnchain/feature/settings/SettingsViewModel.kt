@@ -77,6 +77,14 @@ class SettingsViewModel(
         settingsRepository.setKillSwitchEnabled(enabled)
     }
 
+    fun setAutoConnectOnLaunch(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setAutoConnectOnLaunch(enabled)
+    }
+
+    fun setAutoReconnect(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setAutoReconnect(enabled)
+    }
+
     fun saveProfile(profile: ChainProfile) = viewModelScope.launch {
         profileRepository.save(profile)
         _message.value = SettingsMessage.Info(UiText.Resource(Res.string.settings_profile_saved))
