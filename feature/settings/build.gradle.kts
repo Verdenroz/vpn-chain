@@ -11,7 +11,7 @@ compose.resources {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation(compose.components.resources)
+            implementation(libs.compose.components.resources)
             implementation(projects.core.common)
             implementation(projects.core.config)
         }
