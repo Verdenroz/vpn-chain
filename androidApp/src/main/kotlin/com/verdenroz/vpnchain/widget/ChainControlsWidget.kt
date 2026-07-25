@@ -61,23 +61,34 @@ import org.koin.core.context.GlobalContext
  */
 class ChainControlsWidget : GlanceAppWidget() {
 
-    override val sizeMode: SizeMode = SizeMode.Responsive(setOf(COMPACT, TALL))
+    override val sizeMode: SizeMode = SizeMode.Responsive(setOf(COMPACT, TALL, XTALL))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         provideContent {
             val state = rememberChainWidgetState(LocalContext.current)
-            val tall = LocalSize.current.height >= TALL.height
-            if (tall) {
-                // Cap the readout height: a readout stretched to fill a big
-                // cell reads as a slab of empty panel, not an instrument.
-                val panelHeight = minOf(LocalSize.current.height - KEY_SIZE - 6.dp, 84.dp)
-                Column(modifier = GlanceModifier.fillMaxSize()) {
+            val height = LocalSize.current.height
+            when {
+                height >= XTALL.height -> Column(modifier = GlanceModifier.fillMaxSize()) {
                     ControlCapsule(state, modifier = GlanceModifier.fillMaxWidth().height(KEY_SIZE))
                     Spacer(GlanceModifier.height(6.dp))
-                    MetricsPanel(modifier = GlanceModifier.fillMaxWidth().height(panelHeight))
+                    // Room for the full readout, so let it fill the cell.
+                    MetricsPanel(
+                        expanded = true,
+                        modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
+                    )
                 }
-            } else {
-                Box(modifier = GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                height >= TALL.height -> Column(modifier = GlanceModifier.fillMaxSize()) {
+                    ControlCapsule(state, modifier = GlanceModifier.fillMaxWidth().height(KEY_SIZE))
+                    Spacer(GlanceModifier.height(6.dp))
+                    // Cap the readout height: a short readout stretched to fill
+                    // reads as a slab of empty panel, not an instrument.
+                    MetricsPanel(
+                        expanded = false,
+                        modifier = GlanceModifier.fillMaxWidth()
+                            .height(minOf(height - KEY_SIZE - 6.dp, 84.dp)),
+                    )
+                }
+                else -> Box(modifier = GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     ControlCapsule(state, modifier = GlanceModifier.fillMaxWidth().height(KEY_SIZE))
                 }
             }
@@ -87,6 +98,7 @@ class ChainControlsWidget : GlanceAppWidget() {
     private companion object {
         val COMPACT = DpSize(110.dp, 50.dp)
         val TALL = DpSize(110.dp, 115.dp)
+        val XTALL = DpSize(110.dp, 180.dp)
     }
 }
 
@@ -131,24 +143,26 @@ private fun ControlCapsule(state: ChainWidgetState, modifier: GlanceModifier) {
 
 /** Live readout fed by the same route/stats flows the Chain screen reads. */
 @Composable
-private fun MetricsPanel(modifier: GlanceModifier) {
+private fun MetricsPanel(expanded: Boolean, modifier: GlanceModifier) {
     val local = LocalContext.current
     val koin = remember { GlobalContext.get() }
-    val status by koin.get<ChainRepository>().status.collectAsState(ChainStatus())
     val stats by koin.get<ChainRepository>().stats.collectAsState(SessionStats())
     val route by remember { koin.get<ObserveChainRouteUseCase>()() }.collectAsState(ChainRoute())
 
     val exit = route.hop(HopRole.Exit)
-    val detailLine = listOfNotNull(
+    val rttLine = listOfNotNull(
         route.throughRttMs?.let { local.getString(R.string.notification_rtt, it) },
         exit?.location?.countryName,
     ).joinToString(" · ").ifEmpty { PLACEHOLDER }
-    val trafficLine = if (stats.hasTraffic) {
-        "↓ ${formatRate(stats.downlinkBytesPerSecond)} · ↑ ${formatRate(stats.uplinkBytesPerSecond)}" +
-            " · ${formatBytes(stats.uplinkBytes + stats.downlinkBytes)}"
+    val rateLine = if (stats.hasTraffic) {
+        "↓ ${formatRate(stats.downlinkBytesPerSecond)} · ↑ ${formatRate(stats.uplinkBytesPerSecond)}"
     } else {
         PLACEHOLDER
     }
+    val sessionLine = buildList {
+        if (stats.hasTraffic) add(formatBytes(stats.uplinkBytes + stats.downlinkBytes))
+        stats.connectedSinceMillis?.let { add(coarseUptime(local, System.currentTimeMillis() - it)) }
+    }.joinToString(" · ").ifEmpty { PLACEHOLDER }
 
     Box(
         modifier = modifier
@@ -162,31 +176,88 @@ private fun MetricsPanel(modifier: GlanceModifier) {
                 .fillMaxSize()
                 .background(WidgetPalette.shellFace)
                 .cornerRadius(14.dp)
-                .padding(horizontal = 14.dp, vertical = 6.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            Column {
-                Text(
-                    text = exit?.ip ?: PLACEHOLDER,
-                    maxLines = 1,
-                    style = TextStyle(
-                        color = WidgetPalette.readout,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                    ),
-                )
-                Text(
-                    text = detailLine,
-                    maxLines = 1,
-                    style = TextStyle(color = WidgetPalette.engraved, fontSize = 10.sp),
-                )
-                Text(
-                    text = trafficLine,
-                    maxLines = 1,
-                    style = TextStyle(color = WidgetPalette.engraved, fontSize = 10.sp),
-                )
+            if (expanded) {
+                // Weight spacers spread the rows across whatever height the
+                // user dragged out, so a big cell fills with readout, not face.
+                // The label column already says RTT, so the value drops its prefix.
+                val rttValue = listOfNotNull(
+                    route.throughRttMs?.let { "$it ms" },
+                    exit?.location?.countryName,
+                ).joinToString(" · ").ifEmpty { PLACEHOLDER }
+                Column(modifier = GlanceModifier.fillMaxSize()) {
+                    MetricRow(local.getString(R.string.widget_label_exit), exit?.ip ?: PLACEHOLDER, strong = true)
+                    Spacer(GlanceModifier.defaultWeight())
+                    MetricRow(local.getString(R.string.widget_label_rtt), rttValue)
+                    Spacer(GlanceModifier.defaultWeight())
+                    MetricRow(local.getString(R.string.widget_label_rate), rateLine)
+                    Spacer(GlanceModifier.defaultWeight())
+                    MetricRow(local.getString(R.string.widget_label_session), sessionLine)
+                }
+            } else {
+                Column {
+                    Text(
+                        text = exit?.ip ?: PLACEHOLDER,
+                        maxLines = 1,
+                        style = TextStyle(
+                            color = WidgetPalette.readout,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                    )
+                    Text(
+                        text = rttLine,
+                        maxLines = 1,
+                        style = TextStyle(color = WidgetPalette.engraved, fontSize = 10.sp),
+                    )
+                    Text(
+                        text = rateLine,
+                        maxLines = 1,
+                        style = TextStyle(color = WidgetPalette.engraved, fontSize = 10.sp),
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun MetricRow(label: String, value: String, strong: Boolean = false) {
+    Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            maxLines = 1,
+            style = TextStyle(
+                color = WidgetPalette.muted,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            modifier = GlanceModifier.width(48.dp),
+        )
+        Text(
+            text = value,
+            maxLines = 1,
+            style = TextStyle(
+                color = if (strong) WidgetPalette.readout else WidgetPalette.engraved,
+                fontSize = if (strong) 13.sp else 11.sp,
+                fontWeight = if (strong) FontWeight.Medium else FontWeight.Normal,
+            ),
+        )
+    }
+}
+
+/**
+ * Minute-granular on purpose: the widget refreshes on a 30s tick, so a
+ * seconds display would sit frozen between ticks and read as a hang.
+ */
+private fun coarseUptime(context: Context, millis: Long): String {
+    val minutes = millis.coerceAtLeast(0) / 60_000
+    return when {
+        minutes < 1 -> context.getString(R.string.widget_uptime_now)
+        minutes < 60 -> context.getString(R.string.widget_uptime_minutes, minutes)
+        else -> context.getString(R.string.widget_uptime_hours, minutes / 60, minutes % 60)
     }
 }
 
