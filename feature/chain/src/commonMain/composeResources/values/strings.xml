@@ -22,5 +22,4 @@
     <string name="chain_kill_switch_hint_proton">Relay-only mode: the ProtonVPN app provides the kill switch here.</string>
     <string name="chain_empty_state_title">No chain profile configured yet.</string>
     <string name="chain_open_settings">Open Settings</string>
-    <string name="chain_route_attribution">Country-level, resolved offline. IP geolocation by DB-IP.</string>
 </resources>
