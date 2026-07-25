@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tunnel_error_tun_privilege_hint">TUN mode needs elevated privileges. Grant them once with:  sudo setcap cap_net_admin,cap_net_bind_service=+ep $(command -v sing-box)</string>
+    <string name="tunnel_error_already_running_hint">a relay is already running. Disconnect first, then reconnect</string>
+    <string name="tunnel_error_kill_switch_unavailable">kill switch helper not found, connecting without fail-closed protection. Build cli/killswitch/ and setcap it to enable.</string>
+    <string name="tunnel_error_relay_already_running_pid">a relay is already running (pid %1$s). Disconnect first</string>
+    <string name="tunnel_error_cannot_launch">cannot launch '%1$s': is sing-box installed and on PATH?</string>
+    <string name="tunnel_error_exit_kill_switch_engaged">sing-box exited (%1$d). Kill switch engaged, network is blocked. Reconnect, or Disconnect to restore normal routing.</string>
+    <string name="tunnel_error_exit_generic">sing-box exited (%1$d): see Logs for details</string>
+    <string name="tunnel_status_tun_adopted">system-wide (TUN), adopted running relay</string>
+    <string name="tunnel_status_tun">system-wide (TUN)</string>
+    <string name="tunnel_status_sharing_cli">sharing relay with CLI</string>
+    <string name="tunnel_error_vpn_permission_denied">VPN permission denied</string>
+    <string name="tunnel_error_no_config_provided">no configuration provided</string>
+    <string name="tunnel_error_start_failed">start failed</string>
+    <string name="tunnel_log_already_state">already %1$s, ignoring connect</string>
+    <string name="tunnel_log_adopted_system_wide">adopted running system-wide relay (started outside this app)</string>
+    <string name="tunnel_log_adopted_relay_port">adopted existing relay on 127.0.0.1:%1$d</string>
+    <string name="tunnel_log_kill_switch_no_exempt">kill switch: could not determine which IPs to exempt, not engaging</string>
+    <string name="tunnel_log_kill_switch_engaged">kill switch engaged (nftables, exempting %1$s)</string>
+    <string name="tunnel_log_kill_switch_disengaged">kill switch disengaged</string>
+    <string name="tunnel_log_kill_switch_helper_error">%1$s: %2$s</string>
+</resources>

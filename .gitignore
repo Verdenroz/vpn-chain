@@ -1,0 +1,31 @@
+# Gradle / build
+.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+/captures/
+.cxx/
+
+# IDE
+.idea/
+*.iml
+local.properties
+
+# OS
+.DS_Store
+
+# Kotlin/Native & KMP
+*.klib
+kotlin-js-store/
+.kotlin/
+
+# Android
+*.apk
+*.aab
+*.keystore
+*.jks
+google-services.json
+
+# Secrets — real values live OUTSIDE the repo in ~/.config/vpn-chain/secrets.env
+secrets.env
+secrets.properties
+*.local.json

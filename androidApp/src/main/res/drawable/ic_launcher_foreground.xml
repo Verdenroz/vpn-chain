@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: the vpn-chain mark (see assets/branding/logo.svg).
+     Geometry authored in a 512 space, scaled so the mark's diagonal corners
+     stay inside the 66dp safe-zone circle of the 108dp adaptive canvas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.148"
+        android:scaleY="0.148"
+        android:translateX="16.11"
+        android:translateY="16.11">
+
+        <!-- link B (lower-right) -->
+        <path
+            android:pathData="M270,186 L338,186 A84,84 0 0 1 422,270 L422,338 A84,84 0 0 1 338,422 L270,422 A84,84 0 0 1 186,338 L186,270 A84,84 0 0 1 270,186 Z"
+            android:strokeWidth="44">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="68" android:startY="68"
+                    android:endX="444" android:endY="444">
+                    <item android:offset="0" android:color="#FF047857" />
+                    <item android:offset="1" android:color="#FF34D399" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- link A (upper-left), drawn over B -->
+        <path
+            android:pathData="M174,90 L242,90 A84,84 0 0 1 326,174 L326,242 A84,84 0 0 1 242,326 L174,326 A84,84 0 0 1 90,242 L90,174 A84,84 0 0 1 174,90 Z"
+            android:strokeWidth="44">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="68" android:startY="68"
+                    android:endX="444" android:endY="444">
+                    <item android:offset="0" android:color="#FF047857" />
+                    <item android:offset="1" android:color="#FF34D399" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- re-draw B over A at the bottom-left crossing to complete the weave -->
+        <group>
+            <clip-path android:pathData="M140,280 L232,280 L232,372 L140,372 Z" />
+            <path
+                android:pathData="M270,186 L338,186 A84,84 0 0 1 422,270 L422,338 A84,84 0 0 1 338,422 L270,422 A84,84 0 0 1 186,338 L186,270 A84,84 0 0 1 270,186 Z"
+                android:strokeWidth="44">
+                <aapt:attr name="android:strokeColor">
+                    <gradient
+                        android:type="linear"
+                        android:startX="68" android:startY="68"
+                        android:endX="444" android:endY="444">
+                        <item android:offset="0" android:color="#FF047857" />
+                        <item android:offset="1" android:color="#FF34D399" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+        </group>
+
+        <!-- the three hops: entry, relay, exit (solid colors sampled from the gradient) -->
+        <path
+            android:fillColor="#FF108E67"
+            android:pathData="M142,160 a18,18 0 1 1 36,0 a18,18 0 1 1 -36,0 Z" />
+        <path
+            android:fillColor="#FF1CA678"
+            android:pathData="M230,256 a26,26 0 1 1 52,0 a26,26 0 1 1 -52,0 Z" />
+        <path
+            android:fillColor="#FF28BD89"
+            android:pathData="M334,352 a18,18 0 1 1 36,0 a18,18 0 1 1 -36,0 Z" />
+    </group>
+</vector>

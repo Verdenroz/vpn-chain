@@ -1,0 +1,135 @@
+# Builds and publishes a GitHub Release when a v* tag is pushed:
+#   - Android: release APKs (arm64-v8a + x86_64 splits), signed with the
+#     keystore from secrets if configured, debug-signed otherwise.
+#   - Desktop: jpackage can't cross-compile, so each package builds on its
+#     native runner — Linux .deb + portable .tar.gz, Windows .msi,
+#     macOS .dmg (arm64; unsigned — right-click → Open past Gatekeeper).
+#
+# Optional secrets for stable Android signing across releases:
+#   ANDROID_KEYSTORE_B64       base64 of the .jks  (base64 -w0 release.jks)
+#   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      # The project's gradle.properties pins a local JDK path; the user-home
+      # file takes precedence, so point it at the runner's JDK instead.
+      - name: Use runner JDK
+        run: |
+          mkdir -p ~/.gradle
+          echo "org.gradle.java.home=$JAVA_HOME" >> ~/.gradle/gradle.properties
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode signing keystore
+        if: env.KEYSTORE_B64 != ''
+        run: printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build release APKs
+        env:
+          VPNCHAIN_KEYSTORE: ${{ env.KEYSTORE_B64 != '' && format('{0}/release.jks', runner.temp) || '' }}
+          VPNCHAIN_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VPNCHAIN_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VPNCHAIN_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :androidApp:assembleRelease
+
+      - name: Collect APKs
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          for apk in androidApp/build/outputs/apk/release/*.apk; do
+            abi=$(basename "$apk" | sed -E 's/^androidApp-(.+)-release(-unsigned)?\.apk$/\1/')
+            cp "$apk" "dist/vpn-chain-$VERSION-android-$abi.apk"
+          done
+          ls -la dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x64
+            tasks: ":desktopApp:packageReleaseDeb :desktopApp:createReleaseDistributable"
+          - os: windows-latest
+            label: windows-x64
+            tasks: ":desktopApp:packageReleaseMsi"
+          - os: macos-latest
+            label: macos-arm64
+            tasks: ":desktopApp:packageReleaseDmg"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Use runner JDK
+        shell: bash
+        run: |
+          mkdir -p ~/.gradle
+          # Java .properties files treat \ as an escape char, so a raw Windows
+          # JAVA_HOME (C:\hostedtoolcache\...) gets silently mangled on load;
+          # cygpath -m gives the same path with forward slashes instead.
+          JDK_HOME="$JAVA_HOME"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            JDK_HOME="$(cygpath -m "$JAVA_HOME")"
+          fi
+          echo "org.gradle.java.home=$JDK_HOME" >> ~/.gradle/gradle.properties
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build desktop packages
+        shell: bash
+        run: ./gradlew ${{ matrix.tasks }}
+
+      - name: Collect packages
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          OUT=desktopApp/build/compose/binaries/main-release
+          mkdir -p dist
+          for pkg in "$OUT"/deb/*.deb "$OUT"/msi/*.msi "$OUT"/dmg/*.dmg; do
+            [ -e "$pkg" ] || continue
+            cp "$pkg" "dist/vpn-chain-$VERSION-${{ matrix.label }}.${pkg##*.}"
+          done
+          # Portable distributable (Linux only)
+          if [ -d "$OUT/app/vpn-chain" ]; then
+            tar -C "$OUT/app" -czf "dist/vpn-chain-$VERSION-${{ matrix.label }}.tar.gz" vpn-chain
+          fi
+          ls -la dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.label }}
+          path: dist/*
+
+  publish:
+    needs: [android, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

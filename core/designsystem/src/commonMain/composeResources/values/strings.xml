@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="status_disconnected">disconnected</string>
+    <string name="status_connecting">connecting</string>
+    <string name="status_connected">connected</string>
+    <string name="status_error">error</string>
+    <string name="switch_legend_off">OFF</string>
+    <string name="switch_legend_on">ON</string>
+</resources>

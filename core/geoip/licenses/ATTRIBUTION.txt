@@ -1,0 +1,15 @@
+# Data sources
+
+`geoip_ranges.bin` — IPv4 range → country-code table, compiled from the
+[DB-IP Lite country database](https://db-ip.com/db/download/ip-to-country-lite)
+(2026-07 edition), licensed under
+[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+Attribution: IP Geolocation by [DB-IP](https://db-ip.com).
+
+`CountryGeo.kt` centroids — computed from
+[Natural Earth](https://www.naturalearthdata.com/) 1:110m Admin 0 Countries
+(public domain, no attribution required), with a small manual fallback list
+for territories the 110m layer omits.
+
+The in-app map background (`world.svg`) is traced from Natural Earth 1:110m
+Land polygons (public domain).

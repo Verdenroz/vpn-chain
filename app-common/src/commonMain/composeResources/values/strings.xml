@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_chain">chain</string>
+    <string name="nav_logs">logs</string>
+    <string name="nav_settings">settings</string>
+</resources>
