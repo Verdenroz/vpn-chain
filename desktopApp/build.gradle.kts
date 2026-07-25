@@ -72,6 +72,7 @@ compose.desktop {
         buildTypes.release.proguard { isEnabled.set(false) }
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            modules("jdk.unsupported")
             packageName = "vpn-chain"
             packageVersion = providers.gradleProperty("vpnchain.version").getOrElse("0.1.0")
             linux { iconFile.set(project.file("icons/vpn-chain.png")) }
