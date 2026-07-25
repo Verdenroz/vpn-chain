@@ -88,6 +88,17 @@ fun SettingsRoute(
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Hoisted above SettingsScreen so an external QrScanRequest (widget/deep
+    // link) can fire the same launcher the in-screen button uses.
+    val scanQr = rememberQrScanLauncher { scanned -> scanned?.let(viewModel::importSecretsEnv) }
+    val scanRequested by QrScanRequest.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(scanRequested) {
+        if (scanRequested) {
+            QrScanRequest.consume()
+            scanQr()
+        }
+    }
+
     // Resolved here, in the Composable body, since asString() needs a
     // stringResource context that the coroutine scope below doesn't have.
     val messageText = message?.let {
@@ -112,6 +123,7 @@ fun SettingsRoute(
         onClearProfile = viewModel::clearProfile,
         onImportText = viewModel::importSecretsEnv,
         onImportDefault = viewModel::importDefaultSecretsEnv,
+        onScanQr = scanQr,
         onToggleSystemWide = viewModel::setSystemWideTun,
         onToggleKillSwitch = viewModel::setKillSwitchEnabled,
         onOpenSystemVpnSettings = viewModel::openSystemVpnSettings,
@@ -128,6 +140,7 @@ fun SettingsScreen(
     onClearProfile: () -> Unit,
     onImportText: (String) -> Unit,
     onImportDefault: () -> Unit,
+    onScanQr: () -> Unit,
     onToggleSystemWide: (Boolean) -> Unit,
     onToggleKillSwitch: (Boolean) -> Unit,
     onOpenSystemVpnSettings: () -> Unit,
@@ -204,7 +217,11 @@ fun SettingsScreen(
 
                 Reveal(visible = importExpanded) {
                     Spacer(Modifier.height(16.dp))
-                    ImportSection(onImportText = onImportText, onImportDefault = onImportDefault)
+                    ImportSection(
+                        onImportText = onImportText,
+                        onImportDefault = onImportDefault,
+                        onScanQr = onScanQr,
+                    )
                 }
                 Reveal(visible = formExpanded) {
                     Spacer(Modifier.height(16.dp))
@@ -312,10 +329,10 @@ private fun AlwaysOnGuidance(detected: Boolean, onOpenSystemVpnSettings: () -> U
 private fun ImportSection(
     onImportText: (String) -> Unit,
     onImportDefault: () -> Unit,
+    onScanQr: () -> Unit,
 ) {
     val colors = PanelTheme.colors
     var pasted by remember { mutableStateOf("") }
-    val scanQr = rememberQrScanLauncher { scanned -> scanned?.let(onImportText) }
 
     Column {
         // Typing 12 secret fields on a phone keyboard is miserable — scanning the
@@ -323,7 +340,7 @@ private fun ImportSection(
         if (currentPlatform == Platform.Android) {
             PanelButton(
                 text = stringResource(Res.string.settings_scan_qr),
-                onClick = scanQr,
+                onClick = onScanQr,
                 prominent = true,
             )
             Spacer(Modifier.height(12.dp))

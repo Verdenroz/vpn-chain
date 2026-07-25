@@ -42,8 +42,13 @@ android {
 dependencies {
     implementation(projects.appCommon)
     implementation(projects.core.tunnel)
+    // Tile/widget surfaces drive the chain through the same use cases the UI does.
+    implementation(projects.core.data)
+    implementation(projects.core.domain)
+    implementation(projects.feature.settings)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.glance.appwidget)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.koin.core)
     implementation(libs.koin.android)

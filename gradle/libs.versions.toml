@@ -22,6 +22,7 @@ koin = "4.2.2"
 jetbrainsLifecycle = "2.10.0"
 jetbrainsNavigation = "2.9.2"
 androidxDataStore = "1.2.1"
+androidxGlance = "1.1.1"
 okio = "3.17.0"
 # Genuine prebuilt sing-box mobile core (gomobile AAR); tag == sing-box version.
 libbox = "1.13.14"
@@ -46,6 +47,7 @@ jetbrains-lifecycle-viewmodel-compose = { group = "org.jetbrains.androidx.lifecy
 jetbrains-lifecycle-runtime-compose = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "jetbrainsLifecycle" }
 jetbrains-navigation-compose = { group = "org.jetbrains.androidx.navigation", name = "navigation-compose", version.ref = "jetbrainsNavigation" }
 androidx-datastore-preferences-core = { group = "androidx.datastore", name = "datastore-preferences-core", version.ref = "androidxDataStore" }
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "androidxGlance" }
 okio = { group = "com.squareup.okio", name = "okio", version.ref = "okio" }
 libbox = { group = "com.github.singbox-android", name = "libbox", version.ref = "libbox" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
