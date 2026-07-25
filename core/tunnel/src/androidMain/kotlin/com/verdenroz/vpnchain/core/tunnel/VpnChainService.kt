@@ -15,6 +15,7 @@ import android.os.ParcelFileDescriptor
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.Res
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_engine_stopped
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_no_config_provided
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_start_failed
 import io.nekohasekai.libbox.CommandClient
@@ -48,6 +49,9 @@ class VpnChainService : VpnService(), CommandServerHandler {
     private var worker: Thread? = null
 
     private val lockdownPoller = Handler(Looper.getMainLooper())
+
+    /** Set while we are dismantling the tunnel ourselves. */
+    @Volatile private var tearingDown = false
     private val lockdownCheck = object : Runnable {
         override fun run() {
             refreshLockdownState()
@@ -94,6 +98,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
             return
         }
 
+        tearingDown = false
         startForegroundNotification()
         TunnelBridge.setState(TunnelState.Connecting)
         refreshLockdownState()
@@ -123,6 +128,22 @@ class VpnChainService : VpnService(), CommandServerHandler {
         }.also { it.start() }
     }
 
+    /**
+     * Reports an unexpected stop as [TunnelState.Error] rather than
+     * Disconnected: that is what tells ChainSupervisor to reconnect, where a
+     * clean Disconnected would read as the user having asked for it.
+     */
+    private fun onEngineDied() {
+        if (TunnelBridge.status.value.state != TunnelState.Connected) return
+        TunnelBridge.setState(
+            TunnelState.Error,
+            UiText.Resource(Res.string.tunnel_error_engine_stopped),
+        )
+        cleanup()
+        stopForegroundCompat()
+        stopSelf()
+    }
+
     private fun stopTunnel() {
         TunnelBridge.setState(TunnelState.Disconnected)
         cleanup()
@@ -131,6 +152,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
     }
 
     private fun cleanup() {
+        tearingDown = true
         lockdownPoller.removeCallbacks(lockdownCheck)
         runCatching { logClient?.disconnect() }
         logClient = null
@@ -293,7 +315,19 @@ class VpnChainService : VpnService(), CommandServerHandler {
             }
         }
         override fun connected() = Unit
-        override fun disconnected(message: String?) = Unit
+
+        /**
+         * The engine going away underneath us. Nothing else on Android notices
+         * a post-start death: the worker thread has long since returned, so
+         * without this the tunnel reads Connected while carrying no traffic.
+         */
+        override fun disconnected(message: String?) {
+            if (tearingDown || TunnelBridge.status.value.state != TunnelState.Connected) return
+            TunnelBridge.log("sing-box status stream ended: ${message ?: "no reason given"}")
+            // Hopped to the main thread because this runs on a libbox callback,
+            // and cleanup() disconnects the very client calling us.
+            lockdownPoller.post { onEngineDied() }
+        }
         override fun writeLogs(messageList: LogIterator) = Unit
         override fun clearLogs() = Unit
         override fun setDefaultLogLevel(level: Int) = Unit
