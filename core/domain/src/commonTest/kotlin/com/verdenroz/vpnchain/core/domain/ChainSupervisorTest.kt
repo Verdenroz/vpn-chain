@@ -6,6 +6,7 @@ import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
@@ -228,6 +229,7 @@ private class FakeChainRepository(initialState: TunnelState) : ChainRepository {
     private val statusFlow = MutableStateFlow(ChainStatus(state = initialState))
     override val status: Flow<ChainStatus> = statusFlow
     override val connectionIntent = MutableStateFlow(false)
+    override val stats = MutableStateFlow(SessionStats())
     override val killSwitchGuidanceSupported = false
     override val alwaysOnDetected = MutableStateFlow(false)
     override fun openSystemVpnSettings() = Unit

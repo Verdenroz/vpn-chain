@@ -1,10 +1,33 @@
 package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import java.net.ServerSocket
+import java.security.SecureRandom
 
-actual fun renderPlatformTunnelConfig(profile: ChainProfile, systemWide: Boolean): String =
-    if (systemWide) {
-        SingBoxConfigFactory.androidChainConfig(profile)
+/**
+ * Desktop renders a clash API into every config so the controller has a way to
+ * read traffic counters — sing-box is an opaque subprocess here, unlike Android
+ * where libbox reports status in-process.
+ */
+actual fun renderPlatformTunnelConfig(profile: ChainProfile, systemWide: Boolean): String {
+    val clashApi = newClashApi()
+    return if (systemWide) {
+        SingBoxConfigFactory.androidChainConfig(profile, clashApi)
     } else {
-        SingBoxConfigFactory.mixedProxyConfig(profile)
+        SingBoxConfigFactory.mixedProxyConfig(profile, clashApi)
     }
+}
+
+/**
+ * A fresh port and secret per rendered config. There is a window between
+ * releasing the probe socket and sing-box binding it, but losing that race
+ * costs stats, not the tunnel — the relay itself does not depend on the API.
+ */
+private fun newClashApi(): ClashApi = ClashApi(
+    port = ServerSocket(0).use { it.localPort },
+    secret = ByteArray(SECRET_BYTES)
+        .also(SecureRandom()::nextBytes)
+        .joinToString("") { byte -> ((byte.toInt() and 0xFF) + 0x100).toString(16).substring(1) },
+)
+
+private const val SECRET_BYTES = 24

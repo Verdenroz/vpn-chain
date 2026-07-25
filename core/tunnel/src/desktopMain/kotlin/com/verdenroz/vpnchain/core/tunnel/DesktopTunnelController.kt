@@ -1,6 +1,9 @@
 package com.verdenroz.vpnchain.core.tunnel
 
+import com.verdenroz.vpnchain.core.common.currentTimeMillis
+import com.verdenroz.vpnchain.core.config.ClashApi
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.KillSwitchState
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
@@ -70,6 +73,12 @@ class DesktopTunnelController(
     private val singBoxBin: String = "sing-box",
     private val killSwitchBin: String = "vpn-chain-killswitch",
 ) : TunnelController {
+
+    private val _stats = MutableStateFlow(SessionStats())
+    override val stats: StateFlow<SessionStats> = _stats.asStateFlow()
+
+    @Volatile private var clashApi: ClashApi? = null
+    private var statsJob: Job? = null
 
     private val _status = MutableStateFlow(ChainStatus())
     override val status: StateFlow<ChainStatus> = _status.asStateFlow()
@@ -143,7 +152,8 @@ class DesktopTunnelController(
                 return@withLock
             }
             if (process?.isAlive == true) return@withLock
-            tunMode = RelayConfig.isTun(configJson)
+            clashApi = RelayConfig.clashApi(configJson)
+        tunMode = RelayConfig.isTun(configJson)
             tunHasEntry = tunMode && RelayConfig.hasWireGuardEntry(configJson)
             proxyPort = RelayConfig.proxyPort(configJson, DEFAULT_PROXY_PORT)
             this@DesktopTunnelController.killSwitchEnabled = killSwitchEnabled
@@ -490,6 +500,7 @@ class DesktopTunnelController(
             },
         )
         startLogTail()
+        startStatsPoll()
         scope.launch(Dispatchers.IO) {
             // The first request after a fresh relay often times out while the
             // VLESS connection warms up, so retry a few times. In TUN mode all
@@ -540,7 +551,50 @@ class DesktopTunnelController(
         }
     }
 
+    /**
+     * Adopted CLI relays render no clash API, so this simply never starts and
+     * the readout stays empty rather than reporting zeroes as though measured.
+     */
+    private fun startStatsPoll() {
+        statsJob?.cancel()
+        val api = clashApi ?: return
+        val startedAt = currentTimeMillis()
+        _stats.value = SessionStats(connectedSinceMillis = startedAt)
+        statsJob = scope.launch(Dispatchers.IO) {
+            var lastTotals: TrafficTotals? = null
+            var lastSampleAt = startedAt
+            while (isActive && _status.value.state == TunnelState.Connected) {
+                val totals = ClashStatsClient.fetchTotals(api)
+                val now = currentTimeMillis()
+                if (totals != null) {
+                    val previous = lastTotals
+                    _stats.value = SessionStats(
+                        connectedSinceMillis = startedAt,
+                        uplinkBytes = totals.uplinkBytes,
+                        downlinkBytes = totals.downlinkBytes,
+                        uplinkBytesPerSecond = previous?.let {
+                            rateBytesPerSecond(it.uplinkBytes, totals.uplinkBytes, now - lastSampleAt)
+                        } ?: 0,
+                        downlinkBytesPerSecond = previous?.let {
+                            rateBytesPerSecond(it.downlinkBytes, totals.downlinkBytes, now - lastSampleAt)
+                        } ?: 0,
+                    )
+                    lastTotals = totals
+                    lastSampleAt = now
+                }
+                delay(STATS_POLL_MS)
+            }
+        }
+    }
+
+    private fun stopStatsPoll() {
+        statsJob?.cancel()
+        statsJob = null
+        _stats.value = SessionStats()
+    }
+
     private fun stopLogTail() {
+        stopStatsPoll()
         logTailJob?.cancel()
         logTailJob = null
     }
@@ -638,6 +692,7 @@ class DesktopTunnelController(
         const val PROTON_INTERFACE = "proton0"
         const val TUN_ADDRESS = "10.19.19.1"
         const val POLL_INTERVAL_MS = 3_000L
+        const val STATS_POLL_MS = 1_000L
         const val PROCESS_EXIT_TIMEOUT_S = 5L
         const val PROBE_TIMEOUT_MS = 400
         const val HTTP_TIMEOUT_MS = 10_000

@@ -5,6 +5,7 @@ import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.logging.Logger
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +35,9 @@ interface ChainRepository {
      */
     suspend fun reconnect(): Result<Unit>
 
+    /** Traffic and uptime for the live session. */
+    val stats: Flow<SessionStats>
+
     /** Whether this platform has an OS-level kill switch worth guiding the user toward. */
     val killSwitchGuidanceSupported: Boolean
 
@@ -53,6 +57,7 @@ internal class DefaultChainRepository(
 ) : ChainRepository {
 
     override val status: Flow<ChainStatus> = controller.status
+    override val stats: Flow<SessionStats> = controller.stats
     override val killSwitchGuidanceSupported: Boolean = controller.killSwitchGuidanceSupported
     override val alwaysOnDetected: Flow<Boolean> = controller.alwaysOnDetected
     override val connectionIntent: Flow<Boolean> = preferences.connectionIntent

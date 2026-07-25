@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.tunnel
 
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.SessionStats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +31,12 @@ interface TunnelController {
      * system Settings toggle, desktop's is the real ProtonVPN app's own switch.
      */
     val killSwitchGuidanceSupported: Boolean get() = false
+
+    /**
+     * Traffic and uptime for the live session. Defaults to empty: a platform
+     * with no way to report traffic is a missing readout, not a broken build.
+     */
+    val stats: StateFlow<SessionStats> get() = MutableStateFlow(SessionStats()).asStateFlow()
 
     /** True once we've observed the OS itself launch us as an always-on VPN. */
     val alwaysOnDetected: StateFlow<Boolean> get() = MutableStateFlow(false).asStateFlow()
