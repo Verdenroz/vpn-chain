@@ -30,13 +30,16 @@ val dataModule = module {
     single<ConnectivityRepository> { DefaultConnectivityRepository(get()) }
     // Named rather than positional: every collaborator here is resolved by a
     // bare get(), so a reordered parameter would bind silently and wrongly.
-    single<ChainRepository> {
+    // Eager: it has to be watching for out-of-app stops (Android's notification
+    // key, an OS revoke) before one happens, not from first UI resolution.
+    single<ChainRepository>(createdAtStart = true) {
         DefaultChainRepository(
             controller = get(),
             profileRepository = get(),
             settingsRepository = get(),
             preferences = get(),
             logger = get(),
+            scope = get<CoroutineScope>(applicationScopeQualifier),
         )
     }
     single<LogRepository>(createdAtStart = true) {

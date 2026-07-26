@@ -84,6 +84,13 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 stopTunnel()
                 return START_NOT_STICKY
             }
+            // Distinct from ACTION_STOP: this is a stop the repository never saw,
+            // so nothing else will clear the user's connection intent for it.
+            ACTION_STOP_BY_USER -> {
+                TunnelBridge.signalUserStop()
+                stopTunnel()
+                return START_NOT_STICKY
+            }
             else -> startTunnel()
         }
         return START_STICKY
@@ -208,7 +215,13 @@ class VpnChainService : VpnService(), CommandServerHandler {
         super.onDestroy()
     }
 
+    /**
+     * The OS pulled our consent — the user disconnected us from Settings, or
+     * another VPN app took over. Either way they did not ask to come back, so
+     * this counts as a user stop rather than a drop to reconnect from.
+     */
     override fun onRevoke() {
+        TunnelBridge.signalUserStop()
         stopTunnel()
         super.onRevoke()
     }
@@ -268,7 +281,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         val disconnect = PendingIntent.getService(
             this,
             1,
-            Intent(this, VpnChainService::class.java).setAction(ACTION_STOP),
+            Intent(this, VpnChainService::class.java).setAction(ACTION_STOP_BY_USER),
             flags,
         )
         val disconnectAction = Notification.Action.Builder(
@@ -356,6 +369,9 @@ class VpnChainService : VpnService(), CommandServerHandler {
     companion object {
         const val ACTION_START = "com.verdenroz.vpnchain.action.START"
         const val ACTION_STOP = "com.verdenroz.vpnchain.action.STOP"
+
+        /** Stop originating from a notification key, outside the app's own path. */
+        const val ACTION_STOP_BY_USER = "com.verdenroz.vpnchain.action.STOP_BY_USER"
         // Shared with androidApp's ChainNotificationUpdater, which enriches the
         // connected notification with route data the service can't reach.
         const val CHANNEL_ID = "vpn-chain-status"

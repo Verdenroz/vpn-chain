@@ -45,6 +45,17 @@ internal object TunnelBridge {
     /** Session traffic/uptime, reset on every connect (see [SessionStats]). */
     val stats = MutableStateFlow(SessionStats())
 
+    /**
+     * Stops that came from the notification's Disconnect key or an OS revoke,
+     * rather than from the app's own disconnect path. Buffered so the service
+     * can signal without suspending on a libbox or system callback thread.
+     */
+    val userStops = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    fun signalUserStop() {
+        userStops.tryEmit(Unit)
+    }
+
     // replacement here would silently reset kill-switch status on every state change.
     fun setState(state: TunnelState, detail: UiText? = null) {
         val wasConnected = status.value.state == TunnelState.Connected

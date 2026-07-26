@@ -87,6 +87,26 @@ class ChainSupervisorTest {
         assertEquals(0, world.chain.reconnectCalls)
     }
 
+    /**
+     * The Android notification's Disconnect key clears intent a moment after the
+     * tunnel is already down, so the check that has to hold is the one after the
+     * backoff — not the one that entered it.
+     */
+    @Test
+    fun `abandons a pending retry when the user disconnects mid-backoff`() = runTest {
+        val world = SupervisorWorld(this, initialState = TunnelState.Connected)
+        world.chain.connectionIntent.value = true
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+
+        world.chain.emit(TunnelState.Disconnected)
+        advanceTimeBy(ReconnectPolicy.delayForAttemptMillis(1) / 2)
+        world.chain.connectionIntent.value = false
+        advanceTimeBy(ReconnectPolicy.MAX_DELAY_MS)
+
+        assertEquals(0, world.chain.reconnectCalls)
+    }
+
     @Test
     fun `does not reconnect when auto-reconnect is switched off`() = runTest {
         val world = SupervisorWorld(

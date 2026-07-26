@@ -9,8 +9,10 @@ import com.verdenroz.vpnchain.core.model.effectiveFor
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Drives the tunnel from the stored [ChainProfile]. This is the seam the UI
@@ -55,7 +57,16 @@ internal class DefaultChainRepository(
     private val settingsRepository: SettingsRepository,
     private val preferences: VpnChainPreferencesDataSource,
     private val logger: Logger,
+    scope: CoroutineScope,
 ) : ChainRepository {
+
+    init {
+        // A stop from Android's notification key or an OS revoke never reaches
+        // disconnect(), so clear intent here or it reads as a drop to reconnect.
+        scope.launch {
+            controller.userStops.collect { preferences.setConnectionIntent(false) }
+        }
+    }
 
     override val status: Flow<ChainStatus> = controller.status
     override val stats: Flow<SessionStats> = controller.stats
