@@ -2,6 +2,8 @@ package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
+import com.verdenroz.vpnchain.core.model.WarpExit
+import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
@@ -26,25 +28,43 @@ object SingBoxConfigFactory {
     private val json = Json { prettyPrint = true }
 
     /** Relay-only config for desktop/CLI (mixed inbound → VLESS). */
-    fun mixedProxyConfig(profile: ChainProfile, clashApi: ClashApi? = null): String = render {
-        putInfoLog()
-        putExperimental(clashApi, cacheFile = false, cachePath = null)
-        putJsonArray("inbounds") {
-            addJsonObject {
-                put("type", "mixed")
-                put("tag", "proxy-in")
-                put("listen", "127.0.0.1")
-                put("listen_port", profile.localProxyPort)
+    fun mixedProxyConfig(
+        profile: ChainProfile,
+        clashApi: ClashApi? = null,
+        warp: WarpExit? = null,
+        warpMode: WarpMode = WarpMode.Off,
+        warpDomains: List<String> = emptyList(),
+    ): String {
+        val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
+        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains) }
+        return render {
+            putInfoLog()
+            putExperimental(clashApi, cacheFile = false, cachePath = null)
+            putJsonArray("inbounds") {
+                addJsonObject {
+                    put("type", "mixed")
+                    put("tag", "proxy-in")
+                    put("listen", "127.0.0.1")
+                    put("listen_port", profile.localProxyPort)
+                }
             }
-        }
-        putJsonArray("outbounds") {
-            addVlessOutbound(profile, tag = "proxy", detour = null, tcpOnly = true)
-            addDirectOutbound()
-        }
-        putJsonObject("route") {
-            put("auto_detect_interface", false)
-            putJsonArray("rules") { addJsonObject { put("action", "sniff") } }
-            put("final", "proxy")
+            if (tail != null) {
+                putJsonArray("endpoints") { addWarpEndpoint(tail, detour = "proxy") }
+            }
+            putJsonArray("outbounds") {
+                addVlessOutbound(profile, tag = "proxy", detour = null, tcpOnly = true)
+                addDirectOutbound()
+            }
+            putJsonObject("route") {
+                put("auto_detect_interface", false)
+                putJsonArray("rules") {
+                    addJsonObject { put("action", "sniff") }
+                    if (tail != null && warpMode == WarpMode.BlockedSites) {
+                        addWarpDomainRule(tailDomains)
+                    }
+                }
+                put("final", if (tail != null && warpMode == WarpMode.AllTraffic) WARP_TAG else "proxy")
+            }
         }
     }
 
@@ -58,9 +78,17 @@ object SingBoxConfigFactory {
         clashApi: ClashApi? = null,
         dnsFilter: DnsFilter = DnsFilter.Off,
         cachePath: String? = null,
+        warp: WarpExit? = null,
+        warpMode: WarpMode = WarpMode.Off,
+        warpDomains: List<String> = emptyList(),
     ): String {
         val entry = profile.entryHop
         val filtering = dnsFilter != DnsFilter.Off
+        val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
+        // No credentials means no tail, whatever the mode says: registration
+        // can fail on a network that blocks Cloudflare, and the chain still has
+        // to come up — one hop shorter, not not at all.
+        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains) }
         return render {
             putInfoLog()
             // The rule-set is remote, so it needs somewhere to persist between
@@ -82,7 +110,9 @@ object SingBoxConfigFactory {
                     putJsonArray("address") { add("10.19.19.1/30"); add("fdfe:dcba:9876::1/126") }
                     // Default TUN MTU is 9000; capped at 1280 to nest inside the entry
                     // WG tunnel (also 1280), else 1400 for VLESS/TLS headroom under 1500.
-                    put("mtu", if (entry != null) 1280 else 1400)
+                    // A WARP tail is another 1280 WireGuard hop, so it caps this the
+                    // same way even when there is no entry hop in front.
+                    put("mtu", if (entry != null || tail != null) 1280 else 1400)
                     put("auto_route", true)
                     put("strict_route", true)
                     // gVisor terminates TCP and clamps MSS itself, avoiding kernel PMTU
@@ -90,8 +120,13 @@ object SingBoxConfigFactory {
                     put("stack", "gvisor")
                 }
             }
-            if (entry != null) {
-                putJsonArray("endpoints") { addWireGuardEndpoint(entry) }
+            if (entry != null || tail != null) {
+                putJsonArray("endpoints") {
+                    entry?.let { addWireGuardEndpoint(it) }
+                    // Dialled through the relay, so the tail is the last hop of
+                    // the chain rather than a second path around it.
+                    tail?.let { addWarpEndpoint(it, detour = VLESS_TAG) }
+                }
             }
             putJsonArray("outbounds") {
                 // TUN captures all traffic incl. UDP, so the relay must carry UDP
@@ -117,8 +152,14 @@ object SingBoxConfigFactory {
                         put("port", 443)
                         put("action", "reject")
                     }
+                    if (tail != null && warpMode == WarpMode.BlockedSites) {
+                        addWarpDomainRule(tailDomains)
+                    }
                 }
-                put("final", VLESS_TAG)
+                put(
+                    "final",
+                    if (tail != null && warpMode == WarpMode.AllTraffic) WARP_TAG else VLESS_TAG,
+                )
             }
         }
     }
@@ -279,8 +320,66 @@ object SingBoxConfigFactory {
         }
     }
 
+    /**
+     * The WARP tail: a WireGuard peer dialled *through* [detour], so packets
+     * leave Cloudflare's network instead of the relay's own datacenter address.
+     * Nothing upstream changes — the entry hop and relay still carry the
+     * traffic, and Cloudflare sees the relay's address, never the device's.
+     */
+    private fun JsonArrayBuilder.addWarpEndpoint(warp: WarpExit, detour: String) = addJsonObject {
+        put("type", "wireguard")
+        put("tag", WARP_TAG)
+        put("mtu", 1280)
+        putJsonArray("address") { add(warp.addressV4); add(warp.addressV6) }
+        put("private_key", warp.privateKey)
+        // Without this the handshake is dialled on the bare link, where the kill
+        // switch rejects it outright — and where it would bypass the chain anyway.
+        put("detour", detour)
+        putJsonArray("peers") {
+            addJsonObject {
+                put("address", warp.endpointHost)
+                put("port", warp.endpointPort)
+                put("public_key", warp.peerPublicKey)
+                putJsonArray("allowed_ips") { add("0.0.0.0/0"); add("::/0") }
+                put("persistent_keepalive_interval", 25)
+            }
+        }
+    }
+
+    /** Sends just the listed names down the tail; everything else keeps the relay's exit. */
+    private fun JsonArrayBuilder.addWarpDomainRule(domains: List<String>) = addJsonObject {
+        putJsonArray("domain_suffix") { domains.forEach { add(it) } }
+        put("action", "route")
+        put("outbound", WARP_TAG)
+    }
+
+    /**
+     * Users type what they read in a URL bar, so a pasted `https://example.com/`
+     * or `*.example.com` has to arrive as the bare suffix sing-box matches on.
+     * Anything left without a dot was never a domain and is dropped, rather
+     * than rendered as a rule that silently matches nothing.
+     */
+    /**
+     * Selective mode with an empty list routes nothing, so the tail is left
+     * out entirely rather than declared as an endpoint nothing ever reaches.
+     */
+    private fun WarpMode.carriesTraffic(domains: List<String>): Boolean = when (this) {
+        WarpMode.Off -> false
+        WarpMode.BlockedSites -> domains.isNotEmpty()
+        WarpMode.AllTraffic -> true
+    }
+
+    private fun normalizeSuffix(raw: String): String? = raw.trim()
+        .lowercase()
+        .substringAfter("://")
+        .substringBefore('/')
+        .removePrefix("*")
+        .trim('.')
+        .takeIf { it.isNotEmpty() && '.' in it }
+
     private const val VLESS_TAG = "vless-proxy"
     private const val ENTRY_HOP_TAG = "entry-hop"
+    private const val WARP_TAG = "warp-exit"
 
     private data class Blocklist(val tag: String, val url: String)
 

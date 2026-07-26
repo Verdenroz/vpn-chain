@@ -15,6 +15,7 @@ import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.model.TunnelState
 import kotlin.test.Test
@@ -53,6 +54,48 @@ class ObserveChainRouteUseCaseTest {
 
         assertEquals(VPS_IP, exit?.ip)
         assertEquals(HopEvidence.Configured, exit?.evidence)
+    }
+
+    /** The tail changes what the world sees, so the exit leg should say so. */
+    @Test
+    fun `the exit names the warp tail once the measured address is not the relay`() = runTest {
+        val world = TestWorld(
+            status = connectedStatus(exitIp = null),
+            settings = UserSettings(warpMode = WarpMode.AllTraffic),
+        )
+        world.probe.next = PublicIpSample("104.28.194.140", elapsedMs = 300)
+
+        val exit = world.resolve().hop(HopRole.Exit)
+
+        assertEquals("104.28.194.140", exit?.ip)
+        assertEquals("vless · reality → warp", exit?.via)
+    }
+
+    /**
+     * Registration fails on a network that blocks Cloudflare, and the chain
+     * comes up one hop shorter. Drawing a tail there would claim a hop that
+     * isn't carrying anything.
+     */
+    @Test
+    fun `no tail is named when the exit is still the relay`() = runTest {
+        val world = TestWorld(
+            status = connectedStatus(exitIp = null),
+            settings = UserSettings(warpMode = WarpMode.AllTraffic),
+        )
+        world.probe.next = PublicIpSample(VPS_IP, elapsedMs = 300)
+
+        assertEquals("vless · reality · tcp 443", world.resolve().hop(HopRole.Exit)?.via)
+    }
+
+    @Test
+    fun `no tail is named when the mode is off`() = runTest {
+        val world = TestWorld(
+            status = connectedStatus(exitIp = null),
+            settings = UserSettings(warpMode = WarpMode.Off),
+        )
+        world.probe.next = PublicIpSample("104.28.194.140", elapsedMs = 300)
+
+        assertEquals("vless · reality · tcp 443", world.resolve().hop(HopRole.Exit)?.via)
     }
 
     @Test
@@ -294,6 +337,8 @@ private class FakeSettings(settings: UserSettings) : SettingsRepository {
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
     override suspend fun setDnsFilter(filter: DnsFilter) = Unit
     override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
+    override suspend fun setWarpMode(mode: WarpMode) = Unit
+    override suspend fun setWarpDomains(domains: List<String>) = Unit
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
     override suspend fun setCloseToTray(enabled: Boolean) = Unit

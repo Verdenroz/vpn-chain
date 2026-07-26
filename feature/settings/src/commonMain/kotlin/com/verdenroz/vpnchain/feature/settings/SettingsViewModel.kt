@@ -13,6 +13,7 @@ import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_failed
@@ -99,6 +100,17 @@ class SettingsViewModel(
 
     fun setEntryHopEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setEntryHopEnabled(enabled)
+    }
+
+    fun setWarpMode(mode: WarpMode) = viewModelScope.launch {
+        settingsRepository.setWarpMode(mode)
+    }
+
+    /** One domain per line in the UI; blank lines are just typing, not entries. */
+    fun setWarpDomains(text: String) = viewModelScope.launch {
+        settingsRepository.setWarpDomains(
+            text.lines().map(String::trim).filter(String::isNotEmpty),
+        )
     }
 
     fun setAutoConnectOnLaunch(enabled: Boolean) = viewModelScope.launch {

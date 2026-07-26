@@ -38,7 +38,8 @@ instead of Hilt, so `commonMain` works on both Android and desktop).
 | `core/config` | KMP `SingBoxConfigFactory` (profile → sing-box JSON) + `SecretsEnvParser`. |
 | `core/datastore` | KMP DataStore-backed profile + settings persistence. |
 | `core/tunnel` | KMP `TunnelController`: Android `VpnChainService` (libbox), desktop sing-box process; live log flow. |
-| `core/data` | KMP repositories: `ChainRepository`, `ProfileRepository`, `SettingsRepository`, `LogRepository`. |
+| `core/warp` | KMP Cloudflare WARP registration for the tail exit (X25519 keygen + the free reg API). |
+| `core/data` | KMP repositories: `ChainRepository`, `ProfileRepository`, `SettingsRepository`, `LogRepository`, `WarpRepository`. |
 | `core/domain` | KMP use cases (`ConnectChainUseCase`, `ImportProfileUseCase`, …). |
 | `core/designsystem` | KMP `VpnChainTheme`, colors/type, `StatusIndicator`. |
 | `core/ui` | KMP shared composables (`SectionCard`, theme resolution). |
@@ -133,6 +134,15 @@ malware, phishing, ad, and tracker domains from blocklists fetched through
 the tunnel, at two levels (threats only / threats + ads). Scores 99% on
 [d3ward's adblock test](https://d3ward.github.io/toolz/adblock);
 see [docs/dns-filtering.md](docs/dns-filtering.md). **Settings → dns**.
+
+**WARP tail exit:** the relay's datacenter address is refused outright by some
+sites (Reddit and ChatGPT both answer 403 through ours), so the chain can add
+a Cloudflare WARP hop *after* the relay and exit from Cloudflare's address
+instead. Dialled through the chain, never around it — Cloudflare sees the
+relay, never your device. Credentials register themselves; no `wgcf`, nothing
+to paste. On by default for all traffic (it measured no slower), or narrow it
+to a list of blocked sites, or off. GUI only; the CLI still exits from the
+VPS. See [docs/warp-exit.md](docs/warp-exit.md). **Settings → routing**.
 
 ## Releases
 

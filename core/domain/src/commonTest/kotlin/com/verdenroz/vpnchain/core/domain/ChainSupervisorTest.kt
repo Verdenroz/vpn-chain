@@ -12,6 +12,7 @@ import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -310,6 +311,8 @@ private class FakeSettingsRepository(value: UserSettings) : SettingsRepository {
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
     override suspend fun setDnsFilter(filter: DnsFilter) = Unit
     override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
+    override suspend fun setWarpMode(mode: WarpMode) = Unit
+    override suspend fun setWarpDomains(domains: List<String>) = Unit
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
     override suspend fun setCloseToTray(enabled: Boolean) = Unit

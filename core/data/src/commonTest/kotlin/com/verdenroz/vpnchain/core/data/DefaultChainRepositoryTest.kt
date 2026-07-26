@@ -11,6 +11,7 @@ import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -74,6 +75,7 @@ private class RepositoryWorld(scope: CoroutineScope) {
         controller = controller,
         profileRepository = StubProfileRepository(),
         settingsRepository = StubSettingsRepository(),
+        warpRepository = StubWarpRepository(),
         preferences = preferences,
         logger = SilentLogger(),
         scope = scope,
@@ -122,11 +124,17 @@ private class StubSettingsRepository : SettingsRepository {
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
     override suspend fun setDnsFilter(filter: DnsFilter) = Unit
     override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
+    override suspend fun setWarpMode(mode: WarpMode) = Unit
+    override suspend fun setWarpDomains(domains: List<String>) = Unit
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
     override suspend fun setCloseToTray(enabled: Boolean) = Unit
     override val autostartSupported = false
     override suspend fun setAutoStartOnLogin(enabled: Boolean) = Result.success(Unit)
+}
+
+private class StubWarpRepository : WarpRepository {
+    override suspend fun exit() = null
 }
 
 private class SilentLogger : Logger {

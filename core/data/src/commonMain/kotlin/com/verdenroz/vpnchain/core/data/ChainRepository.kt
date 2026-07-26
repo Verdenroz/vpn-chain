@@ -8,6 +8,7 @@ import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.effectiveFor
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
+import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -55,6 +56,7 @@ internal class DefaultChainRepository(
     private val controller: TunnelController,
     private val profileRepository: ProfileRepository,
     private val settingsRepository: SettingsRepository,
+    private val warpRepository: WarpRepository,
     private val preferences: VpnChainPreferencesDataSource,
     private val logger: Logger,
     scope: CoroutineScope,
@@ -88,9 +90,14 @@ internal class DefaultChainRepository(
         val profile: ChainProfile = profileRepository.profile.first()
             ?: return Result.failure(IllegalStateException("No chain profile configured"))
         val settings = settingsRepository.settings.first()
+        // Registration talks to Cloudflare over the untunnelled link, so it
+        // happens here rather than at render time — and a failure costs the
+        // tail, never the connect.
+        val warp = if (settings.warpMode == WarpMode.Off) null else warpRepository.exit()
 
         return runCatching {
-            val configJson = renderPlatformTunnelConfig(profile.effectiveFor(settings), settings)
+            val configJson =
+                renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp)
             controller.start(configJson, settings.killSwitchEnabled)
         }.onFailure { logger.e(TAG, "connect failed", it) }
     }

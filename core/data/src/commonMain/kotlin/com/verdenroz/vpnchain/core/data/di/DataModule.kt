@@ -11,23 +11,34 @@ import com.verdenroz.vpnchain.core.data.DefaultLogRepository
 import com.verdenroz.vpnchain.core.data.DefaultOriginRepository
 import com.verdenroz.vpnchain.core.data.DefaultProfileRepository
 import com.verdenroz.vpnchain.core.data.DefaultSettingsRepository
+import com.verdenroz.vpnchain.core.data.DefaultWarpRepository
 import com.verdenroz.vpnchain.core.data.LogRepository
 import com.verdenroz.vpnchain.core.data.OriginRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
+import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.datastore.di.dataStoreModule
 import com.verdenroz.vpnchain.core.logging.di.loggingModule
 import com.verdenroz.vpnchain.core.tunnel.di.tunnelModule
+import com.verdenroz.vpnchain.core.warp.di.warpModule
 import kotlinx.coroutines.CoroutineScope
 import org.koin.dsl.module
 
 val dataModule = module {
-    includes(commonModule, loggingModule, dataStoreModule, tunnelModule)
+    includes(commonModule, loggingModule, dataStoreModule, tunnelModule, warpModule)
 
     single<ProfileRepository> { DefaultProfileRepository(get()) }
     single<OriginRepository> { DefaultOriginRepository(get()) }
     single<SettingsRepository> { DefaultSettingsRepository(get(), get()) }
     single<ConnectivityRepository> { DefaultConnectivityRepository(get()) }
+    single<WarpRepository> {
+        DefaultWarpRepository(
+            preferences = get(),
+            registrar = get(),
+            logger = get(),
+            now = ::currentTimeMillis,
+        )
+    }
     // Named rather than positional: every collaborator here is resolved by a
     // bare get(), so a reordered parameter would bind silently and wrongly.
     // Eager: it has to be watching for out-of-app stops (Android's notification
@@ -37,6 +48,7 @@ val dataModule = module {
             controller = get(),
             profileRepository = get(),
             settingsRepository = get(),
+            warpRepository = get(),
             preferences = get(),
             logger = get(),
             scope = get<CoroutineScope>(applicationScopeQualifier),

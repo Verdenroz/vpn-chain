@@ -30,6 +30,13 @@
     <string name="settings_entry_hop_detail">Dial the relay through the profile's WireGuard hop, hiding this device's address from the relay VPS. Turn off to connect single-hop</string>
     <string name="settings_route_entire_system_title">Route entire system</string>
     <string name="settings_route_entire_system_detail">Send all system traffic through sing-box instead of a local proxy. Needs elevated privileges on the sing-box binary.</string>
+    <string name="settings_warp_title">Cloudflare WARP exit</string>
+    <string name="settings_warp_detail">Adds a Cloudflare hop after the relay, so sites see Cloudflare's address instead of your VPS. Fixes sites that refuse datacenter addresses outright. Cloudflare then sees which sites you reach — it still never sees this device, only the relay.</string>
+    <string name="settings_warp_off">off</string>
+    <string name="settings_warp_blocked">blocked sites</string>
+    <string name="settings_warp_all">everything</string>
+    <string name="settings_warp_domains_label">domains</string>
+    <string name="settings_warp_domains_hint">The sites that refuse the relay's address, one per line. A domain covers its subdomains.</string>
     <string name="settings_kill_switch_title">kill switch</string>
     <string name="settings_dns_title">dns</string>
     <string name="settings_dns_filter_title">Block unwanted domains</string>
@@ -62,7 +69,7 @@
     <string name="settings_field_server_port">server port</string>
     <string name="settings_field_local_proxy_port">local proxy port</string>
     <string name="settings_entry_hop_title_android">entry hop (recommended)</string>
-    <string name="settings_entry_hop_detail_android">Lets sing-box dial the WireGuard peer directly — any provider, or your own box. Leaving this blank exposes your real IP to the relay. Android can\'t run another VPN app alongside this one.</string>
+    <string name="settings_entry_hop_detail_android">Lets sing-box dial the WireGuard peer directly. Leaving this blank exposes your real IP to the relay. Android can't run another VPN app alongside this one.</string>
     <string name="settings_entry_hop_title_desktop">entry hop (optional)</string>
     <string name="settings_entry_hop_detail_desktop">Leave blank to relay through a system VPN app instead. Filling it in takes that app, and its kill switch, out of the loop.</string>
     <string name="settings_field_wg_private_key">wg private key</string>

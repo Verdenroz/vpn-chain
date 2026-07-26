@@ -2,6 +2,7 @@ package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpExit
 import java.io.File
 import java.net.ServerSocket
 import java.security.SecureRandom
@@ -11,7 +12,11 @@ import java.security.SecureRandom
  * read traffic counters — sing-box is an opaque subprocess here, unlike Android
  * where libbox reports status in-process.
  */
-actual fun renderPlatformTunnelConfig(profile: ChainProfile, settings: UserSettings): String {
+actual fun renderPlatformTunnelConfig(
+    profile: ChainProfile,
+    settings: UserSettings,
+    warp: WarpExit?,
+): String {
     val clashApi = newClashApi()
     return if (settings.systemWideTun) {
         SingBoxConfigFactory.androidChainConfig(
@@ -19,9 +24,18 @@ actual fun renderPlatformTunnelConfig(profile: ChainProfile, settings: UserSetti
             clashApi = clashApi,
             dnsFilter = settings.dnsFilter,
             cachePath = cacheFilePath(),
+            warp = warp,
+            warpMode = settings.warpMode,
+            warpDomains = settings.warpDomains,
         )
     } else {
-        SingBoxConfigFactory.mixedProxyConfig(profile, clashApi)
+        SingBoxConfigFactory.mixedProxyConfig(
+            profile = profile,
+            clashApi = clashApi,
+            warp = warp,
+            warpMode = settings.warpMode,
+            warpDomains = settings.warpDomains,
+        )
     }
 }
 

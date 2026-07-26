@@ -46,12 +46,14 @@ import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
+import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.ui.ScreenNameplate
 import com.verdenroz.vpnchain.core.ui.SectionCard
 import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.settings.component.ProfileForm
 import com.verdenroz.vpnchain.feature.settings.component.ProfilePicker
 import com.verdenroz.vpnchain.feature.settings.component.DnsFilterPicker
+import com.verdenroz.vpnchain.feature.settings.component.WarpModePicker
 import com.verdenroz.vpnchain.feature.settings.component.ThemePicker
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_always_on_active
@@ -98,6 +100,11 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_secrets_env_label
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_show_qr
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_all
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_domains_hint
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_domains_label
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_window_title
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -153,6 +160,8 @@ fun SettingsRoute(
         onToggleEntryHop = viewModel::setEntryHopEnabled,
         onToggleKillSwitch = viewModel::setKillSwitchEnabled,
         onSetDnsFilter = viewModel::setDnsFilter,
+        onSetWarpMode = viewModel::setWarpMode,
+        onSetWarpDomains = viewModel::setWarpDomains,
         onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
         onToggleAutoReconnect = viewModel::setAutoReconnect,
         onToggleAutoStart = viewModel::setAutoStartOnLogin,
@@ -178,6 +187,8 @@ fun SettingsScreen(
     onToggleEntryHop: (Boolean) -> Unit,
     onToggleKillSwitch: (Boolean) -> Unit,
     onSetDnsFilter: (DnsFilter) -> Unit,
+    onSetWarpMode: (WarpMode) -> Unit,
+    onSetWarpDomains: (String) -> Unit,
     onToggleAutoConnect: (Boolean) -> Unit,
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleAutoStart: (Boolean) -> Unit,
@@ -344,31 +355,38 @@ fun SettingsScreen(
                 }
             }
 
-            val profileHasEntry = uiState.profile?.entryHop != null
-            if (currentPlatform == Platform.Desktop || profileHasEntry) {
-                SectionCard(title = stringResource(Res.string.settings_routing_title)) {
-                    // Android has no proxy-only mode — the tunnel is always TUN —
-                    // so this toggle would be a no-op there.
-                    if (currentPlatform == Platform.Desktop) {
-                        SettingRow(
-                            title = stringResource(Res.string.settings_route_entire_system_title),
-                            detail = stringResource(Res.string.settings_route_entire_system_detail),
-                            checked = uiState.settings.systemWideTun,
-                            onCheckedChange = onToggleSystemWide,
-                        )
-                    }
-                    // Only for profiles that have an entry to disable; a profile
-                    // without one is single-hop with or without this.
-                    if (profileHasEntry) {
-                        if (currentPlatform == Platform.Desktop) Spacer(Modifier.height(16.dp))
-                        SettingRow(
-                            title = stringResource(Res.string.settings_entry_hop_title),
-                            detail = stringResource(Res.string.settings_entry_hop_detail),
-                            checked = uiState.settings.entryHopEnabled,
-                            onCheckedChange = onToggleEntryHop,
-                        )
-                    }
+            // Always rendered: the WARP tail applies to every chain, including
+            // an Android profile with no entry hop to configure.
+            SectionCard(title = stringResource(Res.string.settings_routing_title)) {
+                val profileHasEntry = uiState.profile?.entryHop != null
+                // Android has no proxy-only mode — the tunnel is always TUN —
+                // so this toggle would be a no-op there.
+                if (currentPlatform == Platform.Desktop) {
+                    SettingRow(
+                        title = stringResource(Res.string.settings_route_entire_system_title),
+                        detail = stringResource(Res.string.settings_route_entire_system_detail),
+                        checked = uiState.settings.systemWideTun,
+                        onCheckedChange = onToggleSystemWide,
+                    )
+                    Spacer(Modifier.height(16.dp))
                 }
+                // Only for profiles that have an entry to disable; a profile
+                // without one is single-hop with or without this.
+                if (profileHasEntry) {
+                    SettingRow(
+                        title = stringResource(Res.string.settings_entry_hop_title),
+                        detail = stringResource(Res.string.settings_entry_hop_detail),
+                        checked = uiState.settings.entryHopEnabled,
+                        onCheckedChange = onToggleEntryHop,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
+                WarpSection(
+                    mode = uiState.settings.warpMode,
+                    domains = uiState.settings.warpDomains,
+                    onSetMode = onSetWarpMode,
+                    onSetDomains = onSetWarpDomains,
+                )
             }
 
             SectionCard(title = stringResource(Res.string.settings_kill_switch_title)) {
@@ -421,6 +439,67 @@ fun SettingsScreen(
             }
         }
         SnackbarHost(snackbarHostState)
+    }
+}
+
+/**
+ * The WARP tail: which traffic takes it, and — for the selective mode — the
+ * domains to add to the built-in list. The field only appears for that mode,
+ * since it decides nothing in the other two.
+ */
+@Composable
+private fun WarpSection(
+    mode: WarpMode,
+    domains: List<String>,
+    onSetMode: (WarpMode) -> Unit,
+    onSetDomains: (String) -> Unit,
+) {
+    val colors = PanelTheme.colors
+    var domainText by remember { mutableStateOf(domains.joinToString("\n")) }
+    // Re-seeded only when the stored list is something this field didn't type
+    // — blank lines are dropped on the way to storage, so echoing every write
+    // straight back would delete the newline the moment Enter was pressed.
+    LaunchedEffect(domains) {
+        if (domains != domainText.lines().map(String::trim).filter(String::isNotEmpty)) {
+            domainText = domains.joinToString("\n")
+        }
+    }
+
+    Column {
+        Text(
+            stringResource(Res.string.settings_warp_title),
+            style = MaterialTheme.typography.bodyLarge,
+            color = colors.readout,
+        )
+        Spacer(Modifier.height(5.dp))
+        Text(
+            stringResource(Res.string.settings_warp_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.muted,
+        )
+        Spacer(Modifier.height(12.dp))
+        WarpModePicker(selected = mode, onSelect = onSetMode)
+
+        Reveal(visible = mode == WarpMode.BlockedSites) {
+            Column {
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    stringResource(Res.string.settings_warp_domains_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.muted,
+                )
+                Spacer(Modifier.height(10.dp))
+                PanelField(
+                    label = stringResource(Res.string.settings_warp_domains_label),
+                    value = domainText,
+                    minLines = 3,
+                    onValueChange = {
+                        domainText = it
+                        onSetDomains(it)
+                    },
+                )
+            }
+        }
     }
 }
 

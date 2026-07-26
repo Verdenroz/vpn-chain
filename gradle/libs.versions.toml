@@ -32,6 +32,8 @@ zxing = "3.5.3"
 # AAR, so scanning works on de-Googled ROMs without Play Services installed.
 camerax = "1.6.1"
 mlkitBarcode = "17.3.0"
+# X25519 for WARP registration keys (the JDK's XDH provider is Android 13+).
+tink = "1.23.0"
 
 [libraries]
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -59,6 +61,8 @@ androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycl
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 androidx-camera-mlkit-vision = { group = "androidx.camera", name = "camera-mlkit-vision", version.ref = "camerax" }
 mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcode" }
+tink = { group = "com.google.crypto.tink", name = "tink", version.ref = "tink" }
+tink-android = { group = "com.google.crypto.tink", name = "tink-android", version.ref = "tink" }
 # Gradle plugin artifacts, used by build-logic convention plugins (compileOnly).
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
 android-tools-common = { group = "com.android.tools", name = "common", version.ref = "androidTools" }

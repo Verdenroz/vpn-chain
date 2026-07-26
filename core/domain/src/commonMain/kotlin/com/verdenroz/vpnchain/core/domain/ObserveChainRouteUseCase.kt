@@ -11,6 +11,8 @@ import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.effectiveFor
 import com.verdenroz.vpnchain.core.model.TunnelState
+import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -58,7 +60,10 @@ class ObserveChainRouteUseCase(
             chainRepository.status,
             originRepository.lastKnownOriginIp,
             samples(),
-        ) { profile, status, lastOrigin, sample -> Inputs(profile, status, lastOrigin, sample) }
+            settingsRepository.settings,
+        ) { profile, status, lastOrigin, sample, settings ->
+            Inputs(profile, status, lastOrigin, sample, settings)
+        }
             .mapLatest { render(it) }
 
     private data class Inputs(
@@ -66,6 +71,7 @@ class ObserveChainRouteUseCase(
         val status: ChainStatus,
         val lastOrigin: String?,
         val sample: Sample?,
+        val settings: UserSettings,
     )
 
     /**
@@ -94,7 +100,7 @@ class ObserveChainRouteUseCase(
             hops = listOfNotNull(
                 originHop(connected, sample, inputs.lastOrigin, inputs.profile, inputs.status),
                 entryHop(inputs.profile, connected),
-                exitHop(inputs.profile, inputs.status, sample, connected),
+                exitHop(inputs.profile, inputs.status, sample, connected, inputs.settings),
             ),
             // Only report a timing taken over the path currently in use.
             throughRttMs = sample?.takeIf { it.throughChain == connected }?.elapsedMs,
@@ -171,17 +177,25 @@ class ObserveChainRouteUseCase(
         status: ChainStatus,
         sample: Sample?,
         connected: Boolean,
+        settings: UserSettings,
     ): ChainHop? {
         // While connected, our own sample *is* the exit as the world sees it.
         val measured = sample?.takeIf { connected && it.throughChain }?.ip ?: status.exitIp
         val ip = measured ?: profile?.vpsIp ?: return null
+        // Named only on evidence: the tail is configured *and* the address the
+        // world reports is not the relay's. Registration can fail silently, and
+        // a hop that isn't carrying must never be drawn as though it were.
+        val tailCarrying = settings.warpMode != WarpMode.Off &&
+            measured != null && measured != profile?.vpsIp
         return ChainHop(
             role = HopRole.Exit,
             ip = ip,
             location = geolocator.locate(ip),
             evidence = if (measured != null) HopEvidence.Measured else HopEvidence.Configured,
             carrying = connected,
-            via = profile?.let { "vless · reality · tcp ${it.serverPort}" },
+            via = profile?.let {
+                if (tailCarrying) "vless · reality → warp" else "vless · reality · tcp ${it.serverPort}"
+            },
         )
     }
 

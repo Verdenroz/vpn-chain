@@ -5,6 +5,7 @@ import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.flow.Flow
 
 interface SettingsRepository {
@@ -14,6 +15,8 @@ interface SettingsRepository {
     suspend fun setKillSwitchEnabled(enabled: Boolean)
     suspend fun setDnsFilter(filter: DnsFilter)
     suspend fun setEntryHopEnabled(enabled: Boolean)
+    suspend fun setWarpMode(mode: WarpMode)
+    suspend fun setWarpDomains(domains: List<String>)
     suspend fun setAutoConnectOnLaunch(enabled: Boolean)
     suspend fun setAutoReconnect(enabled: Boolean)
     suspend fun setCloseToTray(enabled: Boolean)
@@ -48,6 +51,10 @@ internal class DefaultSettingsRepository(
         preferences.setDnsFilter(filter)
     override suspend fun setEntryHopEnabled(enabled: Boolean) =
         preferences.setEntryHopEnabled(enabled)
+    override suspend fun setWarpMode(mode: WarpMode) =
+        preferences.setWarpMode(mode)
+    override suspend fun setWarpDomains(domains: List<String>) =
+        preferences.setWarpDomains(domains)
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) =
         preferences.setAutoConnectOnLaunch(enabled)
     override suspend fun setAutoReconnect(enabled: Boolean) =
