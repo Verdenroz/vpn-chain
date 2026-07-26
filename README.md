@@ -9,11 +9,14 @@
 </p>
 
 <p align="center">
-  <img src="assets/branding/hops-diagram.svg" width="880" alt="Route: you, through the ProtonVPN entry hop, through the VLESS+REALITY relay VPS, exiting directly to the internet">
+  <img src="assets/branding/hops-diagram.svg" width="880" alt="Route: you, through the optional ProtonVPN entry hop, through the VLESS+REALITY relay VPS, exiting directly to the internet — with a dashed single-hop path from you straight to the relay when the entry hop is off">
 </p>
 
-A passive observer on your network sees a WireGuard connection to Proton,
-never a connection to the relay VPS.
+With the entry hop on, a passive observer on your network sees a WireGuard
+connection to Proton, never a connection to the relay VPS. Toggle it off
+(**Settings → routing**) and the chain dials the relay directly — no Proton
+leg to stall, at the cost of the VPS seeing your IP — still disguised as
+HTTPS to your SNI.
 
 **Contents:** [Layout](#layout) · [Secrets](#secrets) · [Toolchain](#toolchain)
 · [Quick start](#quick-start-linux-cli) · [Apps](#apps) · [Releases](#releases)
@@ -111,9 +114,10 @@ nav) and Koin for DI. Both tunnels are functional:
 **Entry hop:** optional. Configure the Proton WireGuard fields and the app
 dials the entry hop itself; leave them blank and it runs single-hop
 (you → relay VPS → internet), or leave them blank and run the real ProtonVPN
-app to have that carry the entry hop instead. Single-hop is faster and has
-nothing to expire, but the VPS then sees your real address — the exact thing
-the entry hop exists to hide.
+app to have that carry the entry hop instead. A configured entry can also be
+switched off without touching the profile (**Settings → routing → ProtonVPN
+entry hop**) — handy when the Proton peer is being flaky. Single-hop is
+faster and has nothing to expire, but the VPS then sees your real address
 
 **Kill switch:** a narrow nftables helper for any TUN chain the app dials
 itself, single-hop included; ProtonVPN's own when that app is the entry hop
