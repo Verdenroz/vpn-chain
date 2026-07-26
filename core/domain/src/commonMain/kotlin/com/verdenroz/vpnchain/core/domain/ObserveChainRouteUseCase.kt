@@ -155,7 +155,7 @@ class ObserveChainRouteUseCase(
 
     /** Absent entirely on a relay-only chain — there is no second hop to draw. */
     private suspend fun entryHop(profile: ChainProfile?, connected: Boolean): ChainHop? {
-        val entry = profile?.protonEntry ?: return null
+        val entry = profile?.entryHop ?: return null
         return ChainHop(
             role = HopRole.Entry,
             ip = entry.endpointHost,

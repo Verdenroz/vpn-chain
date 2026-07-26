@@ -70,7 +70,7 @@ import org.jetbrains.compose.resources.getString
  *   see it too;
  * - polls the port so the UI reflects relay up/down driven from the CLI.
  *
- * The Proton entry hop is managed outside this (Proton app or the CLI's `up`).
+ * The entry hop is managed outside this (a VPN app, or the CLI's `up`).
  */
 class DesktopTunnelController(
     private val scope: CoroutineScope,
@@ -546,9 +546,9 @@ class DesktopTunnelController(
         _status.value = ChainStatus(
             state = TunnelState.Connected,
             exitIp = exitIp,
-            // Entry is via Proton whether sing-box dialed the WireGuard entry
+            // An entry hop is in play whether sing-box dialed the WireGuard peer
             // itself, or the real Proton app happens to be the OS default route.
-            entryThroughProton = tunHasEntry || realProtonAppUp,
+            entryHopActive = tunHasEntry || realProtonAppUp,
             // Two independent mechanisms: our own nftables table for any TUN
             // chain we dial, and the real Proton app's kill switch when that
             // app is the entry hop. Reported by what actually holds, not by

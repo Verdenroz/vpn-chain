@@ -22,7 +22,7 @@ private val TUN_WITH_ENTRY = """
         "endpoints": [
             {
                 "type": "wireguard",
-                "tag": "proton-entry",
+                "tag": "entry-hop",
                 "peers": [
                     {
                         "address": "146.70.198.34",
@@ -47,7 +47,7 @@ private val TUN_WITH_NETSHIELD_DNS = """
     {
         "dns": {
             "servers": [
-                { "type": "udp", "tag": "dns-proton", "server": "10.2.0.1", "detour": "proton-entry" }
+                { "type": "udp", "tag": "dns-entry", "server": "10.2.0.1", "detour": "entry-hop" }
             ]
         },
         "inbounds": [
@@ -63,7 +63,7 @@ private val TUN_WITH_NETSHIELD_DNS = """
         "endpoints": [
             {
                 "type": "wireguard",
-                "tag": "proton-entry",
+                "tag": "entry-hop",
                 "peers": [
                     {
                         "address": "146.70.198.34",
@@ -123,12 +123,12 @@ class RelayConfigTest {
     }
 
     /**
-     * The kill switch blocks everything except these. Missing the Proton peer
+     * The kill switch blocks everything except these. Missing the entry peer
      * here is what leaves sing-box unable to reach its own entry hop, so the
      * machine ends up fail-closed against a tunnel that can never come up.
      */
     @Test
-    fun `exempts both the vps and the proton peer endpoint`() {
+    fun `exempts both the vps and the entry peer endpoint`() {
         val exempt = RelayConfig.exemptIps(TUN_WITH_ENTRY)
 
         assertEquals(listOf("89.127.235.38", "146.70.198.34"), exempt)

@@ -2,7 +2,7 @@ package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
-import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -16,17 +16,17 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-private fun profile(entry: ProtonWireGuardEntry? = null) = ChainProfile(
+private fun profile(entry: WireGuardEntry? = null) = ChainProfile(
     vpsIp = "89.127.235.38",
     vlessUuid = "uuid",
     realityPublicKey = "pubkey",
     shortId = "shortid",
     serverPort = 443,
     localProxyPort = 1080,
-    protonEntry = entry,
+    entryHop = entry,
 )
 
-private fun entry(dns: String? = null) = ProtonWireGuardEntry(
+private fun entry(dns: String? = null) = WireGuardEntry(
     privateKey = "priv",
     address = "10.2.0.2/32",
     peerPublicKey = "peer",
@@ -111,7 +111,7 @@ class SingBoxConfigFactoryTest {
         val relayOnly = parse(SingBoxConfigFactory.androidChainConfig(profile()))
 
         assertEquals(
-            "proton-entry",
+            "entry-hop",
             withEntry.array("outbounds").taggedWith("vless-proxy")?.getValue("detour")?.jsonPrimitive?.content,
         )
         assertTrue(relayOnly.array("outbounds").taggedWith("vless-proxy")?.containsKey("detour") == false)
@@ -160,9 +160,9 @@ class SingBoxConfigFactoryTest {
         val dns = config.getValue("dns").jsonObject
         val server = dns.array("servers").single().jsonObject
         assertEquals("10.2.0.1", server.getValue("server").jsonPrimitive.content)
-        assertEquals("proton-entry", server.getValue("detour").jsonPrimitive.content)
+        assertEquals("entry-hop", server.getValue("detour").jsonPrimitive.content)
         assertEquals("udp", server.getValue("type").jsonPrimitive.content)
-        assertEquals("dns-proton", dns.getValue("final").jsonPrimitive.content)
+        assertEquals("dns-entry", dns.getValue("final").jsonPrimitive.content)
     }
 
     @Test

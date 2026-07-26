@@ -1,7 +1,7 @@
 package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
-import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -28,7 +28,7 @@ class SecretsEnvParserTest {
         assertEquals("a1b2c3d4", profile.shortId)
         assertEquals(ChainProfile.DEFAULT_SNI, profile.sni)
         assertEquals(ChainProfile.DEFAULT_SERVER_PORT, profile.serverPort)
-        assertNull(profile.protonEntry)
+        assertNull(profile.entryHop)
     }
 
     @Test
@@ -78,9 +78,9 @@ class SecretsEnvParserTest {
             """.trimIndent(),
         ).getOrThrow()
 
-        val entry = assertNotNull(complete.protonEntry)
+        val entry = assertNotNull(complete.entryHop)
         assertEquals("146.70.198.34", entry.endpointHost)
-        assertEquals(ProtonWireGuardEntry.DEFAULT_ENDPOINT_PORT, entry.endpointPort)
+        assertEquals(WireGuardEntry.DEFAULT_ENDPOINT_PORT, entry.endpointPort)
     }
 
     @Test
@@ -96,7 +96,7 @@ class SecretsEnvParserTest {
             """.trimIndent(),
         ).getOrThrow()
 
-        assertEquals("10.2.0.1", assertNotNull(withDns.protonEntry).dns)
+        assertEquals("10.2.0.1", assertNotNull(withDns.entryHop).dns)
     }
 
     @Test
@@ -111,7 +111,7 @@ class SecretsEnvParserTest {
             """.trimIndent(),
         ).getOrThrow()
 
-        assertNull(assertNotNull(complete.protonEntry).dns)
+        assertNull(assertNotNull(complete.entryHop).dns)
     }
 
     /** A half-filled entry hop must not silently become a partial tunnel. */
@@ -125,7 +125,7 @@ class SecretsEnvParserTest {
             """.trimIndent(),
         ).getOrThrow()
 
-        assertNull(partial.protonEntry)
+        assertNull(partial.entryHop)
     }
 
     @Test
@@ -152,7 +152,7 @@ class SecretsEnvParserTest {
 
         val roundTripped = SecretsEnvParser.parse(SecretsEnvParser.format(original)).getOrThrow()
 
-        assertEquals("10.2.0.1", roundTripped.protonEntry?.dns)
+        assertEquals("10.2.0.1", roundTripped.entryHop?.dns)
     }
 
     @Test

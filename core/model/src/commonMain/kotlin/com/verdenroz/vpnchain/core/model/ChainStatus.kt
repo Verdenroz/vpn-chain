@@ -24,7 +24,8 @@ enum class KillSwitchState {
 
 data class ChainStatus(
     val state: TunnelState = TunnelState.Disconnected,
-    val entryThroughProton: Boolean = false,
+    /** True for either entry-hop form: this app's WireGuard peer, or the external ProtonVPN app. */
+    val entryHopActive: Boolean = false,
     val killSwitch: KillSwitchState = KillSwitchState.Disabled,
     val exitIp: String? = null,
     val detail: UiText? = null,
