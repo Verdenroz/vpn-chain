@@ -58,23 +58,39 @@ object SecretsEnvParser {
         )
     }
 
-    /** Inverse of [parse] — used to render a QR payload the same parser can read back. */
+    /**
+     * Inverse of [parse] — used to render a QR payload the same parser can read back.
+     * Keys already equal to [parse]'s own fallback are omitted: every byte dropped
+     * lowers the QR's module count, and a denser code is a harder camera target.
+     */
     fun format(profile: ChainProfile): String = buildString {
         appendLine("VPS_IP=${profile.vpsIp}")
         appendLine("VLESS_UUID=${profile.vlessUuid}")
         appendLine("REALITY_PUBKEY=${profile.realityPublicKey}")
         appendLine("SHORT_ID=${profile.shortId}")
-        appendLine("SNI=${profile.sni}")
-        appendLine("SERVER_PORT=${profile.serverPort}")
-        appendLine("LOCAL_PROXY_PORT=${profile.localProxyPort}")
+        appendUnlessDefault("SNI", profile.sni, ChainProfile.DEFAULT_SNI)
+        appendUnlessDefault("SERVER_PORT", profile.serverPort, ChainProfile.DEFAULT_SERVER_PORT)
+        appendUnlessDefault(
+            "LOCAL_PROXY_PORT",
+            profile.localProxyPort,
+            ChainProfile.DEFAULT_LOCAL_PROXY_PORT,
+        )
         profile.entryHop?.let { entry ->
             appendLine("ENTRY_PRIVKEY=${entry.privateKey}")
             appendLine("ENTRY_ADDRESS=${entry.address}")
             appendLine("ENTRY_PEER_PUBKEY=${entry.peerPublicKey}")
             appendLine("ENTRY_HOST=${entry.endpointHost}")
-            appendLine("ENTRY_PORT=${entry.endpointPort}")
+            appendUnlessDefault(
+                "ENTRY_PORT",
+                entry.endpointPort,
+                WireGuardEntry.DEFAULT_ENDPOINT_PORT,
+            )
             entry.dns?.let { appendLine("ENTRY_DNS=$it") }
         }
+    }
+
+    private fun <T> StringBuilder.appendUnlessDefault(key: String, value: T, default: T) {
+        if (value != default) appendLine("$key=$value")
     }
 
     private val REQUIRED_KEYS = listOf("VPS_IP", "VLESS_UUID", "REALITY_PUBKEY", "SHORT_ID")

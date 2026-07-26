@@ -4,6 +4,7 @@ import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -164,5 +165,53 @@ class SecretsEnvParserTest {
         assertEquals("example.org", profile.sni)
         assertEquals(8443, profile.serverPort)
         assertEquals(1081, profile.localProxyPort)
+    }
+
+    /** Each omitted line shrinks the QR, and a smaller code is what an
+     *  Android camera can actually decode off a desktop screen. */
+    @Test
+    fun `format omits keys whose value already matches the parse default`() {
+        val profile = SecretsEnvParser.parse(
+            """
+            $RELAY_ONLY
+            ENTRY_PRIVKEY=priv
+            ENTRY_ADDRESS=10.2.0.2/32
+            ENTRY_PEER_PUBKEY=peer
+            ENTRY_HOST=146.70.198.34
+            """.trimIndent(),
+        ).getOrThrow()
+
+        val formatted = SecretsEnvParser.format(profile)
+
+        assertFalse("SNI=" in formatted)
+        assertFalse("SERVER_PORT=" in formatted)
+        assertFalse("LOCAL_PROXY_PORT=" in formatted)
+        assertFalse("ENTRY_PORT=" in formatted)
+        assertEquals(profile, SecretsEnvParser.parse(formatted).getOrThrow())
+    }
+
+    @Test
+    fun `format keeps non-default optional values`() {
+        val profile = SecretsEnvParser.parse(
+            """
+            $RELAY_ONLY
+            SNI=example.org
+            SERVER_PORT=8443
+            LOCAL_PROXY_PORT=1081
+            ENTRY_PRIVKEY=priv
+            ENTRY_ADDRESS=10.2.0.2/32
+            ENTRY_PEER_PUBKEY=peer
+            ENTRY_HOST=146.70.198.34
+            ENTRY_PORT=51821
+            """.trimIndent(),
+        ).getOrThrow()
+
+        val formatted = SecretsEnvParser.format(profile)
+
+        assertTrue("SNI=example.org" in formatted)
+        assertTrue("SERVER_PORT=8443" in formatted)
+        assertTrue("LOCAL_PROXY_PORT=1081" in formatted)
+        assertTrue("ENTRY_PORT=51821" in formatted)
+        assertEquals(profile, SecretsEnvParser.parse(formatted).getOrThrow())
     }
 }
