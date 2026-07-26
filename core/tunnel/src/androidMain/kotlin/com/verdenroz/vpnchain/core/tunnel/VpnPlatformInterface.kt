@@ -3,6 +3,11 @@ package com.verdenroz.vpnchain.core.tunnel
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.Libbox
@@ -26,6 +31,10 @@ internal class VpnPlatformInterface(
 ) : PlatformInterface {
 
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    /** The non-VPN network sing-box's sockets are told to leave through. */
+    @Volatile
+    private var underlyingNetwork: Network? = null
 
     override fun openTun(options: TunOptions): Int {
         val builder = service.Builder()
@@ -67,26 +76,63 @@ internal class VpnPlatformInterface(
         if (!service.protect(fd)) throw IllegalStateException("VpnService.protect($fd) failed")
     }
 
+    /**
+     * Watches the network sing-box should dial *out* of, which is never the
+     * default network: once our own TUN is up it becomes this app's default,
+     * and reporting it would tell sing-box to send the relay's own sockets back
+     * into the tunnel it is carrying. `NOT_VPN` pins the callback to the real
+     * link underneath. Two-hop chains survived the mistake by accident — the
+     * WireGuard socket is dialled once, before the TUN exists, and everything
+     * after rides inside it — but a relay-only chain redials per connection and
+     * fails every one with "no available network interface".
+     */
     override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
         val cm = service.getSystemService(ConnectivityManager::class.java) ?: return
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = notify(cm, network, listener)
-            override fun onLinkPropertiesChanged(network: Network, lp: LinkProperties) =
+            override fun onAvailable(network: Network) {
+                underlyingNetwork = network
+                notify(cm, network, listener)
+            }
+
+            override fun onLinkPropertiesChanged(network: Network, lp: LinkProperties) {
+                underlyingNetwork = network
                 notify(cm, network, listener, lp)
-            override fun onLost(network: Network) =
+            }
+
+            // Below API 31 every matching network is reported, so a link we
+            // aren't using going away must not clear the one we are.
+            override fun onLost(network: Network) {
+                if (network != underlyingNetwork) return
+                underlyingNetwork = null
                 listener.updateDefaultInterface("", 0, false, false)
+            }
         }
         networkCallback = callback
-        // registerDefaultNetworkCallback reports the current network only on a
-        // later thread, and sing-box dials rule-sets as soon as this returns.
-        cm.activeNetwork?.let { notify(cm, it, listener) }
-        cm.registerDefaultNetworkCallback(callback)
+
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+
+        // The callback reports the current network only on a later thread, and
+        // sing-box dials rule-sets as soon as this returns. Safe to read the
+        // default here: our TUN cannot be up yet this early in startup.
+        cm.activeNetwork
+            ?.takeIf { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == false }
+            ?.let { underlyingNetwork = it; notify(cm, it, listener) }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            cm.registerBestMatchingNetworkCallback(request, callback, Handler(Looper.getMainLooper()))
+        } else {
+            cm.registerNetworkCallback(request, callback)
+        }
     }
 
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
         val cm = service.getSystemService(ConnectivityManager::class.java) ?: return
         networkCallback?.let { runCatching { cm.unregisterNetworkCallback(it) } }
         networkCallback = null
+        underlyingNetwork = null
     }
 
     private fun notify(
