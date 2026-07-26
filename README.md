@@ -108,11 +108,25 @@ nav) and Koin for DI. Both tunnels are functional:
   `VpnService`, performing both hops itself since Android allows only one
   active VPN. See [docs/android.md](docs/android.md).
 
-**Kill switch:** free, from ProtonVPN's own kill switch, in relay-only mode;
-otherwise a narrow nftables helper when a WireGuard entry hop is configured
+**Entry hop:** optional. Configure the Proton WireGuard fields and the app
+dials the entry hop itself; leave them blank and it runs single-hop
+(you → relay VPS → internet), or leave them blank and run the real ProtonVPN
+app to have that carry the entry hop instead. Single-hop is faster and has
+nothing to expire, but the VPS then sees your real address — the exact thing
+the entry hop exists to hide.
+
+**Kill switch:** a narrow nftables helper for any TUN chain the app dials
+itself, single-hop included; ProtonVPN's own when that app is the entry hop
 (setup in [docs/kill-switch.md](docs/kill-switch.md)). Android's is the OS's
 own Always-on VPN toggle (details in
 [docs/android.md](docs/android.md#kill-switch)).
+
+**DNS filtering:** on by default, and the reason a single-hop chain doesn't
+just lose NetShield — the chain's own resolver refuses malware, phishing,
+ad, and tracker domains from blocklists fetched through the tunnel, with
+NetShield's two levels (threats only / threats + ads). Scores 99% on
+[d3ward's adblock test](https://d3ward.github.io/toolz/adblock);
+see [docs/dns-filtering.md](docs/dns-filtering.md). **Settings → dns**.
 
 ## Releases
 

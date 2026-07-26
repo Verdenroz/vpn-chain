@@ -1,14 +1,27 @@
 # Desktop kill switch
 
-Desktop gets a real kill switch either way, but through one of two different
-mechanisms depending on which mode you pick.
+Desktop gets a real kill switch in every mode, through one of two mechanisms:
+the app's own nftables helper for any TUN chain it dials itself, or the real
+ProtonVPN app's kill switch when that app is carrying the entry hop.
 
-## Relay-only mode
+## Relay-only mode, with the ProtonVPN app
 
 Leave the entry-hop fields blank and run the real ProtonVPN app with its own
 kill switch enabled. sing-box's VLESS dial just rides whatever the OS default
 route is — since that's Proton's tunnel, Proton's kill switch protects it
 exactly as if it were any other app on your system. No custom code involved.
+
+The app detects this (`proton0` is up) and stands down rather than installing
+its own table: the rendered config never lists Proton's WireGuard endpoint as
+an exemption, so our rule would blackhole the very tunnel it is riding.
+
+## Single-hop mode
+
+Leave the entry-hop fields blank and *don't* run the ProtonVPN app, and the
+chain is you → relay VPS → internet. Neither of the above applies — there is
+no Proton kill switch to inherit — so the app installs its own table, exactly
+as below but exempting only the VPS. Enabled by the same **Settings → kill
+switch** toggle, and it needs the same helper.
 
 ## WireGuard entry hop mode
 
@@ -62,6 +75,12 @@ without the safety net.
 ## Status
 
 The app's **Chain** screen shows `kill switch: protected` when either setup
-is active and detected, or a warning when it isn't. There's no way for the
+is active and detected, or a warning when it isn't — reported from what
+actually holds, not from which mode was configured. There's no way for the
 app to enable ProtonVPN's own kill switch for you — turn that one on in the
 ProtonVPN app/CLI's own settings.
+
+Desktop's proxy mode (**Settings → routing**, system-wide TUN off) is the one
+case with no fail-closed option of ours: nothing is captured system-wide, so
+there is no leak for a firewall to catch. The status says so rather than
+claiming protection.
