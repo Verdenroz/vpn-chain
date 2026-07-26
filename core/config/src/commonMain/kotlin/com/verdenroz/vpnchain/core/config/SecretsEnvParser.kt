@@ -6,8 +6,8 @@ import com.verdenroz.vpnchain.core.model.WireGuardEntry
 /**
  * Parses the CLI's `secrets.env` format (see examples/secrets.env.example)
  * so the GUI apps can import the exact same file the CLI runs from. The
- * `PROTON_ENTRY_*` keys are optional and only used by the TUN-mode entry hop;
- * the prefix is historical — they take any WireGuard peer, not just Proton's.
+ * `ENTRY_*` keys are optional, take any WireGuard peer, and are only used by
+ * the TUN-mode entry hop.
  */
 object SecretsEnvParser {
 
@@ -48,13 +48,13 @@ object SecretsEnvParser {
         val hasAll = ENTRY_HOP_KEYS.all { !values[it].isNullOrBlank() }
         if (!hasAll) return null
         return WireGuardEntry(
-            privateKey = values.getValue("PROTON_ENTRY_PRIVKEY"),
-            address = values.getValue("PROTON_ENTRY_ADDRESS"),
-            peerPublicKey = values.getValue("PROTON_ENTRY_PEER_PUBKEY"),
-            endpointHost = values.getValue("PROTON_ENTRY_HOST"),
-            endpointPort = values["PROTON_ENTRY_PORT"]?.toIntOrNull()
+            privateKey = values.getValue("ENTRY_PRIVKEY"),
+            address = values.getValue("ENTRY_ADDRESS"),
+            peerPublicKey = values.getValue("ENTRY_PEER_PUBKEY"),
+            endpointHost = values.getValue("ENTRY_HOST"),
+            endpointPort = values["ENTRY_PORT"]?.toIntOrNull()
                 ?: WireGuardEntry.DEFAULT_ENDPOINT_PORT,
-            dns = values["PROTON_ENTRY_DNS"]?.takeIf(String::isNotBlank),
+            dns = values["ENTRY_DNS"]?.takeIf(String::isNotBlank),
         )
     }
 
@@ -68,20 +68,20 @@ object SecretsEnvParser {
         appendLine("SERVER_PORT=${profile.serverPort}")
         appendLine("LOCAL_PROXY_PORT=${profile.localProxyPort}")
         profile.entryHop?.let { entry ->
-            appendLine("PROTON_ENTRY_PRIVKEY=${entry.privateKey}")
-            appendLine("PROTON_ENTRY_ADDRESS=${entry.address}")
-            appendLine("PROTON_ENTRY_PEER_PUBKEY=${entry.peerPublicKey}")
-            appendLine("PROTON_ENTRY_HOST=${entry.endpointHost}")
-            appendLine("PROTON_ENTRY_PORT=${entry.endpointPort}")
-            entry.dns?.let { appendLine("PROTON_ENTRY_DNS=$it") }
+            appendLine("ENTRY_PRIVKEY=${entry.privateKey}")
+            appendLine("ENTRY_ADDRESS=${entry.address}")
+            appendLine("ENTRY_PEER_PUBKEY=${entry.peerPublicKey}")
+            appendLine("ENTRY_HOST=${entry.endpointHost}")
+            appendLine("ENTRY_PORT=${entry.endpointPort}")
+            entry.dns?.let { appendLine("ENTRY_DNS=$it") }
         }
     }
 
     private val REQUIRED_KEYS = listOf("VPS_IP", "VLESS_UUID", "REALITY_PUBKEY", "SHORT_ID")
     private val ENTRY_HOP_KEYS = listOf(
-        "PROTON_ENTRY_PRIVKEY",
-        "PROTON_ENTRY_ADDRESS",
-        "PROTON_ENTRY_PEER_PUBKEY",
-        "PROTON_ENTRY_HOST",
+        "ENTRY_PRIVKEY",
+        "ENTRY_ADDRESS",
+        "ENTRY_PEER_PUBKEY",
+        "ENTRY_HOST",
     )
 }

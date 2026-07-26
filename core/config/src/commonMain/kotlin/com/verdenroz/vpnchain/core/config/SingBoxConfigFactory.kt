@@ -17,11 +17,10 @@ import kotlinx.serialization.json.putJsonObject
 /**
  * Builds sing-box client configs from a [ChainProfile]. Two shapes:
  * - [mixedProxyConfig]: relay-only local mixed inbound → VLESS (desktop/CLI);
- *   no entry hop of its own, the real ProtonVPN app fills that role instead.
+ *   no entry hop of its own, an external VPN app fills that role instead.
  * - [androidChainConfig]: full TUN chain with an optional WireGuard entry hop
- *   (any provider — Proton is only what the docs assume), used by Android
- *   always and by desktop when system-wide TUN is on. Mirrors
- *   config-templates/sing-box-android.template.json.
+ *   from any provider, used by Android always and by desktop when system-wide
+ *   TUN is on. Mirrors config-templates/sing-box-android.template.json.
  */
 object SingBoxConfigFactory {
     private val json = Json { prettyPrint = true }
@@ -160,7 +159,7 @@ object SingBoxConfigFactory {
     }
 
     /**
-     * NetShield's job, done client-side: reject the lookup outright rather than
+     * Upstream filtering's job, done client-side: reject the lookup rather than
      * answer with an address. `refused` fails callers fast instead of leaving
      * them to time out on a black-holed connection. One rule covers every
      * rule-set of the level — a name is refused if any of them lists it.
@@ -205,9 +204,9 @@ object SingBoxConfigFactory {
         putJsonObject("log") { put("level", "info"); put("timestamp", true) }
 
     /**
-     * A resolver on the entry peer's internal network (Proton's NetShield IPs
-     * being the usual case) must be dialed through that peer — routing it via
-     * the relay like the public fallback would just make it unreachable, not
+     * A resolver on the entry peer's internal network — a provider's filtering
+     * resolver being the usual case — must be dialed through that peer. Routing
+     * it via the relay like the public fallback would make it unreachable, not
      * merely unfiltered.
      */
     private fun JsonObjectBuilder.putDnsServers(entry: WireGuardEntry?) {

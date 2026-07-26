@@ -55,7 +55,7 @@ class SingBoxConfigFactoryTest {
     }
 
     /** The relay-only path leaves interface detection off so it can't fight the
-     *  real ProtonVPN app's routing. */
+     *  an external VPN app's routing. */
     @Test
     fun `proxy config keeps auto_detect_interface off and stays tcp-only`() {
         val config = parse(SingBoxConfigFactory.mixedProxyConfig(profile()))
@@ -141,7 +141,7 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `dns is resolved through the relay when no netshield dns is configured`() {
+    fun `dns is resolved through the relay when no entry dns is configured`() {
         val config = parse(SingBoxConfigFactory.androidChainConfig(profile(entry())))
 
         val dns = config.getValue("dns").jsonObject
@@ -151,10 +151,10 @@ class SingBoxConfigFactoryTest {
         assertEquals("ipv4_only", dns.getValue("strategy").jsonPrimitive.content)
     }
 
-    /** NetShield's filtering only works if its DNS IP is reachable — that IP
-     *  lives on Proton's internal network, so it must dial through the peer. */
+    /** Entry-side filtering only works if its DNS IP is reachable — that IP
+     *  lives on the peer's internal network, so it must dial through it. */
     @Test
-    fun `netshield dns is resolved through the proton peer, not the relay`() {
+    fun `entry dns is resolved through the entry peer, not the relay`() {
         val config = parse(SingBoxConfigFactory.androidChainConfig(profile(entry(dns = "10.2.0.1"))))
 
         val dns = config.getValue("dns").jsonObject
@@ -190,7 +190,7 @@ class SingBoxConfigFactoryTest {
         assertEquals("dns-remote", dns.getValue("final").jsonPrimitive.content)
     }
 
-    /** NetShield's level 1: threats blocked, ads left to resolve. */
+    /** Level 1: threats blocked, ads left to resolve. */
     @Test
     fun `malware-only filtering renders just the threat list`() {
         val config = parse(

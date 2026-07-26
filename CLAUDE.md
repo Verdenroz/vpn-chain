@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A layered, censorship-resistant VPN chain (`you → ProtonVPN entry hop →
+A layered, censorship-resistant VPN chain (`you → WireGuard entry hop →
 VLESS+REALITY relay VPS → internet`) built two ways: a bash CLI
 (`cli/vpn-chain`) and a Kotlin Multiplatform GUI (Android + desktop) that
 shares one core. Real credentials never live in the repo — see the README's
@@ -78,7 +78,7 @@ prebuilt `libbox` AAR inside a `VpnService` (`VpnChainService` +
 `VpnPlatformInterface` implementing libbox's `PlatformInterface`) — see
 `docs/android.md` for the full wiring, and note Android's one-VPN-at-a-time
 constraint means the app performs *both* chain hops itself instead of
-delegating the entry hop to the real ProtonVPN app.
+delegating the entry hop to a separate VPN app.
 
 **Kill switch** has two independent implementations depending on platform and
 mode — Android relies on OS-level Always-on VPN (no app code can enable it,

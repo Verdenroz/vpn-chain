@@ -1,7 +1,7 @@
 # Desktop TUN mode
 
 TUN is the default: sing-box creates a TUN device and captures all system
-traffic, doing both hops itself (`tun` → optional Proton WireGuard entry →
+traffic, doing both hops itself (`tun` → optional WireGuard entry →
 VLESS). The narrower alternative is SOCKS-proxy mode — only apps configured
 to use `127.0.0.1:1080` are tunneled, and any entry hop is your own
 responsibility to run. Toggle between them at **Settings → Routing → "Route
@@ -9,7 +9,7 @@ entire system (TUN)"**.
 
 `SingBoxConfigFactory.renderPlatformTunnelConfig` picks the shape per
 platform; desktop's TUN chain mirrors the CLI's
-`you → Proton → VPS → internet` chain, so the GUI and CLI are functionally
+`you → entry hop → VPS → internet` chain, so the GUI and CLI are functionally
 equivalent.
 
 ## One-time privilege grant
@@ -32,26 +32,26 @@ interface on every connect and disconnect, which by default means a polkit
 password prompt each time. `cli/setup-desktop.sh` installs a rule scoped to
 just that (`cli/polkit/10-vpn-chain-resolve1.rules`) so it stops prompting.
 
-## Adding the Proton entry hop
+## Adding the WireGuard entry hop
 
-Generate a **dedicated** WireGuard config at account.protonvpn.com (a
+Generate a **dedicated** WireGuard config from your provider (a
 *different* one than any other device uses — the same key can't be active in
 two places) and import it without exposing the key:
 
 ```
-cli/import-proton-entry.sh ~/Downloads/your-entry.conf   # → secrets.env
+cli/import-entry-conf.sh ~/Downloads/your-entry.conf   # → secrets.env
 ```
 
 then in the app: **Settings → Import ~/.config/vpn-chain/secrets.env**. Or
 type the fields into the Settings form's *TUN entry hop* section. Without an
 entry the TUN chain is relay-only.
 
-## Conflict with the real ProtonVPN app
+## Conflict with a separate VPN app
 
-If you also run the CLI's local ProtonVPN entry hop (the real app, not the WG
+If you also run the CLI's local app-based entry hop (a separate VPN client, not the WG
 config above), disconnect it before using desktop TUN mode
-(`protonvpn disconnect`) — sing-box now dials Proton itself via the
-WireGuard entry, so a separate Proton connection fights over the routing
+(e.g. `protonvpn disconnect`) — sing-box now dials the entry peer itself via
+the WireGuard entry, so a second VPN connection fights over the routing
 table, and its kill switch would block sing-box's traffic. Afterwards confirm
 your default route is back on your physical interface
 (`ip route show default`) and no `pvpnksintrf0` kill-switch interface

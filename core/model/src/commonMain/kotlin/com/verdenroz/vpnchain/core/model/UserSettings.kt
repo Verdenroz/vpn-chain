@@ -18,14 +18,14 @@ data class UserSettings(
     val systemWideTun: Boolean = true,
     /**
      * Desktop only: installs the nftables kill switch before connecting, for
-     * any TUN chain this app dials itself. Deferred to the real ProtonVPN app's
+     * any TUN chain this app dials itself. Deferred to an external VPN app's
      * own kill switch when that app is the entry hop, and ignored on Android,
      * where fail-closed is the system Always-on VPN setting.
      */
     val killSwitchEnabled: Boolean = true,
     /**
      * Blocklist filtering on the chain's resolver. On by default: a chain
-     * without a Proton entry hop has no NetShield behind it, and losing the
+     * with no entry hop has no upstream filter behind it, and losing the
      * filtering silently is worse than filtering something you wanted.
      */
     val dnsFilter: DnsFilter = DnsFilter.AdsAndTrackers,

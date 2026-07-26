@@ -40,11 +40,13 @@ internal class DesktopNetworkMonitor(
  * counting them would report "online" during the outage we're trying to detect.
  */
 private fun NetworkInterface.isOurTunnel(): Boolean =
-    name == PROTON_INTERFACE_NAME ||
+    name == ENTRY_APP_INTERFACE ||
         inetAddresses.asSequence().any { it.hostAddress == TUN_ADDRESS }
 
 private fun NetworkInterface.hasRoutableAddress(): Boolean =
     inetAddresses.asSequence().any { !it.isLoopbackAddress && !it.isLinkLocalAddress }
 
-private const val PROTON_INTERFACE_NAME = "proton0"
+// The literal interface the ProtonVPN desktop app creates — the only external
+// VPN client detected here, because it is the only one with a fixed name.
+private const val ENTRY_APP_INTERFACE = "proton0"
 private const val TUN_ADDRESS = "10.19.19.1"
