@@ -84,7 +84,8 @@ class ChainNotificationUpdater(
         val disconnect = PendingIntent.getService(
             context,
             1,
-            Intent(context, VpnChainService::class.java).setAction(VpnChainService.ACTION_STOP),
+            Intent(context, VpnChainService::class.java)
+                .setAction(VpnChainService.ACTION_STOP_BY_USER),
             flags,
         )
 

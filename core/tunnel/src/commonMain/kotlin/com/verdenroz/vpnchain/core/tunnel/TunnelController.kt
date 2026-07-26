@@ -2,9 +2,11 @@ package com.verdenroz.vpnchain.core.tunnel
 
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.SessionStats
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
@@ -40,6 +42,14 @@ interface TunnelController {
 
     /** True once we've observed the OS itself launch us as an always-on VPN. */
     val alwaysOnDetected: StateFlow<Boolean> get() = MutableStateFlow(false).asStateFlow()
+
+    /**
+     * Stops the user asked for through a surface that never reaches the app's
+     * own disconnect path — Android's notification button, or an OS revoke.
+     * Whoever tracks connection intent has to clear it on these, or they read
+     * as a drop. Empty on platforms where every stop goes through [stop].
+     */
+    val userStops: SharedFlow<Unit> get() = MutableSharedFlow<Unit>().asSharedFlow()
 
     /** Opens the platform's VPN settings screen, if [killSwitchGuidanceSupported]. */
     fun openSystemVpnSettings() {}

@@ -11,6 +11,7 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.Res
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_vpn_permission_denied
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
@@ -29,6 +30,7 @@ class AndroidTunnelController(
     override val status: StateFlow<ChainStatus> = TunnelBridge.status.asStateFlow()
     override val logs: SharedFlow<String> = TunnelBridge.logs
     override val stats: StateFlow<SessionStats> = TunnelBridge.stats.asStateFlow()
+    override val userStops: SharedFlow<Unit> = TunnelBridge.userStops.asSharedFlow()
 
     override val killSwitchGuidanceSupported: Boolean = true
     override val alwaysOnDetected: StateFlow<Boolean> = TunnelBridge.alwaysOnDetected.asStateFlow()

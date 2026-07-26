@@ -81,6 +81,9 @@ class ChainSupervisor(
                             val wait = ReconnectPolicy.delayForAttemptMillis(attempt)
                             _state.value = ReconnectState.Waiting(attempt, wait)
                             awaitBackoffOrNetworkReturn(wait)
+                            // Re-checked after the wait: the user can disconnect
+                            // during a backoff, and that has to win.
+                            if (!shouldReconnect()) break
                             _state.value = ReconnectState.Retrying(attempt)
                             // Not cancellable: reaching Connecting re-emits and
                             // would otherwise cancel the very attempt in flight.
