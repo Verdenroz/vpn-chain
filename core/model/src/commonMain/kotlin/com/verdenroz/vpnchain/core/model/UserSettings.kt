@@ -37,13 +37,17 @@ data class UserSettings(
      */
     val entryHopEnabled: Boolean = true,
     /**
-     * How much traffic takes the Cloudflare WARP tail after the relay. On by
-     * default for everything: the relay's datacenter address is refused
-     * outright by some sites, and the extra hop measured no slower. Cost is
-     * that Cloudflare, not a box you own, is the last hop — drop to
-     * [WarpMode.BlockedSites] or [WarpMode.Off] to take that back.
+     * How much traffic takes the Cloudflare WARP tail after the relay.
+     *
+     * Defaults to the blocked sites only. The tail is dialled through the
+     * relay, so Cloudflare sees the VPS's address — unique, and rented in
+     * someone's name — against every destination it carries. Confining that
+     * to the domains that actually refuse the relay keeps a box you control
+     * as the exit for everything else. [WarpMode.AllTraffic] is the trade in
+     * the other direction: it costs nothing measurable in speed and denies
+     * sites a single-tenant address to fingerprint you by.
      */
-    val warpMode: WarpMode = WarpMode.AllTraffic,
+    val warpMode: WarpMode = WarpMode.BlockedSites,
     /**
      * The domains [WarpMode.BlockedSites] routes down the tail — the whole
      * list, seeded from [DEFAULT_WARP_DOMAINS] and editable in full. Suffix

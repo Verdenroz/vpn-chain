@@ -21,8 +21,8 @@ sees the relay's address — never the device's.
 | Mode | What routes through WARP |
 |---|---|
 | `off` | Nothing. Traffic exits from the VPS, as it did before. |
-| `blocked sites` | Exactly the domains listed in the settings field. Suffix matches, so `example.com` covers its subdomains. |
-| `everything` | All traffic. **The default.** |
+| `blocked sites` | Exactly the domains listed in the settings field. **The default.** Suffix matches, so `example.com` covers its subdomains. |
+| `everything` | All traffic. |
 
 The domain field is seeded with the sites known to refuse the relay's address
 (Reddit's and ChatGPT's), and is then an ordinary editable list: nothing is
@@ -31,17 +31,24 @@ an empty list renders no tail at all. Paste what a URL bar shows —
 `https://Example.com/path` and `*.example.com` both normalise to
 `example.com`.
 
-`everything` is the default because it measured no slower — WARP rides
-Cloudflare's backbone, and on a non-Cloudflare target throughput was within
-noise of the plain relay while first-byte latency improved. Drop to
-`blocked sites` if you'd rather keep the VPS as the exit of record.
+`everything` costs nothing measurable in speed — WARP rides Cloudflare's
+backbone, and on a non-Cloudflare target throughput was within noise of the
+plain relay while first-byte latency improved. It is not the default anyway;
+see the trade below.
 
 ## What it costs
 
-- **The last hop is no longer a box you own.** Cloudflare sees every
-  destination you reach in `everything` mode. It does *not* see your device —
-  it sees the relay — but "no third party knows where I go" is no longer true.
-  `blocked sites` narrows that to the domains you name.
+- **WARP does not anonymize you to Cloudflare.** The tail is dialled through
+  the relay, so what Cloudflare sees is the VPS's address — unique, static,
+  and rented in someone's name — attached to a persistent registration and to
+  every destination it carries. It never sees the device, but it gets a
+  durable pseudonym that resolves back to a box with a billing record.
+  Rotating the key changes nothing; the source address is the constant.
+  This is why `blocked sites` is the default: it confines that view to the
+  domains that actually forced the issue.
+- **The last hop is no longer a box you own.** In `everything` mode,
+  destination knowledge moves off your VPS and onto a US company with far
+  more legal-process exposure.
 - **Shared-IP reputation cuts both ways.** WARP addresses are shared by
   everyone using WARP. Some sites are stricter with them than with a quiet
   VPS: expect more CAPTCHAs, and some banks and streaming services block WARP

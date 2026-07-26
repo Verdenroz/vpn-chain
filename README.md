@@ -140,9 +140,11 @@ sites (Reddit and ChatGPT both answer 403 through ours), so the chain can add
 a Cloudflare WARP hop *after* the relay and exit from Cloudflare's address
 instead. Dialled through the chain, never around it — Cloudflare sees the
 relay, never your device. Credentials register themselves; no `wgcf`, nothing
-to paste. On by default for all traffic (it measured no slower), or narrow it
-to a list of blocked sites, or off. GUI only; the CLI still exits from the
-VPS. See [docs/warp-exit.md](docs/warp-exit.md). **Settings → routing**.
+to paste. Defaults to the blocked sites only — the tail is dialled through
+the relay, so Cloudflare sees the VPS's address against whatever it carries,
+and confining that to the sites that force it keeps your own box as the exit
+for everything else. Widen it to all traffic (it measured no slower) or turn
+it off. GUI only; the CLI still exits from the VPS. See [docs/warp-exit.md](docs/warp-exit.md). **Settings → routing**.
 
 ## Releases
 

@@ -73,7 +73,7 @@ class VpnChainPreferencesDataSource(
             entryHopEnabled = prefs[ENTRY_HOP_ENABLED_KEY] ?: true,
             warpMode = prefs[WARP_MODE_KEY]
                 ?.let { raw -> runCatching { WarpMode.valueOf(raw) }.getOrNull() }
-                ?: WarpMode.AllTraffic,
+                ?: WarpMode.BlockedSites,
             // Absent means never edited, so it seeds from the built-in list; a
             // list the user emptied is stored as "[]" and stays empty.
             warpDomains = prefs[WARP_DOMAINS_KEY]
