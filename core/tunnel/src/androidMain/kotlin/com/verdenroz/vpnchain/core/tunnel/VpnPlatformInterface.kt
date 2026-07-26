@@ -77,6 +77,9 @@ internal class VpnPlatformInterface(
                 listener.updateDefaultInterface("", 0, false, false)
         }
         networkCallback = callback
+        // registerDefaultNetworkCallback reports the current network only on a
+        // later thread, and sing-box dials rule-sets as soon as this returns.
+        cm.activeNetwork?.let { notify(cm, it, listener) }
         cm.registerDefaultNetworkCallback(callback)
     }
 
@@ -106,6 +109,7 @@ internal class VpnPlatformInterface(
                     mtu = runCatching { nif.mtu }.getOrDefault(-1)
                     type = Libbox.InterfaceTypeOther
                     metered = false
+                    flags = nif.goFlags()
                     addresses = StringList(
                         nif.interfaceAddresses.mapNotNull { addr ->
                             // Link-local IPv6 addresses carry a "%zone" suffix
@@ -119,6 +123,21 @@ internal class VpnPlatformInterface(
         }.getOrDefault(emptyList())
         return NetworkInterfaceList(interfaces)
     }
+
+    /**
+     * Go's `net.Flags` bit order, which is how libbox reads this field. Left at
+     * its 0 default every interface looks administratively down, and sing-box
+     * rejects the whole set with "no available network interface".
+     */
+    private fun JavaNetworkInterface.goFlags(): Int = runCatching {
+        var flags = 0
+        if (isUp) flags = flags or FLAG_UP or FLAG_RUNNING
+        if (isLoopback) flags = flags or FLAG_LOOPBACK
+        if (isPointToPoint) flags = flags or FLAG_POINT_TO_POINT
+        if (supportsMulticast()) flags = flags or FLAG_MULTICAST
+        if (interfaceAddresses.any { it.broadcast != null }) flags = flags or FLAG_BROADCAST
+        flags
+    }.getOrDefault(FLAG_UP or FLAG_RUNNING)
 
     // Unused by our config; provide safe defaults so libbox never NPEs.
     override fun useProcFS(): Boolean = false
@@ -138,3 +157,10 @@ internal class VpnPlatformInterface(
         destinationPort: Int,
     ): ConnectionOwner = throw UnsupportedOperationException("process matching not supported")
 }
+
+private const val FLAG_UP = 1
+private const val FLAG_BROADCAST = 1 shl 1
+private const val FLAG_LOOPBACK = 1 shl 2
+private const val FLAG_POINT_TO_POINT = 1 shl 3
+private const val FLAG_MULTICAST = 1 shl 4
+private const val FLAG_RUNNING = 1 shl 5
