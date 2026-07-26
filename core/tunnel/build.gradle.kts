@@ -1,5 +1,6 @@
 plugins {
     id("vpnchain.kmp.library")
+    alias(libs.plugins.kotlin.serialization)
     id("vpnchain.compose.multiplatform")
 }
 
@@ -16,6 +17,7 @@ kotlin {
             implementation(projects.core.config)
             implementation(projects.core.common)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.core)
             implementation(libs.compose.runtime)
             implementation(libs.compose.components.resources)

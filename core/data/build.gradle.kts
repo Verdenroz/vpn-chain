@@ -12,6 +12,7 @@ kotlin {
             implementation(projects.core.config)
             implementation(projects.core.datastore)
             implementation(projects.core.tunnel)
+            implementation(projects.core.warp)
             implementation(projects.core.logging)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.koin.core)

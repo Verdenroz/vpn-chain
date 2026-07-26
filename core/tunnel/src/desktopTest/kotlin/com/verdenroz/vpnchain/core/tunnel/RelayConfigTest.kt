@@ -101,6 +101,70 @@ private val PROXY_ONLY = """
     }
 """.trimIndent()
 
+/** Single-hop with a WARP tail: a WireGuard endpoint, but not an entry hop. */
+private val TUN_WARP_ONLY = """
+    {
+        "inbounds": [
+            { "type": "tun", "tag": "tun-in", "mtu": 1280 }
+        ],
+        "endpoints": [
+            {
+                "type": "wireguard",
+                "tag": "warp-exit",
+                "detour": "vless-proxy",
+                "peers": [
+                    {
+                        "address": "162.159.192.1",
+                        "port": 2408
+                    }
+                ]
+            }
+        ],
+        "outbounds": [
+            {
+                "type": "vless",
+                "tag": "vless-proxy",
+                "server": "89.127.235.38",
+                "server_port": 443
+            }
+        ]
+    }
+""".trimIndent()
+
+/** Both hops: the entry peer is dialled directly, the tail through the relay. */
+private val TUN_ENTRY_AND_WARP = """
+    {
+        "inbounds": [
+            { "type": "tun", "tag": "tun-in", "mtu": 1280 }
+        ],
+        "endpoints": [
+            {
+                "type": "wireguard",
+                "tag": "entry-hop",
+                "peers": [
+                    { "address": "146.70.198.34", "port": 51820 }
+                ]
+            },
+            {
+                "type": "wireguard",
+                "tag": "warp-exit",
+                "detour": "vless-proxy",
+                "peers": [
+                    { "address": "162.159.192.1", "port": 2408 }
+                ]
+            }
+        ],
+        "outbounds": [
+            {
+                "type": "vless",
+                "tag": "vless-proxy",
+                "server": "89.127.235.38",
+                "server_port": 443
+            }
+        ]
+    }
+""".trimIndent()
+
 class RelayConfigTest {
 
     @Test
@@ -113,6 +177,29 @@ class RelayConfigTest {
     fun `detects the wireguard entry hop only when one is declared`() {
         assertTrue(RelayConfig.hasWireGuardEntry(TUN_WITH_ENTRY))
         assertFalse(RelayConfig.hasWireGuardEntry(PROXY_ONLY))
+    }
+
+    /** Regression: the WARP tail is a WireGuard endpoint too. Counting it as an
+     *  entry hop makes the readout claim a hop the chain doesn't have — and
+     *  makes the controller think the firewall is its own to own. */
+    @Test
+    fun `a warp tail alone is not an entry hop`() {
+        assertFalse(RelayConfig.hasWireGuardEntry(TUN_WARP_ONLY))
+        assertTrue(RelayConfig.hasWireGuardEntry(TUN_ENTRY_AND_WARP))
+    }
+
+    /**
+     * The tail is dialled through the relay, so its packets are already inside
+     * the tunnel. Exempting Cloudflare's anycast address would open a hole
+     * nothing needs — and, worse, one that stays open if sing-box dies.
+     */
+    @Test
+    fun `the warp endpoint is never exempted from the kill switch`() {
+        assertEquals(listOf("89.127.235.38"), RelayConfig.exemptIps(TUN_WARP_ONLY))
+        assertEquals(
+            listOf("89.127.235.38", "146.70.198.34"),
+            RelayConfig.exemptIps(TUN_ENTRY_AND_WARP),
+        )
     }
 
     @Test

@@ -6,10 +6,13 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.DEFAULT_WARP_DOMAINS
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpExit
+import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
@@ -68,6 +71,14 @@ class VpnChainPreferencesDataSource(
                 ?.let { raw -> runCatching { DnsFilter.valueOf(raw) }.getOrNull() }
                 ?: DnsFilter.AdsAndTrackers,
             entryHopEnabled = prefs[ENTRY_HOP_ENABLED_KEY] ?: true,
+            warpMode = prefs[WARP_MODE_KEY]
+                ?.let { raw -> runCatching { WarpMode.valueOf(raw) }.getOrNull() }
+                ?: WarpMode.AllTraffic,
+            // Absent means never edited, so it seeds from the built-in list; a
+            // list the user emptied is stored as "[]" and stays empty.
+            warpDomains = prefs[WARP_DOMAINS_KEY]
+                ?.let { raw -> runCatching { json.decodeFromString<List<String>>(raw) }.getOrNull() }
+                ?: DEFAULT_WARP_DOMAINS,
             autoConnectOnLaunch = prefs[AUTO_CONNECT_ON_LAUNCH_KEY] ?: false,
             autoReconnect = prefs[AUTO_RECONNECT_KEY] ?: true,
             autoStartOnLogin = prefs[AUTO_START_ON_LOGIN_KEY] ?: false,
@@ -136,6 +147,28 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { it[ENTRY_HOP_ENABLED_KEY] = enabled }
     }
 
+    suspend fun setWarpMode(mode: WarpMode) {
+        dataStore.edit { it[WARP_MODE_KEY] = mode.name }
+    }
+
+    suspend fun setWarpDomains(domains: List<String>) {
+        dataStore.edit { it[WARP_DOMAINS_KEY] = json.encodeToString(domains) }
+    }
+
+    /**
+     * The registered WARP tail, or null before one exists. A private key like
+     * any other in here: never logged, never exported with the profile.
+     */
+    val warpExit: Flow<WarpExit?> = dataStore.data.map { prefs ->
+        prefs[WARP_EXIT_KEY]?.let { raw ->
+            runCatching { json.decodeFromString<WarpExit>(raw) }.getOrNull()
+        }
+    }
+
+    suspend fun setWarpExit(exit: WarpExit) {
+        dataStore.edit { it[WARP_EXIT_KEY] = json.encodeToString(exit) }
+    }
+
     suspend fun setAutoConnectOnLaunch(enabled: Boolean) {
         dataStore.edit { it[AUTO_CONNECT_ON_LAUNCH_KEY] = enabled }
     }
@@ -162,6 +195,9 @@ class VpnChainPreferencesDataSource(
         val KILL_SWITCH_ENABLED_KEY = booleanPreferencesKey("kill_switch_enabled")
         val DNS_FILTER_KEY = stringPreferencesKey("dns_filter")
         val ENTRY_HOP_ENABLED_KEY = booleanPreferencesKey("entry_hop_enabled")
+        val WARP_MODE_KEY = stringPreferencesKey("warp_mode")
+        val WARP_DOMAINS_KEY = stringPreferencesKey("warp_domains_json")
+        val WARP_EXIT_KEY = stringPreferencesKey("warp_exit_json")
         val LAST_ORIGIN_IP_KEY = stringPreferencesKey("last_origin_ip")
         val AUTO_CONNECT_ON_LAUNCH_KEY = booleanPreferencesKey("auto_connect_on_launch")
         val AUTO_RECONNECT_KEY = booleanPreferencesKey("auto_reconnect")

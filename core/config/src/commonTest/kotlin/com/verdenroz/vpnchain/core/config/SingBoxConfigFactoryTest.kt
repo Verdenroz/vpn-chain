@@ -1,7 +1,10 @@
 package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.DEFAULT_WARP_DOMAINS
 import com.verdenroz.vpnchain.core.model.DnsFilter
+import com.verdenroz.vpnchain.core.model.WarpExit
+import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,6 +35,13 @@ private fun entry(dns: String? = null) = WireGuardEntry(
     peerPublicKey = "peer",
     endpointHost = "146.70.198.34",
     dns = dns,
+)
+
+private fun warp() = WarpExit(
+    privateKey = "warp-priv",
+    addressV4 = "172.16.0.2/32",
+    addressV6 = "2606:4700::2/128",
+    peerPublicKey = "warp-peer",
 )
 
 private fun parse(raw: String): JsonObject = Json.parseToJsonElement(raw).jsonObject
@@ -284,6 +294,205 @@ class SingBoxConfigFactoryTest {
             singleHop.getValue("dns").jsonObject.array("rules"),
             withEntry.getValue("dns").jsonObject.array("rules"),
         )
+    }
+
+    /**
+     * The tail is what changes the address sites see. Dialling it through the
+     * relay is what keeps it a tail rather than a second path around the chain
+     * — and on desktop, a WARP handshake on the bare link is rejected outright
+     * by the kill switch.
+     */
+    @Test
+    fun `the warp tail is dialled through the relay and carries both families`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(entry()),
+                warp = warp(),
+                warpMode = WarpMode.AllTraffic,
+            ),
+        )
+
+        val tail = config.array("endpoints").taggedWith("warp-exit")
+        assertEquals("vless-proxy", tail?.getValue("detour")?.jsonPrimitive?.content)
+        assertEquals("warp-priv", tail?.getValue("private_key")?.jsonPrimitive?.content)
+        val peer = tail?.array("peers")?.single()?.jsonObject
+        assertEquals("162.159.192.1", peer?.getValue("address")?.jsonPrimitive?.content)
+        assertEquals(2408, peer?.getValue("port")?.jsonPrimitive?.int)
+        assertEquals(
+            listOf("0.0.0.0/0", "::/0"),
+            peer?.array("allowed_ips")?.map { it.jsonPrimitive.content },
+        )
+        // The entry hop is still there: the tail is an addition, not a swap.
+        assertEquals(2, config.array("endpoints").size)
+    }
+
+    @Test
+    fun `all-traffic mode sends everything out through the tail`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(entry()),
+                warp = warp(),
+                warpMode = WarpMode.AllTraffic,
+            ),
+        )
+
+        val route = config.getValue("route").jsonObject
+        assertEquals("warp-exit", route.getValue("final").jsonPrimitive.content)
+        // No domain rule: everything already goes there.
+        assertTrue(route.array("rules").map { it.jsonObject }.none { "domain_suffix" in it })
+    }
+
+    @Test
+    fun `blocked-sites mode routes only the listed names and leaves the exit alone`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(entry()),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                warpDomains = DEFAULT_WARP_DOMAINS,
+            ),
+        )
+
+        val route = config.getValue("route").jsonObject
+        assertEquals("vless-proxy", route.getValue("final").jsonPrimitive.content)
+        val rule = route.array("rules").map { it.jsonObject }.single { "domain_suffix" in it }
+        assertEquals("warp-exit", rule.getValue("outbound").jsonPrimitive.content)
+        assertEquals("route", rule.getValue("action").jsonPrimitive.content)
+        val suffixes = rule.array("domain_suffix").map { it.jsonPrimitive.content }
+        assertTrue("reddit.com" in suffixes, suffixes.toString())
+        assertTrue("chatgpt.com" in suffixes, suffixes.toString())
+    }
+
+    /**
+     * The stored list is the whole rule — nothing is merged in underneath it,
+     * or removing an entry in settings wouldn't actually stop routing it.
+     */
+    @Test
+    fun `only the given domains are routed, with no built-in list behind them`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                warpDomains = listOf("example.com"),
+            ),
+        )
+
+        val rule = config.getValue("route").jsonObject.array("rules")
+            .map { it.jsonObject }.single { "domain_suffix" in it }
+        assertEquals(
+            listOf("example.com"),
+            rule.array("domain_suffix").map { it.jsonPrimitive.content },
+        )
+    }
+
+    /** Typed by hand, so it arrives however a URL bar shows it. */
+    @Test
+    fun `domains are normalised down to the suffix sing-box matches`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                warpDomains = listOf(
+                    "https://Example.com/path",
+                    "*.news.site",
+                    " bad ",
+                    "reddit.com",
+                    "REDDIT.com",
+                ),
+            ),
+        )
+
+        val rule = config.getValue("route").jsonObject.array("rules")
+            .map { it.jsonObject }.single { "domain_suffix" in it }
+        val suffixes = rule.array("domain_suffix").map { it.jsonPrimitive.content }
+        assertTrue("example.com" in suffixes, suffixes.toString())
+        assertTrue("news.site" in suffixes, suffixes.toString())
+        // No dot, so it was never a domain; and case aliases collapse to one.
+        assertFalse("bad" in suffixes)
+        assertEquals(1, suffixes.count { it == "reddit.com" })
+    }
+
+    /** Selective mode with nothing listed routes nothing, so there is no tail
+     *  to declare — an endpoint no rule ever reaches is just dead config. */
+    @Test
+    fun `blocked-sites mode with an empty list renders no tail at all`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(entry()),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                warpDomains = emptyList(),
+            ),
+        )
+
+        assertTrue(config.array("endpoints").taggedWith("warp-exit") == null)
+        val route = config.getValue("route").jsonObject
+        assertEquals("vless-proxy", route.getValue("final").jsonPrimitive.content)
+        assertTrue(route.array("rules").map { it.jsonObject }.none { "domain_suffix" in it })
+    }
+
+    @Test
+    fun `mode off renders no tail even with credentials in hand`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(entry()),
+                warp = warp(),
+                warpMode = WarpMode.Off,
+            ),
+        )
+
+        assertTrue(config.array("endpoints").taggedWith("warp-exit") == null)
+        assertEquals("vless-proxy", config.getValue("route").jsonObject.getValue("final").jsonPrimitive.content)
+    }
+
+    /**
+     * Registration can fail on a network that blocks Cloudflare, and the chain
+     * still has to come up — one hop shorter, not not at all.
+     */
+    @Test
+    fun `a missing registration degrades to the relay exit instead of breaking`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(entry()),
+                warp = null,
+                warpMode = WarpMode.AllTraffic,
+            ),
+        )
+
+        assertEquals("vless-proxy", config.getValue("route").jsonObject.getValue("final").jsonPrimitive.content)
+        assertTrue(config.array("endpoints").taggedWith("warp-exit") == null)
+    }
+
+    /** The tail is another 1280 WireGuard hop, so it caps the TUN the same way
+     *  an entry hop does — even when there is no entry hop in front. */
+    @Test
+    fun `the tail caps the tun mtu on a single-hop chain`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.AllTraffic,
+            ),
+        )
+
+        assertEquals(1280, config.array("inbounds").single().jsonObject.getValue("mtu").jsonPrimitive.int)
+    }
+
+    @Test
+    fun `the proxy config dials the tail through its own relay outbound`() {
+        val config = parse(
+            SingBoxConfigFactory.mixedProxyConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.AllTraffic,
+            ),
+        )
+
+        val tail = config.array("endpoints").taggedWith("warp-exit")
+        assertEquals("proxy", tail?.getValue("detour")?.jsonPrimitive?.content)
+        assertEquals("warp-exit", config.getValue("route").jsonObject.getValue("final").jsonPrimitive.content)
     }
 
     @Test

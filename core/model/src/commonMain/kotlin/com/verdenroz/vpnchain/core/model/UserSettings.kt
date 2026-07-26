@@ -37,6 +37,20 @@ data class UserSettings(
      */
     val entryHopEnabled: Boolean = true,
     /**
+     * How much traffic takes the Cloudflare WARP tail after the relay. On by
+     * default for everything: the relay's datacenter address is refused
+     * outright by some sites, and the extra hop measured no slower. Cost is
+     * that Cloudflare, not a box you own, is the last hop — drop to
+     * [WarpMode.BlockedSites] or [WarpMode.Off] to take that back.
+     */
+    val warpMode: WarpMode = WarpMode.AllTraffic,
+    /**
+     * The domains [WarpMode.BlockedSites] routes down the tail — the whole
+     * list, seeded from [DEFAULT_WARP_DOMAINS] and editable in full. Suffix
+     * matches, so `example.com` covers its subdomains too.
+     */
+    val warpDomains: List<String> = DEFAULT_WARP_DOMAINS,
+    /**
      * Bring the chain up on app start when a profile exists. Off by default:
      * connecting without being asked is a surprise, not a convenience.
      */

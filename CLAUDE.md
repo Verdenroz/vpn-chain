@@ -57,10 +57,22 @@ classes) → `core/config` (`SingBoxConfigFactory`: profile → sing-box JSON,
 `renderPlatformTunnelConfig` branches per platform) → `core/datastore`
 (profile/settings persistence) → `core/tunnel` (`TunnelController`: Android =
 `VpnChainService` wrapping libbox's `CommandServer`, desktop = spawns the
-`sing-box` binary) → `core/data` (repositories) → `core/domain` (use cases) →
+`sing-box` binary) → `core/warp` (registers the Cloudflare WARP tail exit) →
+`core/data` (repositories) → `core/domain` (use cases) →
 `feature/{chain,settings,logs}` (Compose UI + ViewModels) → `app-common`
 (themed shell, bottom-nav `NavHost`, Koin graph aggregation) →
 `androidApp`/`desktopApp` (thin platform entry points).
+
+**WARP tail exit** (`core/warp` + the `warp-exit` endpoint in
+`SingBoxConfigFactory`): an optional Cloudflare hop *after* the relay, on by
+default for all traffic, because the VPS's datacenter address is refused
+outright by some sites. Two invariants worth keeping: the endpoint always
+carries `detour` to the relay outbound (dialled through the chain, never
+around it — on desktop a bare-link handshake is rejected by the kill switch),
+and it is never added to the kill switch's exemption list. Read
+**[docs/warp-exit.md](docs/warp-exit.md)** before changing it. Note that
+`RelayConfig` now distinguishes endpoints *by tag*: both hops are WireGuard,
+so "a wireguard endpoint exists" no longer means "an entry hop exists".
 
 **Convention plugins** (`build-logic/convention/`) centralize per-module
 Gradle config instead of repeating it: `vpnchain.kmp.library` (KMP + Android
