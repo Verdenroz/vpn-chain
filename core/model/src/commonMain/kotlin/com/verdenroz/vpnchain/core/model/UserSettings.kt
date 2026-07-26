@@ -30,6 +30,13 @@ data class UserSettings(
      */
     val dnsFilter: DnsFilter = DnsFilter.AdsAndTrackers,
     /**
+     * Dial the relay through the profile's Proton WireGuard hop when it has
+     * one. Off means single-hop even with entry keys present — steadier when
+     * the Proton peer is flaky, at the cost of the VPS seeing this device's
+     * IP. Ignored for profiles with no entry configured.
+     */
+    val entryHopEnabled: Boolean = true,
+    /**
      * Bring the chain up on app start when a profile exists. Off by default:
      * connecting without being asked is a surprise, not a convenience.
      */
@@ -51,3 +58,11 @@ data class UserSettings(
      */
     val closeToTray: Boolean = true,
 )
+
+/**
+ * The profile as the chain should actually dial it under these settings.
+ * Every consumer of the topology — config rendering, the route readout —
+ * must go through this, or a disabled entry hop would still be drawn.
+ */
+fun ChainProfile.effectiveFor(settings: UserSettings): ChainProfile =
+    if (settings.entryHopEnabled) this else copy(protonEntry = null)

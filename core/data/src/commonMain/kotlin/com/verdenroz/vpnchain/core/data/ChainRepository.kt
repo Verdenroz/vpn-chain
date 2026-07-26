@@ -5,6 +5,7 @@ import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.logging.Logger
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.effectiveFor
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
@@ -78,7 +79,7 @@ internal class DefaultChainRepository(
         val settings = settingsRepository.settings.first()
 
         return runCatching {
-            val configJson = renderPlatformTunnelConfig(profile, settings)
+            val configJson = renderPlatformTunnelConfig(profile.effectiveFor(settings), settings)
             controller.start(configJson, settings.killSwitchEnabled)
         }.onFailure { logger.e(TAG, "connect failed", it) }
     }

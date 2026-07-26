@@ -83,6 +83,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_pasted
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_kill_switch_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_profile_yet
@@ -145,6 +147,7 @@ fun SettingsRoute(
         onImportDefault = viewModel::importDefaultSecretsEnv,
         onScanQr = scanQr,
         onToggleSystemWide = viewModel::setSystemWideTun,
+        onToggleEntryHop = viewModel::setEntryHopEnabled,
         onToggleKillSwitch = viewModel::setKillSwitchEnabled,
         onSetDnsFilter = viewModel::setDnsFilter,
         onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
@@ -169,6 +172,7 @@ fun SettingsScreen(
     onImportDefault: () -> Unit,
     onScanQr: () -> Unit,
     onToggleSystemWide: (Boolean) -> Unit,
+    onToggleEntryHop: (Boolean) -> Unit,
     onToggleKillSwitch: (Boolean) -> Unit,
     onSetDnsFilter: (DnsFilter) -> Unit,
     onToggleAutoConnect: (Boolean) -> Unit,
@@ -337,16 +341,30 @@ fun SettingsScreen(
                 }
             }
 
-            // Android has no proxy-only mode — the tunnel is always TUN — so this
-            // toggle would be a no-op there.
-            if (currentPlatform == Platform.Desktop) {
+            val profileHasEntry = uiState.profile?.protonEntry != null
+            if (currentPlatform == Platform.Desktop || profileHasEntry) {
                 SectionCard(title = stringResource(Res.string.settings_routing_title)) {
-                    SettingRow(
-                        title = stringResource(Res.string.settings_route_entire_system_title),
-                        detail = stringResource(Res.string.settings_route_entire_system_detail),
-                        checked = uiState.settings.systemWideTun,
-                        onCheckedChange = onToggleSystemWide,
-                    )
+                    // Android has no proxy-only mode — the tunnel is always TUN —
+                    // so this toggle would be a no-op there.
+                    if (currentPlatform == Platform.Desktop) {
+                        SettingRow(
+                            title = stringResource(Res.string.settings_route_entire_system_title),
+                            detail = stringResource(Res.string.settings_route_entire_system_detail),
+                            checked = uiState.settings.systemWideTun,
+                            onCheckedChange = onToggleSystemWide,
+                        )
+                    }
+                    // Only for profiles that have an entry to disable; a profile
+                    // without one is single-hop with or without this.
+                    if (profileHasEntry) {
+                        if (currentPlatform == Platform.Desktop) Spacer(Modifier.height(16.dp))
+                        SettingRow(
+                            title = stringResource(Res.string.settings_entry_hop_title),
+                            detail = stringResource(Res.string.settings_entry_hop_detail),
+                            checked = uiState.settings.entryHopEnabled,
+                            onCheckedChange = onToggleEntryHop,
+                        )
+                    }
                 }
             }
 
