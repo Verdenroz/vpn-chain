@@ -28,7 +28,7 @@ class RelayConfigClashApiTest {
     }
 
     /**
-     * Regression guard, in the shape of the NetShield DNS bug: the kill switch
+     * Regression guard, in the shape of the entry DNS bug: the kill switch
      * picks exempt IPs out of this same JSON by regex, and stranding the machine
      * behind a firewall that blocks the actual relay is the worst outcome here.
      */

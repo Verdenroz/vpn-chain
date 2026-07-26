@@ -15,15 +15,15 @@ XRAY_CONFIG="/usr/local/etc/xray/config.json"
 SNI="${SNI:-www.samsung.com}"          # <-- the domain you impersonate
 DEST="${DEST:-${SNI}:443}"
 
-# ProtonVPN WireGuard params. Leave PROTON_PRIVATE_KEY empty to skip the
+# ProtonVPN WireGuard params. Leave EXIT_WG_PRIVKEY empty to skip the
 # Proton chain (VPS becomes the exit IP directly). Get these from Proton's
 # WireGuard config generator (account.protonvpn.com -> Downloads -> WireGuard).
-PROTON_PRIVATE_KEY="${PROTON_PRIVATE_KEY:-}"     # [Interface] PrivateKey
-PROTON_ADDRESS="${PROTON_ADDRESS:-10.2.0.2/32}"  # [Interface] Address
-PROTON_PEER_PUBKEY="${PROTON_PEER_PUBKEY:-}"     # [Peer] PublicKey
-PROTON_ENDPOINT="${PROTON_ENDPOINT:-}"           # [Peer] Endpoint  host:port
-PROTON_MTU="${PROTON_MTU:-1280}"
-PROTON_DNS="${PROTON_DNS:-10.2.0.1}"     # Proton internal resolver (applies NetShield)
+EXIT_WG_PRIVKEY="${EXIT_WG_PRIVKEY:-}"     # [Interface] PrivateKey
+EXIT_WG_ADDRESS="${EXIT_WG_ADDRESS:-10.2.0.2/32}"  # [Interface] Address
+EXIT_WG_PEER_PUBKEY="${EXIT_WG_PEER_PUBKEY:-}"     # [Peer] PublicKey
+EXIT_WG_ENDPOINT="${EXIT_WG_ENDPOINT:-}"           # [Peer] Endpoint  host:port
+EXIT_WG_MTU="${EXIT_WG_MTU:-1280}"
+EXIT_WG_DNS="${EXIT_WG_DNS:-10.2.0.1}"     # Proton internal resolver (applies NetShield)
 # --------------------------------------------------------------------------
 
 log() { printf '\033[1;36m[deploy]\033[0m %s\n' "$*"; }
@@ -55,21 +55,21 @@ UUID="$("$XRAY_BIN" uuid)"
 SHORT_ID="$(openssl rand -hex 8)"
 
 # ---- build outbound section ----------------------------------------------
-if [ -n "$PROTON_PRIVATE_KEY" ]; then
-  [ -n "$PROTON_PEER_PUBKEY" ] && [ -n "$PROTON_ENDPOINT" ] \
-    || die "Proton chain requested but PROTON_PEER_PUBKEY / PROTON_ENDPOINT missing"
+if [ -n "$EXIT_WG_PRIVKEY" ]; then
+  [ -n "$EXIT_WG_PEER_PUBKEY" ] && [ -n "$EXIT_WG_ENDPOINT" ] \
+    || die "Proton chain requested but EXIT_WG_PEER_PUBKEY / EXIT_WG_ENDPOINT missing"
   log "Configuring ProtonVPN WireGuard outbound (chained exit)."
-  PROTON_OUT=$(jq -n \
-    --arg sk "$PROTON_PRIVATE_KEY" --arg addr "$PROTON_ADDRESS" \
-    --arg pk "$PROTON_PEER_PUBKEY" --arg ep "$PROTON_ENDPOINT" \
-    --argjson mtu "$PROTON_MTU" '
-    { tag:"proton", protocol:"wireguard",
+  EXIT_WG_OUT=$(jq -n \
+    --arg sk "$EXIT_WG_PRIVKEY" --arg addr "$EXIT_WG_ADDRESS" \
+    --arg pk "$EXIT_WG_PEER_PUBKEY" --arg ep "$EXIT_WG_ENDPOINT" \
+    --argjson mtu "$EXIT_WG_MTU" '
+    { tag:"exit-wg", protocol:"wireguard",
       settings:{ secretKey:$sk, address:[$addr], mtu:$mtu,
         peers:[ { publicKey:$pk, endpoint:$ep, allowedIPs:["0.0.0.0/0","::/0"] } ] } }')
-  FINAL_OUT="proton"
+  FINAL_OUT="exit-wg"
 else
   log "No Proton key given -> VPS itself is the exit IP."
-  PROTON_OUT='null'
+  EXIT_WG_OUT='null'
   FINAL_OUT="direct"
 fi
 
@@ -78,7 +78,7 @@ mkdir -p "$(dirname "$XRAY_CONFIG")" /var/log/xray
 jq -n \
   --arg uuid "$UUID" --arg dest "$DEST" --arg sni "$SNI" \
   --arg priv "$PRIV" --arg sid "$SHORT_ID" \
-  --arg final "$FINAL_OUT" --arg pdns "$PROTON_DNS" --argjson proton "$PROTON_OUT" '
+  --arg final "$FINAL_OUT" --arg pdns "$EXIT_WG_DNS" --argjson proton "$EXIT_WG_OUT" '
 {
   log: { access:"none", error:"/var/log/xray/error.log", loglevel:"warning", maskAddress:"half" },
   inbounds: [ {
@@ -93,7 +93,7 @@ jq -n \
   # Xray has no routing.final field (that is sing-box); its default outbound is
   # the FIRST in the array, so force the exit with an explicit catch-all rule.
   routing:{ domainStrategy:"AsIs",
-    rules: ( (if $proton==null then [] else [ { type:"field", ip:[$pdns], outboundTag:"proton" } ] end)
+    rules: ( (if $proton==null then [] else [ { type:"field", ip:[$pdns], outboundTag:"exit-wg" } ] end)
              + [ { type:"field", ip:["geoip:private"], outboundTag:"block" } ]
              + [ { type:"field", network:"tcp,udp", outboundTag:$final } ] ) }
 }' > "$XRAY_CONFIG"

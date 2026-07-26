@@ -1,16 +1,16 @@
 # DNS filtering
 
-ProtonVPN's NetShield filters at Proton's own resolver, so it only exists
-while Proton is the entry hop. A single-hop chain resolves through the relay
+A commercial VPN's DNS filter runs at that provider's own resolver, so it
+only exists while they are the entry hop. A single-hop chain resolves through the relay
 instead — which means the filtering has to happen on our side of the wire.
 
 **Settings → dns → Block unwanted domains.** On by default (at the full
 level), on both platforms, in every mode that renders a TUN chain. The
-selector mirrors NetShield's two levels:
+selector offers two levels:
 
-- **threats** — malware, phishing, and scam domains (NetShield level 1);
+- **threats** — malware, phishing, and scam domains;
 - **threats + ads** — advertising, tracking, and telemetry domains on top
-  (NetShield level 2, the default).
+  (the default).
 
 ## How it works
 
@@ -64,9 +64,9 @@ an address that goes nowhere.
 
 ## What it does and doesn't cover
 
-DNS filtering blocks whole hostnames, so it catches what NetShield catches:
+DNS filtering blocks whole hostnames, so it catches what any resolver-side filter catches:
 third-party ad servers, trackers, telemetry endpoints, and known-malicious
-domains. Like NetShield, it cannot remove first-party ads served from the
+domains. Like any DNS-level filter, it cannot remove first-party ads served from the
 same hostname as the content (YouTube ads, Facebook's feed) — that takes a
 content-inspecting browser extension, which no DNS filter replaces. If you
 have an extra list you trust, it is one entry in `blocklistsFor` in

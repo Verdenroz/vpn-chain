@@ -263,15 +263,15 @@ class DesktopTunnelController(
      * dialed. It is for any TUN chain we dial ourselves — including a
      * single-hop one, which has no entry hop to lean on.
      *
-     * The exception is the real ProtonVPN app carrying our entry hop: its own
+     * The exception is an external VPN app carrying our entry hop: its own
      * kill switch already covers us, and our table would blackhole its
      * WireGuard endpoint, which the config never lists as an exemption.
      */
-    private fun firewallIsOurs(): Boolean = tunHasEntry || !protonInterfaceUp()
+    private fun firewallIsOurs(): Boolean = tunHasEntry || !entryAppInterfaceUp()
 
     /**
      * Installs an nftables OUTPUT-chain table that drops all outbound traffic
-     * except loopback and the VPS/Proton-endpoint exemptions, so sing-box
+     * except loopback and the VPS/entry-endpoint exemptions, so sing-box
      * crashing mid-session blocks traffic instead of leaking it. Doesn't touch
      * the routing table at all, so it can't confuse sing-box's own
      * `auto_detect_interface`. Best-effort: if the helper isn't
@@ -542,24 +542,24 @@ class DesktopTunnelController(
     /** [exitIp] is set when readiness already measured it; an adopted relay has
      *  not been probed yet, so it is looked up below instead. */
     private fun markConnected(adopted: Boolean, exitIp: String? = null) {
-        val realProtonAppUp = protonInterfaceUp()
+        val externalAppUp = entryAppInterfaceUp()
         _status.value = ChainStatus(
             state = TunnelState.Connected,
             exitIp = exitIp,
             // An entry hop is in play whether sing-box dialed the WireGuard peer
-            // itself, or the real Proton app happens to be the OS default route.
-            entryHopActive = tunHasEntry || realProtonAppUp,
+            // itself, or an external VPN app happens to be the OS default route.
+            entryHopActive = tunHasEntry || externalAppUp,
             // Two independent mechanisms: our own nftables table for any TUN
-            // chain we dial, and the real Proton app's kill switch when that
+            // chain we dial, and the external VPN app's kill switch when that
             // app is the entry hop. Reported by what actually holds, not by
             // which mode was configured.
             killSwitch = when {
                 killSwitchEngaged -> KillSwitchState.Active
-                realProtonAppUp -> KillSwitchState.Active
+                externalAppUp -> KillSwitchState.Active
                 !killSwitchEnabled -> KillSwitchState.Disabled
                 // Proxy mode captures nothing system-wide, so there is nothing
                 // for a firewall of ours to fail closed around.
-                !tunMode -> KillSwitchState.ProtonAppRequired
+                !tunMode -> KillSwitchState.ExternalAppRequired
                 // Enabled and attempted, but the helper never came back happy.
                 else -> KillSwitchState.HelperUnavailable
             },
@@ -753,8 +753,8 @@ class DesktopTunnelController(
         conn.inputStream.bufferedReader().use { it.readText().trim() }.ifBlank { null }
     }.getOrNull()
 
-    private fun protonInterfaceUp(): Boolean =
-        runCatching { NetworkInterface.getByName(PROTON_INTERFACE)?.isUp == true }.getOrDefault(false)
+    private fun entryAppInterfaceUp(): Boolean =
+        runCatching { NetworkInterface.getByName(ENTRY_APP_INTERFACE)?.isUp == true }.getOrDefault(false)
 
     /** True once sing-box has created its TUN (identified by the fixed tun address). */
     private fun tunInterfaceUp(): Boolean = runCatching {
@@ -811,7 +811,10 @@ class DesktopTunnelController(
 
     private companion object {
         const val DEFAULT_PROXY_PORT = 1080
-        const val PROTON_INTERFACE = "proton0"
+
+        // The literal interface the ProtonVPN desktop app creates — the only
+        // external VPN client detected, because it has a fixed name.
+        const val ENTRY_APP_INTERFACE = "proton0"
         const val TUN_ADDRESS = "10.19.19.1"
         const val POLL_INTERVAL_MS = 3_000L
         const val STATS_POLL_MS = 1_000L

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# import-proton-entry.sh — copy a Proton WireGuard .conf into the vpn-chain
-# secrets file as the PROTON_ENTRY_* entry-hop keys, so the GUI apps can
+# import-entry-conf.sh — copy a Proton WireGuard .conf into the vpn-chain
+# secrets file as the ENTRY_* entry-hop keys, so the GUI apps can
 # "Import secrets.env". Values move file-to-file: the private key is never
 # printed, echoed, or sent anywhere — only a masked summary is shown.
 #
 # Usage:
-#   cli/import-proton-entry.sh [path/to/wireguard.conf]
+#   cli/import-entry-conf.sh [path/to/wireguard.conf]
 #
 # With no argument it uses the newest *.conf in ~/Downloads.
 # Override the target with VPN_CHAIN_SECRETS=/path/to/secrets.env.
@@ -65,18 +65,18 @@ umask 077
 tmp="$(mktemp "${SECRETS_FILE}.XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 
-# Carry over everything except any prior PROTON_ENTRY_* keys.
+# Carry over everything except any prior ENTRY_* keys.
 if [ -f "$SECRETS_FILE" ]; then
-  grep -vE '^(PROTON_ENTRY_PRIVKEY|PROTON_ENTRY_ADDRESS|PROTON_ENTRY_PEER_PUBKEY|PROTON_ENTRY_HOST|PROTON_ENTRY_PORT|PROTON_ENTRY_DNS)=' \
+  grep -vE '^(ENTRY_PRIVKEY|ENTRY_ADDRESS|ENTRY_PEER_PUBKEY|ENTRY_HOST|ENTRY_PORT|ENTRY_DNS)=' \
     "$SECRETS_FILE" > "$tmp" || true
 fi
 {
-  printf 'PROTON_ENTRY_PRIVKEY=%s\n'    "$PRIVKEY"
-  printf 'PROTON_ENTRY_ADDRESS=%s\n'    "$ADDRESS"
-  printf 'PROTON_ENTRY_PEER_PUBKEY=%s\n' "$PEER_PUBKEY"
-  printf 'PROTON_ENTRY_HOST=%s\n'       "$HOST"
-  printf 'PROTON_ENTRY_PORT=%s\n'       "$PORT"
-  if [ -n "$DNS" ]; then printf 'PROTON_ENTRY_DNS=%s\n' "$DNS"; fi
+  printf 'ENTRY_PRIVKEY=%s\n'    "$PRIVKEY"
+  printf 'ENTRY_ADDRESS=%s\n'    "$ADDRESS"
+  printf 'ENTRY_PEER_PUBKEY=%s\n' "$PEER_PUBKEY"
+  printf 'ENTRY_HOST=%s\n'       "$HOST"
+  printf 'ENTRY_PORT=%s\n'       "$PORT"
+  if [ -n "$DNS" ]; then printf 'ENTRY_DNS=%s\n' "$DNS"; fi
 } >> "$tmp"
 
 mv "$tmp" "$SECRETS_FILE"
@@ -85,14 +85,14 @@ chmod 600 "$SECRETS_FILE"
 
 # --- masked summary (never prints the private key) ---------------------------
 log "Wrote entry-hop keys to ${c_grn}$SECRETS_FILE${c_off} (chmod 600)"
-log "  PROTON_ENTRY_PRIVKEY     = ${c_grn}[hidden]${c_off}"
-log "  PROTON_ENTRY_ADDRESS     = $ADDRESS"
-log "  PROTON_ENTRY_PEER_PUBKEY = $PEER_PUBKEY"
-log "  PROTON_ENTRY_HOST        = $HOST"
-log "  PROTON_ENTRY_PORT        = $PORT"
+log "  ENTRY_PRIVKEY     = ${c_grn}[hidden]${c_off}"
+log "  ENTRY_ADDRESS     = $ADDRESS"
+log "  ENTRY_PEER_PUBKEY = $PEER_PUBKEY"
+log "  ENTRY_HOST        = $HOST"
+log "  ENTRY_PORT        = $PORT"
 if [ -n "$DNS" ]; then
-  log "  PROTON_ENTRY_DNS         = $DNS (NetShield preserved)"
+  log "  ENTRY_DNS         = $DNS (NetShield preserved)"
 else
-  log "  PROTON_ENTRY_DNS         = ${c_yel}(none — this .conf has no DNS line, NetShield won't apply)${c_off}"
+  log "  ENTRY_DNS         = ${c_yel}(none — this .conf has no DNS line, NetShield won't apply)${c_off}"
 fi
 log "Now: in the app, Settings → Import ~/.config/vpn-chain/secrets.env"

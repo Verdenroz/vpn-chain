@@ -18,13 +18,13 @@ enum class KillSwitchState {
     /** Enabled, but the privileged helper it needs isn't installed or usable. */
     HelperUnavailable,
 
-    /** Desktop relay-only mode: only the real ProtonVPN app can fail-close here. */
-    ProtonAppRequired,
+    /** Desktop relay-only mode: only an external VPN app can fail-close here. */
+    ExternalAppRequired,
 }
 
 data class ChainStatus(
     val state: TunnelState = TunnelState.Disconnected,
-    /** True for either entry-hop form: this app's WireGuard peer, or the external ProtonVPN app. */
+    /** True for either entry-hop form: this app's WireGuard peer, or an external VPN app. */
     val entryHopActive: Boolean = false,
     val killSwitch: KillSwitchState = KillSwitchState.Disabled,
     val exitIp: String? = null,

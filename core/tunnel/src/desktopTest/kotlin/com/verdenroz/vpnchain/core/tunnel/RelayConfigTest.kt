@@ -41,9 +41,9 @@ private val TUN_WITH_ENTRY = """
     }
 """.trimIndent()
 
-/** A NetShield DNS server also has a bare "server": "<ip>" field, and — being
+/** An entry-side DNS server also has a bare "server": "<ip>" field, and — being
  *  in the "dns" block — renders before "outbounds" in the real config. */
-private val TUN_WITH_NETSHIELD_DNS = """
+private val TUN_WITH_ENTRY_DNS = """
     {
         "dns": {
             "servers": [
@@ -151,12 +151,12 @@ class RelayConfigTest {
         assertTrue(RelayConfig.exemptIps("""{"outbounds":[]}""").isEmpty())
     }
 
-    /** Regression: a NetShield DNS server's bare "server" field rendering
+    /** Regression: an entry DNS server's bare "server" field rendering
      *  ahead of the real outbound must not steal the VPS's exemption slot —
      *  that strands the machine with the actual relay firewalled off. */
     @Test
-    fun `exempts the vps, not the netshield dns server, when both are present`() {
-        val exempt = RelayConfig.exemptIps(TUN_WITH_NETSHIELD_DNS)
+    fun `exempts the vps, not the entry dns server, when both are present`() {
+        val exempt = RelayConfig.exemptIps(TUN_WITH_ENTRY_DNS)
 
         assertEquals(listOf("89.127.235.38", "146.70.198.34"), exempt)
         assertFalse("10.2.0.1" in exempt)

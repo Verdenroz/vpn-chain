@@ -71,10 +71,10 @@ class SecretsEnvParserTest {
         val complete = SecretsEnvParser.parse(
             """
             $RELAY_ONLY
-            PROTON_ENTRY_PRIVKEY=priv
-            PROTON_ENTRY_ADDRESS=10.2.0.2/32
-            PROTON_ENTRY_PEER_PUBKEY=peer
-            PROTON_ENTRY_HOST=146.70.198.34
+            ENTRY_PRIVKEY=priv
+            ENTRY_ADDRESS=10.2.0.2/32
+            ENTRY_PEER_PUBKEY=peer
+            ENTRY_HOST=146.70.198.34
             """.trimIndent(),
         ).getOrThrow()
 
@@ -84,15 +84,15 @@ class SecretsEnvParserTest {
     }
 
     @Test
-    fun `carries the netshield dns line when present`() {
+    fun `carries the entry dns line when present`() {
         val withDns = SecretsEnvParser.parse(
             """
             $RELAY_ONLY
-            PROTON_ENTRY_PRIVKEY=priv
-            PROTON_ENTRY_ADDRESS=10.2.0.2/32
-            PROTON_ENTRY_PEER_PUBKEY=peer
-            PROTON_ENTRY_HOST=146.70.198.34
-            PROTON_ENTRY_DNS=10.2.0.1
+            ENTRY_PRIVKEY=priv
+            ENTRY_ADDRESS=10.2.0.2/32
+            ENTRY_PEER_PUBKEY=peer
+            ENTRY_HOST=146.70.198.34
+            ENTRY_DNS=10.2.0.1
             """.trimIndent(),
         ).getOrThrow()
 
@@ -104,10 +104,10 @@ class SecretsEnvParserTest {
         val complete = SecretsEnvParser.parse(
             """
             $RELAY_ONLY
-            PROTON_ENTRY_PRIVKEY=priv
-            PROTON_ENTRY_ADDRESS=10.2.0.2/32
-            PROTON_ENTRY_PEER_PUBKEY=peer
-            PROTON_ENTRY_HOST=146.70.198.34
+            ENTRY_PRIVKEY=priv
+            ENTRY_ADDRESS=10.2.0.2/32
+            ENTRY_PEER_PUBKEY=peer
+            ENTRY_HOST=146.70.198.34
             """.trimIndent(),
         ).getOrThrow()
 
@@ -120,8 +120,8 @@ class SecretsEnvParserTest {
         val partial = SecretsEnvParser.parse(
             """
             $RELAY_ONLY
-            PROTON_ENTRY_PRIVKEY=priv
-            PROTON_ENTRY_ADDRESS=10.2.0.2/32
+            ENTRY_PRIVKEY=priv
+            ENTRY_ADDRESS=10.2.0.2/32
             """.trimIndent(),
         ).getOrThrow()
 
@@ -135,18 +135,18 @@ class SecretsEnvParserTest {
         assertEquals(ChainProfile.DEFAULT_SERVER_PORT, profile.serverPort)
     }
 
-    /** format() feeds the QR pairing payload, so a NetShield DNS entry must
+    /** format() feeds the QR pairing payload, so an entry DNS value must
      *  survive the round trip onto the paired device too. */
     @Test
-    fun `format round-trips the netshield dns line through parse`() {
+    fun `format round-trips the entry dns line through parse`() {
         val original = SecretsEnvParser.parse(
             """
             $RELAY_ONLY
-            PROTON_ENTRY_PRIVKEY=priv
-            PROTON_ENTRY_ADDRESS=10.2.0.2/32
-            PROTON_ENTRY_PEER_PUBKEY=peer
-            PROTON_ENTRY_HOST=146.70.198.34
-            PROTON_ENTRY_DNS=10.2.0.1
+            ENTRY_PRIVKEY=priv
+            ENTRY_ADDRESS=10.2.0.2/32
+            ENTRY_PEER_PUBKEY=peer
+            ENTRY_HOST=146.70.198.34
+            ENTRY_DNS=10.2.0.1
             """.trimIndent(),
         ).getOrThrow()
 

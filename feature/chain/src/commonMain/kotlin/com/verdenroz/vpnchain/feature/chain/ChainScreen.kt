@@ -72,7 +72,7 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_hop_origin
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_hop_unresolved
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_helper
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_proton
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_external_app
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_none
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_protected
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_open_settings
@@ -472,7 +472,7 @@ private fun StatusStrip(status: ChainStatus, rttMs: Int?) {
                 stringResource(
                     when (status.killSwitch) {
                         KillSwitchState.HelperUnavailable -> Res.string.chain_kill_switch_hint_helper
-                        KillSwitchState.ProtonAppRequired -> Res.string.chain_kill_switch_hint_proton
+                        KillSwitchState.ExternalAppRequired -> Res.string.chain_kill_switch_hint_external_app
                         else -> Res.string.chain_kill_switch_hint
                     },
                 ),

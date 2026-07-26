@@ -2,7 +2,7 @@
 # vpn-chain — bring up the layered VPN chain with one command.
 #
 #   you (real IP hidden)
-#     -> local ProtonVPN            (entry hop, hides you from the VPS)
+#     -> local VPN app (ProtonVPN)  (entry hop, hides you from the VPS)
 #        -> your VLESS+REALITY VPS  (disguised as HTTPS to your SNI; exits
 #                                     directly from the VPS's own IP)
 #           -> internet
@@ -15,8 +15,8 @@
 #
 # Usage:
 #   vpn-chain up [protonvpn connect args...]   e.g. `vpn-chain up --country US`
-#   vpn-chain down [--disconnect-proton]       stop relay (Proton stays up by
-#                                              default; flag also drops Proton)
+#   vpn-chain down [--disconnect-entry]       stop relay (entry app stays up by
+#                                              default; flag also drops it)
 #   vpn-chain status                           show state, exit IP, entry path
 #   vpn-chain render                           re-render the config and exit
 set -euo pipefail
@@ -35,7 +35,7 @@ STATEFILE="$RUNDIR/relay.state"                       # written by the GUI, clea
 LOGFILE="$RUNDIR/relay.log"
 KILLSWITCH_BIN="${VPN_CHAIN_KILLSWITCH_BIN:-vpn-chain-killswitch}"
 PROXY="127.0.0.1:1080"
-ENTRY_IF="proton0"                                   # local Proton interface
+ENTRY_IF="proton0"                                   # interface the entry VPN app creates
 
 c_cyan=$'\033[1;36m'; c_yel=$'\033[1;33m'; c_red=$'\033[1;31m'; c_grn=$'\033[1;32m'; c_off=$'\033[0m'
 log()  { printf '%s[vpn-chain]%s %s\n' "$c_cyan" "$c_off" "$*"; }
@@ -58,11 +58,11 @@ render() {
   "$SINGBOX_BIN" check -c "$RENDERED" >/dev/null || die "rendered config invalid"
 }
 
-proton_up() { protonvpn status 2>/dev/null | grep -q '^Status: Connected'; }
+entry_app_up() { protonvpn status 2>/dev/null | grep -q '^Status: Connected'; }
 relay_up()  { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
 
 # The point of the entry hop: sing-box's connection to the VPS must leave via
-# proton0 (src 10.2.0.x), never the real LAN interface. Returns the src IP.
+# the entry app's interface (src 10.2.0.x), never the real LAN interface.
 entry_src() {
   local ip="${VPS_IP:-}"; [ -n "$ip" ] || return 0
   curl -s --max-time 8 --socks5-hostname "$PROXY" https://api.ipify.org -o /dev/null 2>/dev/null &
@@ -84,13 +84,13 @@ cmd_up() {
 
   render                                                   # secrets -> rendered config
 
-  if proton_up; then
+  if entry_app_up; then
     log "Local ProtonVPN already connected (entry hop up)."
   else
     log "Connecting local ProtonVPN (entry hop)..."
     protonvpn connect "$@" || die "protonvpn connect failed"
-    for _ in $(seq 1 20); do proton_up && break; sleep 1; done
-    proton_up || die "ProtonVPN never reached Connected state"
+    for _ in $(seq 1 20); do entry_app_up && break; sleep 1; done
+    entry_app_up || die "ProtonVPN never reached Connected state"
   fi
   ip link show "$ENTRY_IF" >/dev/null 2>&1 || die "$ENTRY_IF is not up — Proton not routing?"
 
@@ -108,11 +108,11 @@ cmd_up() {
 }
 
 cmd_down() {
-  local keep_proton=1                                # Proton stays up by default
+  local keep_entry_app=1                                # Proton stays up by default
   for arg in "$@"; do
     case "$arg" in
-      --keep-proton)              keep_proton=1 ;;    # accepted for muscle memory
-      --disconnect-proton|--full) keep_proton=0 ;;
+      --keep-entry)              keep_entry_app=1 ;;    # accepted for muscle memory
+      --disconnect-entry|--full) keep_entry_app=0 ;;
       *) die "unknown option for down: $arg" ;;
     esac
   done
@@ -132,9 +132,9 @@ cmd_down() {
     "$KILLSWITCH_BIN" down >/dev/null 2>&1 || warn "kill switch teardown returned non-zero"
   fi
 
-  if [ "$keep_proton" -eq 1 ]; then
-    log "Leaving local ProtonVPN connected (use --disconnect-proton to drop it)."
-  elif proton_up; then
+  if [ "$keep_entry_app" -eq 1 ]; then
+    log "Leaving local ProtonVPN connected (use --disconnect-entry to drop it)."
+  elif entry_app_up; then
     log "Disconnecting local ProtonVPN..."
     protonvpn disconnect >/dev/null 2>&1 || warn "protonvpn disconnect returned non-zero"
   fi
@@ -163,7 +163,7 @@ killswitch_status() {
 cmd_status() {
   load_secrets || true
   killswitch_status
-  if proton_up; then
+  if entry_app_up; then
     local srv; srv="$(protonvpn status 2>/dev/null | sed -n 's/^Server: //p')"
     printf '  entry hop  : %sProtonVPN connected%s (%s)\n' "$c_grn" "$c_off" "${srv:-unknown}"
   else
@@ -181,7 +181,7 @@ cmd_status() {
   case "$src" in
     10.2.0.*) printf '  entry path : %svia %s (%s) — real IP hidden from VPS%s\n' "$c_grn" "$ENTRY_IF" "$src" "$c_off" ;;
     "")       printf '  entry path : %scould not sample (no active connection)%s\n' "$c_yel" "$c_off" ;;
-    *)        printf '  entry path : %sLEAK — egressing via %s, NOT Proton%s\n' "$c_red" "$src" "$c_off" ;;
+    *)        printf '  entry path : %sLEAK — egressing via %s, NOT the entry hop%s\n' "$c_red" "$src" "$c_off" ;;
   esac
 
   local exit_ip; exit_ip="$(curl -s --max-time 15 --socks5-hostname "$PROXY" https://api.ipify.org 2>/dev/null || true)"
@@ -220,5 +220,5 @@ case "${1:-}" in
   render)    render; log "Rendered config -> $RENDERED" ;;
   install)   cmd_install ;;
   uninstall) cmd_uninstall ;;
-  *) printf 'usage: %s {up [connect-args] | down [--disconnect-proton] | status | render | install | uninstall}\n' "${0##*/}" >&2; exit 2 ;;
+  *) printf 'usage: %s {up [connect-args] | down [--disconnect-entry] | status | render | install | uninstall}\n' "${0##*/}" >&2; exit 2 ;;
 esac
