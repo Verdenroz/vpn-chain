@@ -11,7 +11,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** NetShield's two levels and off, as three stops on the panel's one selector. */
+/** The two filter levels and off, as three stops on the panel's one selector. */
 @Composable
 fun DnsFilterPicker(
     selected: DnsFilter,

@@ -2,31 +2,32 @@
 
 Desktop gets a real kill switch in every mode, through one of two mechanisms:
 the app's own nftables helper for any TUN chain it dials itself, or the real
-ProtonVPN app's kill switch when that app is carrying the entry hop.
+external VPN app's kill switch when that app is carrying the entry hop.
 
-## Relay-only mode, with the ProtonVPN app
+## Relay-only mode, with an external VPN app
 
-Leave the entry-hop fields blank and run the real ProtonVPN app with its own
+Leave the entry-hop fields blank and run an external VPN app with its own
 kill switch enabled. sing-box's VLESS dial just rides whatever the OS default
-route is — since that's Proton's tunnel, Proton's kill switch protects it
+route is — since that's the app's tunnel, the app's kill switch protects it
 exactly as if it were any other app on your system. No custom code involved.
 
-The app detects this (`proton0` is up) and stands down rather than installing
-its own table: the rendered config never lists Proton's WireGuard endpoint as
+The app detects this (ProtonVPN's `proton0` is up — the one external client
+with a fixed interface name) and stands down rather than installing its own
+table: the rendered config never lists that app's WireGuard endpoint as
 an exemption, so our rule would blackhole the very tunnel it is riding.
 
 ## Single-hop mode
 
-Leave the entry-hop fields blank and *don't* run the ProtonVPN app, and the
+Leave the entry-hop fields blank and *don't* run an external VPN app, and the
 chain is you → relay VPS → internet. Neither of the above applies — there is
-no Proton kill switch to inherit — so the app installs its own table, exactly
+no external kill switch to inherit — so the app installs its own table, exactly
 as below but exempting only the VPS. Enabled by the same **Settings → kill
 switch** toggle, and it needs the same helper.
 
 ## WireGuard entry hop mode
 
 When a WireGuard entry hop is configured (see `docs/desktop-tun.md`),
-sing-box dials Proton itself, so there's no real Proton app/tunnel for a kill
+sing-box dials the entry peer itself, so there's no external app/tunnel for a kill
 switch to attach to. Instead, build the narrow helper in `cli/killswitch/`
 (or run `cli/setup-desktop.sh`, which does this step too):
 
@@ -42,7 +43,7 @@ then put `vpn-chain-killswitch` on `PATH`. Enabled by default — flip
 
 Before connecting, the app installs an **nftables** table on the `OUTPUT`
 hook — not a routing-table change — that rejects all outbound traffic except
-loopback, anything already routed to `tun0`, and the VPS/Proton-endpoint
+loopback, anything already routed to `tun0`, and the VPS/entry-endpoint
 exemptions.
 
 - **Firewall, not routing.** sing-box's own `auto_detect_interface` watches
@@ -59,7 +60,7 @@ exemptions.
   not the VPS, so it needs its own exemption distinct from sing-box's own
   uplink. That's safe because the exemption stops applying the instant
   sing-box crashes and `tun0` stops existing; leaked traffic then falls back
-  to the physical link, where only the VPS/Proton IPs still get through and
+  to the physical link, where only the VPS/entry IPs still get through and
   everything else is rejected.
 - **Torn down on disconnect, not on crash.** On Disconnect the app tears the
   table down — but *not* on an unexpected crash, since that's exactly when
@@ -77,8 +78,8 @@ without the safety net.
 The app's **Chain** screen shows `kill switch: protected` when either setup
 is active and detected, or a warning when it isn't — reported from what
 actually holds, not from which mode was configured. There's no way for the
-app to enable ProtonVPN's own kill switch for you — turn that one on in the
-ProtonVPN app/CLI's own settings.
+app to enable an external VPN app's own kill switch for you — turn that one
+on in that app's own settings.
 
 Desktop's proxy mode (**Settings → routing**, system-wide TUN off) is the one
 case with no fail-closed option of ours: nothing is captured system-wide, so

@@ -3,17 +3,17 @@
 ## The one-VPN constraint (important)
 
 Android's `VpnService` allows **only one active VPN at a time**. You therefore
-**cannot** run the ProtonVPN app *and* a separate relay app chained together —
+**cannot** run a separate VPN app *and* a relay app chained together —
 the way the desktop can with the SOCKS-proxy mode.
 
 So on Android the app **is** the single VPN, and sing-box performs *both* hops
-itself: the Proton entry hop as a WireGuard endpoint, then the VLESS relay on
-top. The ProtonVPN app is not part of the chain here.
+itself: the entry hop as a WireGuard endpoint, then the VLESS relay on
+top. No separate VPN app is part of the chain here.
 
 ```
 phone
   → sing-box VpnService (this app)
-       → WireGuard endpoint → ProtonVPN     (entry hop)
+       → WireGuard endpoint → entry peer    (entry hop)
           → VLESS+REALITY   → your VPS      (relay, exits from the VPS's own IP)
              → internet
 ```
@@ -27,12 +27,12 @@ phone
 | Placeholder | Source |
 |-------------|--------|
 | `VPS_IP`, `VLESS_UUID`, `REALITY_PUBKEY`, `SHORT_ID`, `SNI` | same relay identity as the desktop chain (`~/.config/vpn-chain/secrets.env`) |
-| `PROTON_ENTRY_*` (private key, address, peer pubkey, endpoint host/port) | a **dedicated** Proton WireGuard config for this device — generate a *separate* one at account.protonvpn.com so it can be revoked independently |
-| `PROTON_ENTRY_DNS` (optional) | the `.conf`'s `DNS =` line — only present if you generated the config with NetShield on; copying it over is what keeps NetShield's ad/malware/tracker filtering working, since it's Proton's own resolver and only reachable through this same peer |
+| `ENTRY_*` (private key, address, peer pubkey, endpoint host/port) | a **dedicated** WireGuard config for this device — generate a *separate* one with your provider so it can be revoked independently |
+| `ENTRY_DNS` (optional) | the `.conf`'s `DNS =` line — only present if you generated the config with the provider's filtering on; copying it over is what keeps that filtering working, since the resolver lives on the provider's network and is only reachable through this same peer |
 
 ## Two tiers
 
-- **Full chain (recommended):** the template above. Entry hop through Proton, so
+- **Full chain (recommended):** the template above. Entry hop through the peer, so
   your mobile carrier IP is hidden from the VPS.
 - **Relay only:** drop the `entry-hop` endpoint and the `detour`, pointing the
   VLESS outbound straight out. Simpler, but the VPS sees your real mobile IP.
@@ -90,7 +90,7 @@ per ABI.
 platform — Android calls `SingBoxConfigFactory.androidChainConfig`, which emits
 the `tun` inbound, the `wireguard` `entry-hop` endpoint, and the VLESS relay
 reached via that detour (mirrors `sing-box-android.template.json`). Supply the
-`PROTON_ENTRY_*` fields (secrets.env or the Settings form) to enable the entry
+`ENTRY_*` fields (secrets.env or the Settings form) to enable the entry
 hop; omit them for a relay-only chain. All shapes are validated against
 `sing-box check` 1.13.14 (the version libbox embeds).
 

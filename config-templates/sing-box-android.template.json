@@ -23,13 +23,13 @@
       "type": "wireguard",
       "tag": "entry-hop",
       "mtu": 1280,
-      "address": ["${PROTON_ENTRY_ADDRESS}"],
-      "private_key": "${PROTON_ENTRY_PRIVKEY}",
+      "address": ["${ENTRY_ADDRESS}"],
+      "private_key": "${ENTRY_PRIVKEY}",
       "peers": [
         {
-          "address": "${PROTON_ENTRY_HOST}",
-          "port": ${PROTON_ENTRY_PORT},
-          "public_key": "${PROTON_ENTRY_PEER_PUBKEY}",
+          "address": "${ENTRY_HOST}",
+          "port": ${ENTRY_PORT},
+          "public_key": "${ENTRY_PEER_PUBKEY}",
           "allowed_ips": ["0.0.0.0/0"],
           "persistent_keepalive_interval": 25
         }

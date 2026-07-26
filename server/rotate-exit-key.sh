@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rotate-proton-key.sh — replace the server's ProtonVPN WireGuard credentials
+# rotate-exit-key.sh — replace the server's ProtonVPN WireGuard credentials
 # (the chained exit hop) with a freshly generated Proton config, WITHOUT
 # regenerating the VLESS/REALITY identity (clients keep working).
 #
@@ -10,7 +10,7 @@
 # 1. account.protonvpn.com -> Downloads -> WireGuard: create a NEW config
 #    (this mints a new keypair). DELETE the old config there to revoke the
 #    leaked key.
-# 2. Run:  ./rotate-proton-key.sh <new-proton.conf> [user@vps]
+# 2. Run:  ./rotate-exit-key.sh <new-proton.conf> [user@vps]
 #
 # Requires: jq on the VPS. Reads a standard wg-quick .conf locally.
 set -euo pipefail
@@ -53,7 +53,7 @@ cp "$CFG" "${CFG}.bak.$(date +%s 2>/dev/null || echo rotate)"
 # xray detects config format from the file extension, so the temp file must end in .json.
 tmp="$(mktemp --suffix=.json)"
 jq --arg sk "$PRIV" --arg addr "$ADDR" --arg pk "$PEER_PUB" --arg ep "${EP_HOST}:${EP_PORT}" '
-  (.outbounds[] | select(.tag=="proton") | .settings) |=
+  (.outbounds[] | select(.tag=="exit-wg") | .settings) |=
     (.secretKey = $sk
      | .address = [$addr]
      | .peers[0].publicKey = $pk

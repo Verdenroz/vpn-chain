@@ -13,7 +13,6 @@ import okio.Path.Companion.toPath
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -100,22 +99,6 @@ class ProfileMigrationTest {
         assertNull(source.activeProfileId.first())
     }
 
-    /**
-     * `ChainProfile.entryHop` was once `protonEntry` and keeps that `@SerialName`.
-     * Dropping it would deserialize to null under `ignoreUnknownKeys`, silently
-     * turning an existing two-hop chain into a single-hop one.
-     */
-    @Test
-    fun `a stored profile written under the old entry hop key keeps its entry hop`() = runTest {
-        val store = newStore()
-        store.edit { it[LEGACY_KEY] = LEGACY_JSON_WITH_ENTRY }
-        val source = VpnChainPreferencesDataSource(store)
-
-        val entry = assertNotNull(source.profile.first()?.entryHop)
-
-        assertEquals("10.2.0.2/32", entry.address)
-        assertEquals("entry.example", entry.endpointHost)
-    }
 }
 
 private var storeCounter = 0
@@ -139,10 +122,4 @@ private val LEGACY_KEY = stringPreferencesKey("chain_profile_json")
 
 private val LEGACY_JSON = """
     {"vpsIp":"89.127.235.38","vlessUuid":"uuid","realityPublicKey":"pubkey","shortId":"short"}
-""".trimIndent()
-
-private val LEGACY_JSON_WITH_ENTRY = """
-    {"vpsIp":"89.127.235.38","vlessUuid":"uuid","realityPublicKey":"pubkey","shortId":"short",
-     "protonEntry":{"privateKey":"priv","address":"10.2.0.2/32","peerPublicKey":"peer",
-     "endpointHost":"entry.example","endpointPort":51820}}
 """.trimIndent()

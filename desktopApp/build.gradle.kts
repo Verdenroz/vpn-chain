@@ -55,7 +55,7 @@ tasks.register("installDesktopEntry") {
             Type=Application
             Name=VPN Chain
             GenericName=Multi-hop VPN
-            Comment=Chain Proton entry, VLESS relay, and exit hops into one tunnel
+            Comment=Chain the WireGuard entry, VLESS relay, and exit hops into one tunnel
             Exec=$exec
             Icon=vpn-chain
             Terminal=false
