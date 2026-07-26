@@ -341,7 +341,7 @@ fun SettingsScreen(
                 }
             }
 
-            val profileHasEntry = uiState.profile?.protonEntry != null
+            val profileHasEntry = uiState.profile?.entryHop != null
             if (currentPlatform == Platform.Desktop || profileHasEntry) {
                 SectionCard(title = stringResource(Res.string.settings_routing_title)) {
                     // Android has no proxy-only mode — the tunnel is always TUN —

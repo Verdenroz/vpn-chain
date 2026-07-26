@@ -26,8 +26,8 @@
     <string name="settings_close_to_tray_title">Close to tray</string>
     <string name="settings_close_to_tray_detail">Closing the window keeps the chain running and leaves the app in the system tray. Quit from the tray menu to stop it.</string>
     <string name="settings_routing_title">routing</string>
-    <string name="settings_entry_hop_title">ProtonVPN entry hop</string>
-    <string name="settings_entry_hop_detail">Dial the relay through the profile's Proton WireGuard hop, hiding this device's address from the relay VPS. Turn off to connect single-hop</string>
+    <string name="settings_entry_hop_title">wireguard entry hop</string>
+    <string name="settings_entry_hop_detail">Dial the relay through the profile's WireGuard hop, hiding this device's address from the relay VPS. Turn off to connect single-hop</string>
     <string name="settings_route_entire_system_title">Route entire system</string>
     <string name="settings_route_entire_system_detail">Send all system traffic through sing-box instead of a local proxy. Needs elevated privileges on the sing-box binary.</string>
     <string name="settings_kill_switch_title">kill switch</string>
@@ -59,9 +59,9 @@
     <string name="settings_field_server_port">server port</string>
     <string name="settings_field_local_proxy_port">local proxy port</string>
     <string name="settings_entry_hop_title_android">entry hop (recommended)</string>
-    <string name="settings_entry_hop_detail_android">Lets sing-box dial Proton directly. Leaving this blank exposes your real IP to the relay. Android can't run the Proton app alongside this one.</string>
+    <string name="settings_entry_hop_detail_android">Lets sing-box dial the WireGuard peer directly — Proton, or any other provider. Leaving this blank exposes your real IP to the relay. Android can\'t run another VPN app alongside this one.</string>
     <string name="settings_entry_hop_title_desktop">entry hop (optional)</string>
-    <string name="settings_entry_hop_detail_desktop">Leave blank to relay through the Proton app instead. Filling it in takes that app, and its kill switch, out of the loop.</string>
+    <string name="settings_entry_hop_detail_desktop">Leave blank to relay through the ProtonVPN app instead — the only external client this detects. Filling it in takes that app, and its kill switch, out of the loop.</string>
     <string name="settings_field_wg_private_key">wg private key</string>
     <string name="settings_field_wg_address">wg address</string>
     <string name="settings_field_wg_peer_public_key">wg peer public key</string>

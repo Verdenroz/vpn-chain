@@ -21,8 +21,8 @@ phone
 ## Config
 
 `config-templates/sing-box-android.template.json` encodes exactly this: a
-`wireguard` **endpoint** (`proton-entry`) that the VLESS outbound reaches via
-`"detour": "proton-entry"`. Fill the placeholders:
+`wireguard` **endpoint** (`entry-hop`) that the VLESS outbound reaches via
+`"detour": "entry-hop"`. Fill the placeholders:
 
 | Placeholder | Source |
 |-------------|--------|
@@ -34,7 +34,7 @@ phone
 
 - **Full chain (recommended):** the template above. Entry hop through Proton, so
   your mobile carrier IP is hidden from the VPS.
-- **Relay only:** drop the `proton-entry` endpoint and the `detour`, pointing the
+- **Relay only:** drop the `entry-hop` endpoint and the `detour`, pointing the
   VLESS outbound straight out. Simpler, but the VPS sees your real mobile IP.
 
 This same choice is available on desktop when system-wide TUN mode is on — see
@@ -88,7 +88,7 @@ per ABI.
 
 **Config:** `renderPlatformTunnelConfig` (in `core/config`) picks the shape per
 platform — Android calls `SingBoxConfigFactory.androidChainConfig`, which emits
-the `tun` inbound, the `wireguard` `proton-entry` endpoint, and the VLESS relay
+the `tun` inbound, the `wireguard` `entry-hop` endpoint, and the VLESS relay
 reached via that detour (mirrors `sing-box-android.template.json`). Supply the
 `PROTON_ENTRY_*` fields (secrets.env or the Settings form) to enable the entry
 hop; omit them for a relay-only chain. All shapes are validated against

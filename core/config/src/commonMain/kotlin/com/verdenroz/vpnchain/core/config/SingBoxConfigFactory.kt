@@ -2,7 +2,7 @@ package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
-import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonElement
@@ -18,9 +18,10 @@ import kotlinx.serialization.json.putJsonObject
  * Builds sing-box client configs from a [ChainProfile]. Two shapes:
  * - [mixedProxyConfig]: relay-only local mixed inbound → VLESS (desktop/CLI);
  *   no entry hop of its own, the real ProtonVPN app fills that role instead.
- * - [androidChainConfig]: full TUN chain with an optional Proton WireGuard
- *   entry hop, used by Android always and by desktop when system-wide TUN is
- *   on. Mirrors config-templates/sing-box-android.template.json.
+ * - [androidChainConfig]: full TUN chain with an optional WireGuard entry hop
+ *   (any provider — Proton is only what the docs assume), used by Android
+ *   always and by desktop when system-wide TUN is on. Mirrors
+ *   config-templates/sing-box-android.template.json.
  */
 object SingBoxConfigFactory {
     private val json = Json { prettyPrint = true }
@@ -49,8 +50,8 @@ object SingBoxConfigFactory {
     }
 
     /**
-     * Full TUN chain: TUN → (optional Proton WireGuard entry) → VLESS relay.
-     * When [ChainProfile.protonEntry] is null the chain is relay-only (VLESS
+     * Full TUN chain: TUN → (optional WireGuard entry hop) → VLESS relay.
+     * When [ChainProfile.entryHop] is null the chain is relay-only (VLESS
      * dialed directly), which is simpler but exposes the device's IP to the VPS.
      */
     fun androidChainConfig(
@@ -59,7 +60,7 @@ object SingBoxConfigFactory {
         dnsFilter: DnsFilter = DnsFilter.Off,
         cachePath: String? = null,
     ): String {
-        val entry = profile.protonEntry
+        val entry = profile.entryHop
         val filtering = dnsFilter != DnsFilter.Off
         return render {
             putInfoLog()
@@ -80,7 +81,7 @@ object SingBoxConfigFactory {
                     // programs an IPv4 default route, so IPv6 traffic skips the tun
                     // entirely and leaks straight out the real interface.
                     putJsonArray("address") { add("10.19.19.1/30"); add("fdfe:dcba:9876::1/126") }
-                    // Default TUN MTU is 9000; capped at 1280 to nest inside the Proton
+                    // Default TUN MTU is 9000; capped at 1280 to nest inside the entry
                     // WG tunnel (also 1280), else 1400 for VLESS/TLS headroom under 1500.
                     put("mtu", if (entry != null) 1280 else 1400)
                     put("auto_route", true)
@@ -99,7 +100,7 @@ object SingBoxConfigFactory {
                 addVlessOutbound(
                     profile,
                     tag = VLESS_TAG,
-                    detour = if (entry != null) PROTON_ENTRY_TAG else null,
+                    detour = if (entry != null) ENTRY_HOP_TAG else null,
                     tcpOnly = false,
                 )
                 addDirectOutbound()
@@ -204,18 +205,19 @@ object SingBoxConfigFactory {
         putJsonObject("log") { put("level", "info"); put("timestamp", true) }
 
     /**
-     * A Proton NetShield DNS IP must be dialed through the Proton peer itself
-     * (it's Proton's own internal resolver) — routing it via the relay like the
-     * public fallback would just make it unreachable, not merely unfiltered.
+     * A resolver on the entry peer's internal network (Proton's NetShield IPs
+     * being the usual case) must be dialed through that peer — routing it via
+     * the relay like the public fallback would just make it unreachable, not
+     * merely unfiltered.
      */
-    private fun JsonObjectBuilder.putDnsServers(entry: ProtonWireGuardEntry?) {
+    private fun JsonObjectBuilder.putDnsServers(entry: WireGuardEntry?) {
         putJsonArray("servers") {
             if (entry?.dns != null) {
                 addJsonObject {
                     put("type", "udp")
-                    put("tag", "dns-proton")
+                    put("tag", "dns-entry")
                     put("server", entry.dns)
-                    put("detour", PROTON_ENTRY_TAG)
+                    put("detour", ENTRY_HOP_TAG)
                 }
             } else {
                 addJsonObject {
@@ -226,7 +228,7 @@ object SingBoxConfigFactory {
                 }
             }
         }
-        put("final", if (entry?.dns != null) "dns-proton" else "dns-remote")
+        put("final", if (entry?.dns != null) "dns-entry" else "dns-remote")
         put("strategy", "ipv4_only")
     }
 
@@ -261,9 +263,9 @@ object SingBoxConfigFactory {
         if (detour != null) put("detour", detour)
     }
 
-    private fun JsonArrayBuilder.addWireGuardEndpoint(entry: ProtonWireGuardEntry) = addJsonObject {
+    private fun JsonArrayBuilder.addWireGuardEndpoint(entry: WireGuardEntry) = addJsonObject {
         put("type", "wireguard")
-        put("tag", PROTON_ENTRY_TAG)
+        put("tag", ENTRY_HOP_TAG)
         put("mtu", 1280)
         putJsonArray("address") { add(entry.address) }
         put("private_key", entry.privateKey)
@@ -279,7 +281,7 @@ object SingBoxConfigFactory {
     }
 
     private const val VLESS_TAG = "vless-proxy"
-    private const val PROTON_ENTRY_TAG = "proton-entry"
+    private const val ENTRY_HOP_TAG = "entry-hop"
 
     private data class Blocklist(val tag: String, val url: String)
 

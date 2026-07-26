@@ -60,7 +60,7 @@ internal object RelayConfig {
         LISTEN_PORT.find(configJson)?.groupValues?.get(1)?.toIntOrNull() ?: default
 
     /**
-     * The VPS and, when present, the Proton peer endpoint — the two addresses
+     * The VPS and, when present, the entry peer endpoint — the two addresses
      * sing-box's own uplink needs left open when everything else is blocked.
      * Getting this wrong strands the machine, so it returns only what it found.
      */

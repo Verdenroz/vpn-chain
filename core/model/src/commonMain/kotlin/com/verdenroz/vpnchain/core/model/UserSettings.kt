@@ -30,10 +30,10 @@ data class UserSettings(
      */
     val dnsFilter: DnsFilter = DnsFilter.AdsAndTrackers,
     /**
-     * Dial the relay through the profile's Proton WireGuard hop when it has
-     * one. Off means single-hop even with entry keys present — steadier when
-     * the Proton peer is flaky, at the cost of the VPS seeing this device's
-     * IP. Ignored for profiles with no entry configured.
+     * Dial the relay through the profile's WireGuard hop when it has one. Off
+     * means single-hop even with entry keys present — steadier when the entry
+     * peer is flaky, at the cost of the VPS seeing this device's IP. Ignored
+     * for profiles with no entry configured.
      */
     val entryHopEnabled: Boolean = true,
     /**
@@ -65,4 +65,4 @@ data class UserSettings(
  * must go through this, or a disabled entry hop would still be drawn.
  */
 fun ChainProfile.effectiveFor(settings: UserSettings): ChainProfile =
-    if (settings.entryHopEnabled) this else copy(protonEntry = null)
+    if (settings.entryHopEnabled) this else copy(entryHop = null)

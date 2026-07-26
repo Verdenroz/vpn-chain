@@ -12,7 +12,7 @@ import java.awt.image.BufferedImage
 private const val QR_SIZE_PX = 512
 
 actual fun renderQrCode(text: String): ImageBitmap? = runCatching {
-    // Profiles with a Proton entry hop push the payload to ~450 bytes; without
+    // Profiles with an entry hop push the payload to ~450 bytes; without
     // an explicit error-correction hint ZXing defaults to the weakest level
     // (L, ~7%), which a phone camera struggles to decode off a screen.
     val hints = mapOf(EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M)

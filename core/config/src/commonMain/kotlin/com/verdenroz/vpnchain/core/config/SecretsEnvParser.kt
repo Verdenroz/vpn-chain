@@ -1,12 +1,13 @@
 package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
-import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 
 /**
  * Parses the CLI's `secrets.env` format (see examples/secrets.env.example)
  * so the GUI apps can import the exact same file the CLI runs from. The
- * `PROTON_ENTRY_*` keys are optional and only used by the TUN-mode entry hop.
+ * `PROTON_ENTRY_*` keys are optional and only used by the TUN-mode entry hop;
+ * the prefix is historical — they take any WireGuard peer, not just Proton's.
  */
 object SecretsEnvParser {
 
@@ -37,22 +38,22 @@ object SecretsEnvParser {
                 serverPort = values["SERVER_PORT"]?.toIntOrNull() ?: ChainProfile.DEFAULT_SERVER_PORT,
                 localProxyPort = values["LOCAL_PROXY_PORT"]?.toIntOrNull()
                     ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT,
-                protonEntry = parseProtonEntry(values),
+                entryHop = parseEntryHop(values),
             ),
         )
     }
 
     /** Present only when all required WireGuard keys are supplied. */
-    private fun parseProtonEntry(values: Map<String, String>): ProtonWireGuardEntry? {
-        val hasAll = PROTON_KEYS.all { !values[it].isNullOrBlank() }
+    private fun parseEntryHop(values: Map<String, String>): WireGuardEntry? {
+        val hasAll = ENTRY_HOP_KEYS.all { !values[it].isNullOrBlank() }
         if (!hasAll) return null
-        return ProtonWireGuardEntry(
+        return WireGuardEntry(
             privateKey = values.getValue("PROTON_ENTRY_PRIVKEY"),
             address = values.getValue("PROTON_ENTRY_ADDRESS"),
             peerPublicKey = values.getValue("PROTON_ENTRY_PEER_PUBKEY"),
             endpointHost = values.getValue("PROTON_ENTRY_HOST"),
             endpointPort = values["PROTON_ENTRY_PORT"]?.toIntOrNull()
-                ?: ProtonWireGuardEntry.DEFAULT_ENDPOINT_PORT,
+                ?: WireGuardEntry.DEFAULT_ENDPOINT_PORT,
             dns = values["PROTON_ENTRY_DNS"]?.takeIf(String::isNotBlank),
         )
     }
@@ -66,7 +67,7 @@ object SecretsEnvParser {
         appendLine("SNI=${profile.sni}")
         appendLine("SERVER_PORT=${profile.serverPort}")
         appendLine("LOCAL_PROXY_PORT=${profile.localProxyPort}")
-        profile.protonEntry?.let { entry ->
+        profile.entryHop?.let { entry ->
             appendLine("PROTON_ENTRY_PRIVKEY=${entry.privateKey}")
             appendLine("PROTON_ENTRY_ADDRESS=${entry.address}")
             appendLine("PROTON_ENTRY_PEER_PUBKEY=${entry.peerPublicKey}")
@@ -77,7 +78,7 @@ object SecretsEnvParser {
     }
 
     private val REQUIRED_KEYS = listOf("VPS_IP", "VLESS_UUID", "REALITY_PUBKEY", "SHORT_ID")
-    private val PROTON_KEYS = listOf(
+    private val ENTRY_HOP_KEYS = listOf(
         "PROTON_ENTRY_PRIVKEY",
         "PROTON_ENTRY_ADDRESS",
         "PROTON_ENTRY_PEER_PUBKEY",

@@ -21,7 +21,7 @@ import com.verdenroz.vpnchain.core.designsystem.component.PanelButton
 import com.verdenroz.vpnchain.core.designsystem.component.PanelField
 import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
 import com.verdenroz.vpnchain.core.model.ChainProfile
-import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.ui.SectionLabel
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_clear
@@ -65,18 +65,18 @@ fun ProfileForm(
     var proxyPort by remember(initial) {
         mutableStateOf((initial?.localProxyPort ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT).toString())
     }
-    // Optional TUN-mode entry hop (Proton WireGuard), used on Android and on
+    // Optional TUN-mode WireGuard entry hop, used on Android and on
     // desktop when system-wide TUN is on. Empty = relay-only.
-    var wgPrivKey by remember(initial) { mutableStateOf(initial?.protonEntry?.privateKey ?: "") }
-    var wgAddress by remember(initial) { mutableStateOf(initial?.protonEntry?.address ?: "") }
-    var wgPeerKey by remember(initial) { mutableStateOf(initial?.protonEntry?.peerPublicKey ?: "") }
-    var wgHost by remember(initial) { mutableStateOf(initial?.protonEntry?.endpointHost ?: "") }
+    var wgPrivKey by remember(initial) { mutableStateOf(initial?.entryHop?.privateKey ?: "") }
+    var wgAddress by remember(initial) { mutableStateOf(initial?.entryHop?.address ?: "") }
+    var wgPeerKey by remember(initial) { mutableStateOf(initial?.entryHop?.peerPublicKey ?: "") }
+    var wgHost by remember(initial) { mutableStateOf(initial?.entryHop?.endpointHost ?: "") }
     var wgPort by remember(initial) {
         mutableStateOf(
-            (initial?.protonEntry?.endpointPort ?: ProtonWireGuardEntry.DEFAULT_ENDPOINT_PORT).toString(),
+            (initial?.entryHop?.endpointPort ?: WireGuardEntry.DEFAULT_ENDPOINT_PORT).toString(),
         )
     }
-    var wgDns by remember(initial) { mutableStateOf(initial?.protonEntry?.dns ?: "") }
+    var wgDns by remember(initial) { mutableStateOf(initial?.entryHop?.dns ?: "") }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -145,13 +145,13 @@ fun ProfileForm(
                         wgPrivKey.isNotBlank() && wgAddress.isNotBlank() &&
                         wgPeerKey.isNotBlank() && wgHost.isNotBlank()
                     ) {
-                        ProtonWireGuardEntry(
+                        WireGuardEntry(
                             privateKey = wgPrivKey.trim(),
                             address = wgAddress.trim(),
                             peerPublicKey = wgPeerKey.trim(),
                             endpointHost = wgHost.trim(),
                             endpointPort = wgPort.toIntOrNull()
-                                ?: ProtonWireGuardEntry.DEFAULT_ENDPOINT_PORT,
+                                ?: WireGuardEntry.DEFAULT_ENDPOINT_PORT,
                             dns = wgDns.trim().ifBlank { null },
                         )
                     } else {
@@ -167,7 +167,7 @@ fun ProfileForm(
                             serverPort = port.toIntOrNull() ?: ChainProfile.DEFAULT_SERVER_PORT,
                             localProxyPort = proxyPort.toIntOrNull()
                                 ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT,
-                            protonEntry = entry,
+                            entryHop = entry,
                         ),
                     )
                 },

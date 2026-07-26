@@ -21,7 +21,7 @@
   "endpoints": [
     {
       "type": "wireguard",
-      "tag": "proton-entry",
+      "tag": "entry-hop",
       "mtu": 1280,
       "address": ["${PROTON_ENTRY_ADDRESS}"],
       "private_key": "${PROTON_ENTRY_PRIVKEY}",
@@ -52,7 +52,7 @@
         "reality": { "enabled": true, "public_key": "${REALITY_PUBKEY}", "short_id": "${SHORT_ID}" }
       },
       "packet_encoding": "xudp",
-      "detour": "proton-entry"
+      "detour": "entry-hop"
     },
     { "type": "direct", "tag": "direct" }
   ],

@@ -15,7 +15,7 @@ import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
-import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.model.TunnelState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -212,15 +212,15 @@ class ObserveChainRouteUseCaseTest {
 private fun connectedStatus(exitIp: String?) =
     ChainStatus(state = TunnelState.Connected, exitIp = exitIp)
 
-private fun profile(entry: ProtonWireGuardEntry? = defaultEntry()) = ChainProfile(
+private fun profile(entry: WireGuardEntry? = defaultEntry()) = ChainProfile(
     vpsIp = VPS_IP,
     vlessUuid = "uuid",
     realityPublicKey = "pubkey",
     shortId = "shortid",
-    protonEntry = entry,
+    entryHop = entry,
 )
 
-private fun defaultEntry() = ProtonWireGuardEntry(
+private fun defaultEntry() = WireGuardEntry(
     privateKey = "priv",
     address = "10.2.0.2/32",
     peerPublicKey = "peer",
