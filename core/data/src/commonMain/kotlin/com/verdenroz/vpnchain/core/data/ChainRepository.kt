@@ -78,7 +78,7 @@ internal class DefaultChainRepository(
         val settings = settingsRepository.settings.first()
 
         return runCatching {
-            val configJson = renderPlatformTunnelConfig(profile, settings.systemWideTun)
+            val configJson = renderPlatformTunnelConfig(profile, settings)
             controller.start(configJson, settings.killSwitchEnabled)
         }.onFailure { logger.e(TAG, "connect failed", it) }
     }

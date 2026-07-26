@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -36,9 +37,9 @@ class ChainViewModel(
         combine(
             chainRepository.status,
             profileRepository.profile.map { it != null },
-            // Re-resolves on every state change and on its own tick, so the
-            // panel reads live rather than replaying the profile.
-            observeChainRoute(),
+            // Seeded empty because the route is measured: waiting for the first
+            // probe would show a live tunnel as an unconfigured one.
+            observeChainRoute().onStart { emit(ChainRoute()) },
             chainRepository.stats,
         ) { status, hasProfile, route, stats ->
             ChainUiState(status = status, hasProfile = hasProfile, route = route, stats = stats)

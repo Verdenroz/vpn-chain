@@ -13,8 +13,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.transformLatest
 
 /**
  * The live route, re-resolved as connection state changes and on a slow tick.
@@ -46,26 +48,39 @@ class ObserveChainRouteUseCase(
             profileRepository.profile,
             chainRepository.status,
             originRepository.lastKnownOriginIp,
-            ticks(),
-        ) { profile, status, lastOrigin, _ -> Inputs(profile, status, lastOrigin) }
-            .mapLatest { resolve(it) }
+            samples(),
+        ) { profile, status, lastOrigin, sample -> Inputs(profile, status, lastOrigin, sample) }
+            .mapLatest { render(it) }
 
     private data class Inputs(
         val profile: ChainProfile?,
         val status: ChainStatus,
         val lastOrigin: String?,
+        val sample: Sample?,
     )
 
-    private fun ticks(): Flow<Unit> = flow {
-        while (true) {
-            emit(Unit)
-            delay(REFRESH_INTERVAL_MS)
-        }
-    }
+    /**
+     * Probing runs on its own timer, restarted only when the path itself
+     * changes. A refresh tick that cancelled the request in flight never
+     * completed one on a slow link — which is exactly when the tunnel is
+     * warming up and the readout is worth having.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun samples(): Flow<Sample?> =
+        combine(
+            chainRepository.status.map { it.state == TunnelState.Connected }.distinctUntilChanged(),
+            profileRepository.profile,
+        ) { connected, profile -> connected to profile }
+            .transformLatest { (connected, profile) ->
+                while (true) {
+                    emit(currentSample(connected, profile))
+                    delay(SAMPLE_INTERVAL_MS)
+                }
+            }
 
-    private suspend fun resolve(inputs: Inputs): ChainRoute {
+    private suspend fun render(inputs: Inputs): ChainRoute {
         val connected = inputs.status.state == TunnelState.Connected
-        val sample = currentSample(connected, inputs.profile)
+        val sample = inputs.sample
         return ChainRoute(
             hops = listOfNotNull(
                 originHop(connected, sample, inputs.lastOrigin, inputs.profile, inputs.status),
@@ -162,7 +177,6 @@ class ObserveChainRouteUseCase(
     }
 
     private companion object {
-        const val REFRESH_INTERVAL_MS = 5_000L
         const val SAMPLE_INTERVAL_MS = 10_000L
     }
 }

@@ -7,6 +7,7 @@ import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.ThemeConfig
@@ -88,6 +89,12 @@ class SettingsViewModel(
 
     fun setKillSwitchEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setKillSwitchEnabled(enabled)
+    }
+
+    /** One switch in the UI; an enum underneath, so further lists can be added
+     *  without migrating what is already stored. */
+    fun setDnsFilter(filter: DnsFilter) = viewModelScope.launch {
+        settingsRepository.setDnsFilter(filter)
     }
 
     fun setAutoConnectOnLaunch(enabled: Boolean) = viewModelScope.launch {

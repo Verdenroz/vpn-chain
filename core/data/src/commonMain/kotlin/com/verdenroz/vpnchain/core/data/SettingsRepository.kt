@@ -2,6 +2,7 @@ package com.verdenroz.vpnchain.core.data
 
 import com.verdenroz.vpnchain.core.common.autostart.LoginAutostart
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
+import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
 import kotlinx.coroutines.flow.Flow
@@ -11,6 +12,7 @@ interface SettingsRepository {
     suspend fun setThemeConfig(themeConfig: ThemeConfig)
     suspend fun setSystemWideTun(enabled: Boolean)
     suspend fun setKillSwitchEnabled(enabled: Boolean)
+    suspend fun setDnsFilter(filter: DnsFilter)
     suspend fun setAutoConnectOnLaunch(enabled: Boolean)
     suspend fun setAutoReconnect(enabled: Boolean)
     suspend fun setCloseToTray(enabled: Boolean)
@@ -41,6 +43,8 @@ internal class DefaultSettingsRepository(
         preferences.setSystemWideTun(enabled)
     override suspend fun setKillSwitchEnabled(enabled: Boolean) =
         preferences.setKillSwitchEnabled(enabled)
+    override suspend fun setDnsFilter(filter: DnsFilter) =
+        preferences.setDnsFilter(filter)
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) =
         preferences.setAutoConnectOnLaunch(enabled)
     override suspend fun setAutoReconnect(enabled: Boolean) =

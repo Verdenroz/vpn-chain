@@ -29,8 +29,14 @@
     <string name="settings_route_entire_system_title">Route entire system</string>
     <string name="settings_route_entire_system_detail">Send all system traffic through sing-box instead of a local proxy. Needs elevated privileges on the sing-box binary.</string>
     <string name="settings_kill_switch_title">kill switch</string>
-    <string name="settings_fail_closed_title">Fail closed on entry-hop mode</string>
-    <string name="settings_fail_closed_detail">Blocks traffic instead of leaking it if sing-box dies. Needs the kill-switch helper built and setcapped.</string>
+    <string name="settings_dns_title">dns</string>
+    <string name="settings_dns_filter_title">Block unwanted domains</string>
+    <string name="settings_dns_filter_detail">Refuses known-bad domains at the chain's own resolver — what NetShield does when Proton is the entry hop. Threats covers malware, phishing, and scams; ads adds advertising and tracker domains on top. Lists are fetched through the chain and refreshed weekly.</string>
+    <string name="settings_dns_filter_off">off</string>
+    <string name="settings_dns_filter_malware">threats</string>
+    <string name="settings_dns_filter_ads">threats + ads</string>
+    <string name="settings_fail_closed_title">Fail closed</string>
+    <string name="settings_fail_closed_detail">Blocks traffic instead of leaking it if sing-box dies. Covers any tunnel this app dials itself; needs the kill-switch helper built and setcapped.</string>
     <string name="settings_appearance_title">appearance</string>
     <string name="settings_always_on_active">Always-on VPN is active. The network is blocked if the tunnel drops.</string>
     <string name="settings_always_on_not_armed">Not armed yet. Turn on Always-on VPN for this app, plus &quot;Block connections without VPN&quot;.</string>

@@ -1,6 +1,8 @@
 package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.UserSettings
+import java.io.File
 import java.net.ServerSocket
 import java.security.SecureRandom
 
@@ -9,13 +11,27 @@ import java.security.SecureRandom
  * read traffic counters — sing-box is an opaque subprocess here, unlike Android
  * where libbox reports status in-process.
  */
-actual fun renderPlatformTunnelConfig(profile: ChainProfile, systemWide: Boolean): String {
+actual fun renderPlatformTunnelConfig(profile: ChainProfile, settings: UserSettings): String {
     val clashApi = newClashApi()
-    return if (systemWide) {
-        SingBoxConfigFactory.androidChainConfig(profile, clashApi)
+    return if (settings.systemWideTun) {
+        SingBoxConfigFactory.androidChainConfig(
+            profile = profile,
+            clashApi = clashApi,
+            dnsFilter = settings.dnsFilter,
+            cachePath = cacheFilePath(),
+        )
     } else {
         SingBoxConfigFactory.mixedProxyConfig(profile, clashApi)
     }
+}
+
+/**
+ * Beside the rest of our state rather than in sing-box's working directory,
+ * which is whatever the app was launched with — `/` for a login item.
+ */
+private fun cacheFilePath(): String {
+    val dir = File(System.getProperty("user.home"), ".config/vpn-chain").apply { mkdirs() }
+    return File(dir, "singbox-cache.db").absolutePath
 }
 
 /**

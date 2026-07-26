@@ -17,11 +17,18 @@ data class UserSettings(
      */
     val systemWideTun: Boolean = true,
     /**
-     * Desktop only, and only meaningful with a WireGuard entry hop configured:
-     * installs a blackhole-route kill switch before connecting. Ignored otherwise
-     * — relay-only mode relies on Proton's own kill switch, Android on Always-on VPN.
+     * Desktop only: installs the nftables kill switch before connecting, for
+     * any TUN chain this app dials itself. Deferred to the real ProtonVPN app's
+     * own kill switch when that app is the entry hop, and ignored on Android,
+     * where fail-closed is the system Always-on VPN setting.
      */
     val killSwitchEnabled: Boolean = true,
+    /**
+     * Blocklist filtering on the chain's resolver. On by default: a chain
+     * without a Proton entry hop has no NetShield behind it, and losing the
+     * filtering silently is worse than filtering something you wanted.
+     */
+    val dnsFilter: DnsFilter = DnsFilter.AdsAndTrackers,
     /**
      * Bring the chain up on app start when a profile exists. Off by default:
      * connecting without being asked is a surprise, not a convenience.

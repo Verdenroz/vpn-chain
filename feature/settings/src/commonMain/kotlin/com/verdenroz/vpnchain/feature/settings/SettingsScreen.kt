@@ -43,12 +43,14 @@ import com.verdenroz.vpnchain.core.designsystem.component.PanelField
 import com.verdenroz.vpnchain.core.designsystem.component.PanelToggle
 import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.ui.ScreenNameplate
 import com.verdenroz.vpnchain.core.ui.SectionCard
 import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.settings.component.ProfileForm
 import com.verdenroz.vpnchain.feature.settings.component.ProfilePicker
+import com.verdenroz.vpnchain.feature.settings.component.DnsFilterPicker
 import com.verdenroz.vpnchain.feature.settings.component.ThemePicker
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_always_on_active
@@ -79,6 +81,9 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_hint_android
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_hint_desktop
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_pasted
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_kill_switch_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_profile_yet
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profiles_title
@@ -141,6 +146,7 @@ fun SettingsRoute(
         onScanQr = scanQr,
         onToggleSystemWide = viewModel::setSystemWideTun,
         onToggleKillSwitch = viewModel::setKillSwitchEnabled,
+        onSetDnsFilter = viewModel::setDnsFilter,
         onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
         onToggleAutoReconnect = viewModel::setAutoReconnect,
         onToggleAutoStart = viewModel::setAutoStartOnLogin,
@@ -164,6 +170,7 @@ fun SettingsScreen(
     onScanQr: () -> Unit,
     onToggleSystemWide: (Boolean) -> Unit,
     onToggleKillSwitch: (Boolean) -> Unit,
+    onSetDnsFilter: (DnsFilter) -> Unit,
     onToggleAutoConnect: (Boolean) -> Unit,
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleAutoStart: (Boolean) -> Unit,
@@ -360,6 +367,30 @@ fun SettingsScreen(
                     AlwaysOnGuidance(
                         detected = uiState.alwaysOnDetected,
                         onOpenSystemVpnSettings = onOpenSystemVpnSettings,
+                    )
+                }
+            }
+
+            // The chain renders a resolver of its own only for a TUN chain;
+            // desktop's proxy mode leaves DNS to the system, where this would
+            // be a toggle that does nothing.
+            if (currentPlatform == Platform.Android || uiState.settings.systemWideTun) {
+                SectionCard(title = stringResource(Res.string.settings_dns_title)) {
+                    Text(
+                        stringResource(Res.string.settings_dns_filter_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.readout,
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        stringResource(Res.string.settings_dns_filter_detail),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.muted,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    DnsFilterPicker(
+                        selected = uiState.settings.dnsFilter,
+                        onSelect = onSetDnsFilter,
                     )
                 }
             }
