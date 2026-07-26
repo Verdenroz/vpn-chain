@@ -23,7 +23,7 @@
     <string name="chain_kill_switch_none">open</string>
     <string name="chain_kill_switch_hint">See Settings to enable one.</string>
     <string name="chain_kill_switch_hint_helper">Enabled, but the helper is missing. Run cli/killswitch/build.sh, then setcap it.</string>
-    <string name="chain_kill_switch_hint_proton">Relay-only mode: the ProtonVPN app provides the kill switch here.</string>
+    <string name="chain_kill_switch_hint_external_app">Relay-only mode: your system VPN app provides the kill switch here.</string>
     <string name="chain_empty_state_title">No chain profile configured yet.</string>
     <string name="chain_open_settings">Open Settings</string>
 </resources>

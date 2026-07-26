@@ -1,7 +1,7 @@
 # Rotating the VLESS identity (relay client credentials)
 
 Rotate whenever the **VLESS UUID** / **REALITY short_id** may be exposed (e.g.
-shared in a conversation or captured in an AI memory store). Unlike the Proton
+shared in a conversation or captured in an AI memory store). Unlike the exit
 key, this is **client-affecting**: every client must pick up the new
 `secrets.env`, and the live connection breaks until you re-run `vpn-chain up`.
 
@@ -30,13 +30,14 @@ server/rotate-vless-identity.sh --reality
 vpn-chain down && vpn-chain up
 ```
 
-`vpn-chain status` should then show a healthy chain (entry via `proton0`, a Proton
+`vpn-chain status` should then show a healthy chain (entry via the entry app's
+interface, a provider-owned
 exit IP). If it breaks, restore the local backup `~/.config/vpn-chain/secrets.env.bak`
 and the server backup `/usr/local/etc/xray/config.json.bak.*`.
 
 ## Notes
 
-- The Proton exit chain is untouched — only the inbound identity changes.
+- The server's exit chain is untouched — only the inbound identity changes.
 - Requires `jq` + `xray` + `openssl` on the VPS.
 - Any other client (a future Android profile) must also be updated with the new
   UUID/short_id (+ REALITY public key if you used `--reality`).

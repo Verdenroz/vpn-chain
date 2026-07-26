@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <img src="assets/branding/hops-diagram.svg" width="880" alt="Route: you, through the optional ProtonVPN entry hop, through the VLESS+REALITY relay VPS, exiting directly to the internet — with a dashed single-hop path from you straight to the relay when the entry hop is off">
+  <img src="assets/branding/hops-diagram.svg" width="880" alt="Route: you, through the optional WireGuard entry hop, through the VLESS+REALITY relay VPS, exiting directly to the internet — with a dashed single-hop path from you straight to the relay when the entry hop is off">
 </p>
 
 With the entry hop on, a passive observer on your network sees a WireGuard
-connection to Proton, never a connection to the relay VPS. Toggle it off
-(**Settings → routing**) and the chain dials the relay directly — no Proton
-leg to stall, at the cost of the VPS seeing your IP — still disguised as
-HTTPS to your SNI.
+connection to your entry provider, never a connection to the relay VPS.
+Toggle it off (**Settings → routing**) and the chain dials the relay
+directly — no entry leg to stall, at the cost of the VPS seeing your IP —
+still disguised as HTTPS to your SNI.
 
 **Contents:** [Layout](#layout) · [Secrets](#secrets) · [Toolchain](#toolchain)
 · [Quick start](#quick-start-linux-cli) · [Apps](#apps) · [Releases](#releases)
@@ -29,8 +29,8 @@ instead of Hilt, so `commonMain` works on both Android and desktop).
 
 | Path | What |
 |------|------|
-| `cli/vpn-chain` | Linux CLI: renders a sing-box config from secrets, drives ProtonVPN + the relay. |
-| `cli/import-proton-entry.sh` | Imports a Proton WireGuard `.conf` into `secrets.env`, file-to-file (never prints the key). |
+| `cli/vpn-chain` | Linux CLI: renders a sing-box config from secrets, drives the entry hop + the relay. |
+| `cli/import-entry-conf.sh` | Imports a WireGuard `.conf` into `secrets.env`, file-to-file (never prints the key). |
 | `cli/killswitch/` | nftables kill-switch helper for desktop's WireGuard-entry-hop mode. |
 | `core/model` | KMP data classes: `ChainProfile`, `ChainStatus`, `TunnelState`, `UserSettings`, `LogEntry`. |
 | `core/common` | KMP coroutine scope/dispatcher qualifiers, `currentTimeMillis`. |
@@ -48,7 +48,7 @@ instead of Hilt, so `commonMain` works on both Android and desktop).
 | `app-common` | Themed shell: bottom-nav `Scaffold` + `NavHost`, Koin graph aggregation. |
 | `androidApp` | Native Android app (Compose + VpnService). |
 | `desktopApp` | Compose Multiplatform desktop (Windows/macOS/Linux). |
-| `server/` | VPS provisioning, Proton key rotation, link generator. |
+| `server/` | VPS provisioning, entry key rotation, link generator. |
 | `config-templates/` | sing-box templates + reference configs. |
 | `examples/secrets.env.example` | Template for the runtime secret file. |
 | `docs/` | Architecture, Android setup, desktop TUN/kill-switch internals, key rotation. |
@@ -87,9 +87,9 @@ org.gradle.java.home=/usr/lib/jvm/java-21-openjdk
 
 ```
 cli/vpn-chain install       # symlink into ~/.local/bin so `vpn-chain` works anywhere
-vpn-chain up                # connect Proton + start the relay
+vpn-chain up                # connect the entry hop + start the relay
 vpn-chain status            # entry path + exit IP
-vpn-chain down              # stop the relay (Proton stays up)
+vpn-chain down              # stop the relay (the entry hop stays up)
 ```
 
 `install` symlinks the script (override the target dir with
@@ -111,24 +111,26 @@ nav) and Koin for DI. Both tunnels are functional:
   `VpnService`, performing both hops itself since Android allows only one
   active VPN. See [docs/android.md](docs/android.md).
 
-**Entry hop:** optional. Configure the Proton WireGuard fields and the app
+**Entry hop:** optional, and any WireGuard peer will do — a commercial
+provider's config or your own box. Fill in the WireGuard fields and the app
 dials the entry hop itself; leave them blank and it runs single-hop
-(you → relay VPS → internet), or leave them blank and run the real ProtonVPN
-app to have that carry the entry hop instead. A configured entry can also be
-switched off without touching the profile (**Settings → routing → ProtonVPN
-entry hop**) — handy when the Proton peer is being flaky. Single-hop is
+(you → relay VPS → internet), or leave them blank and run a separate VPN app
+to have that carry the entry hop instead. A configured entry can also be
+switched off without touching the profile (**Settings → routing → wireguard
+entry hop**) — handy when the entry peer is being flaky. Single-hop is
 faster and has nothing to expire, but the VPS then sees your real address
 
 **Kill switch:** a narrow nftables helper for any TUN chain the app dials
-itself, single-hop included; ProtonVPN's own when that app is the entry hop
+itself, single-hop included; the external app's own when a separate VPN app
+carries the entry hop (desktop detects it by interface name)
 (setup in [docs/kill-switch.md](docs/kill-switch.md)). Android's is the OS's
 own Always-on VPN toggle (details in
 [docs/android.md](docs/android.md#kill-switch)).
 
 **DNS filtering:** on by default, and the reason a single-hop chain doesn't
-just lose NetShield — the chain's own resolver refuses malware, phishing,
-ad, and tracker domains from blocklists fetched through the tunnel, with
-NetShield's two levels (threats only / threats + ads). Scores 99% on
+lose filtering along with the entry hop — the chain's own resolver refuses
+malware, phishing, ad, and tracker domains from blocklists fetched through
+the tunnel, at two levels (threats only / threats + ads). Scores 99% on
 [d3ward's adblock test](https://d3ward.github.io/toolz/adblock);
 see [docs/dns-filtering.md](docs/dns-filtering.md). **Settings → dns**.
 

@@ -8,7 +8,7 @@
 #   bash set-exit-direct.sh
 #
 # Reverting to the Proton exit: restore the backup it prints, or re-run
-# deploy-server.sh with the PROTON_* env vars set (note: a full re-run also
+# deploy-server.sh with the EXIT_WG_* env vars set (note: a full re-run also
 # rotates your UUID/keys).
 set -euo pipefail
 
@@ -24,7 +24,7 @@ command -v jq >/dev/null || die "jq not installed — apt-get install -y jq"
 [ -x "$XRAY_BIN" ] || die "xray binary not found"
 
 # Already direct? (no proton outbound and catch-all points at direct)
-if ! jq -e '.outbounds[]? | select(.tag=="proton")' "$XRAY_CONFIG" >/dev/null 2>&1; then
+if ! jq -e '.outbounds[]? | select(.tag=="exit-wg")' "$XRAY_CONFIG" >/dev/null 2>&1; then
   log "No Proton outbound present — this relay already exits directly. Nothing to do."
   exit 0
 fi
@@ -39,13 +39,13 @@ tmp="$(mktemp --suffix=.json)"
 trap 'rm -f "$tmp"' EXIT
 jq '
   # 1. drop the Proton WireGuard outbound
-  .outbounds |= map(select(.tag != "proton"))
+  .outbounds |= map(select(.tag != "exit-wg"))
   # 2. retarget the catch-all (network "tcp,udp") rule to the direct freedom
   #    outbound FIRST — before step 3 removes proton rules, or it would delete
   #    the catch-all too (it still points at proton at this moment).
   | .routing.rules |= map(if (.network == "tcp,udp") then .outboundTag = "direct" else . end)
   # 3. drop any remaining rule that pointed at Proton (e.g. the Proton-DNS rule)
-  | .routing.rules |= map(select((.outboundTag // "") != "proton"))
+  | .routing.rules |= map(select((.outboundTag // "") != "exit-wg"))
 ' "$XRAY_CONFIG" > "$tmp" || die "jq transform failed (original left in place)"
 
 "$XRAY_BIN" -test -config "$tmp" >/dev/null \

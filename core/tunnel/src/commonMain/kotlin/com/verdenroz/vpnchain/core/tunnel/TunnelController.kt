@@ -28,7 +28,7 @@ interface TunnelController {
     /**
      * Whether this platform has an OS-level kill switch worth guiding the user
      * toward. Neither platform lets an app enable one silently - Android's is a
-     * system Settings toggle, desktop's is the real ProtonVPN app's own switch.
+     * system Settings toggle, desktop's is the external VPN app's own switch.
      */
     val killSwitchGuidanceSupported: Boolean get() = false
 
