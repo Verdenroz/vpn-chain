@@ -64,9 +64,11 @@ classes) → `core/config` (`SingBoxConfigFactory`: profile → sing-box JSON,
 `androidApp`/`desktopApp` (thin platform entry points).
 
 **WARP tail exit** (`core/warp` + the `warp-exit` endpoint in
-`SingBoxConfigFactory`): an optional Cloudflare hop *after* the relay, on by
-default for all traffic, because the VPS's datacenter address is refused
-outright by some sites. Two invariants worth keeping: the endpoint always
+`SingBoxConfigFactory`): an optional Cloudflare hop *after* the relay, for
+sites that refuse the VPS's datacenter address outright. Defaults to those
+sites only, not all traffic — the tail is dialled through the relay, so
+Cloudflare would otherwise see the VPS's unique address against every
+destination. Two invariants worth keeping: the endpoint always
 carries `detour` to the relay outbound (dialled through the chain, never
 around it — on desktop a bare-link handshake is rejected by the kill switch),
 and it is never added to the kill switch's exemption list. Read
