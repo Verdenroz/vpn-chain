@@ -289,6 +289,7 @@ private class FakeSettingsRepository(value: UserSettings) : SettingsRepository {
     override suspend fun setSystemWideTun(enabled: Boolean) = Unit
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
     override suspend fun setDnsFilter(filter: DnsFilter) = Unit
+    override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
     override suspend fun setCloseToTray(enabled: Boolean) = Unit

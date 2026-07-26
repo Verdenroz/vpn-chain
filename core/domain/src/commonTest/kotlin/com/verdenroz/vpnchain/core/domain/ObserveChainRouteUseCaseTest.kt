@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.core.domain
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.OriginRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
+import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.geoip.HopLocation
 import com.verdenroz.vpnchain.core.geoip.NetworkProbe
 import com.verdenroz.vpnchain.core.geoip.PublicIpSample
@@ -11,6 +12,9 @@ import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.SessionStats
+import com.verdenroz.vpnchain.core.model.DnsFilter
+import com.verdenroz.vpnchain.core.model.ThemeConfig
+import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
 import com.verdenroz.vpnchain.core.model.TunnelState
 import kotlin.test.Test
@@ -123,6 +127,20 @@ class ObserveChainRouteUseCaseTest {
         assertEquals(listOf(HopRole.Origin, HopRole.Exit), route.hops.map { it.role })
     }
 
+    /** The readout must draw the topology as dialed: a disabled entry is not a hop. */
+    @Test
+    fun `entry hop is absent when the setting disables it`() = runTest {
+        val world = TestWorld(
+            status = connectedStatus(exitIp = VPS_IP),
+            settings = UserSettings(entryHopEnabled = false),
+        )
+
+        val route = world.resolve()
+
+        assertNull(route.hop(HopRole.Entry))
+        assertEquals(listOf(HopRole.Origin, HopRole.Exit), route.hops.map { it.role })
+    }
+
     @Test
     fun `entry hop is reported as configured, never measured`() = runTest {
         val world = TestWorld(status = connectedStatus(exitIp = VPS_IP))
@@ -214,6 +232,7 @@ private class TestWorld(
     status: ChainStatus,
     profile: ChainProfile? = profile(),
     lastOrigin: String? = null,
+    settings: UserSettings = UserSettings(),
 ) {
     var clock = 1_000_000L
     val status = MutableStateFlow(status)
@@ -222,6 +241,7 @@ private class TestWorld(
 
     private val useCase = ObserveChainRouteUseCase(
         profileRepository = FakeProfiles(profile),
+        settingsRepository = FakeSettings(settings),
         chainRepository = FakeChain(this.status),
         originRepository = origins,
         geolocator = StubGeolocator,
@@ -265,6 +285,20 @@ private class FakeProfiles(profile: ChainProfile?) : ProfileRepository {
     override suspend fun importFromSecretsEnv(text: String) = Result.failure<ChainProfile>(
         UnsupportedOperationException("not used in these tests"),
     )
+}
+
+private class FakeSettings(settings: UserSettings) : SettingsRepository {
+    override val settings = MutableStateFlow(settings)
+    override suspend fun setThemeConfig(themeConfig: ThemeConfig) = Unit
+    override suspend fun setSystemWideTun(enabled: Boolean) = Unit
+    override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
+    override suspend fun setDnsFilter(filter: DnsFilter) = Unit
+    override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
+    override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
+    override suspend fun setAutoReconnect(enabled: Boolean) = Unit
+    override suspend fun setCloseToTray(enabled: Boolean) = Unit
+    override val autostartSupported = false
+    override suspend fun setAutoStartOnLogin(enabled: Boolean) = Result.success(Unit)
 }
 
 private class FakeChain(override val status: Flow<ChainStatus>) : ChainRepository {

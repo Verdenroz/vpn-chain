@@ -97,6 +97,10 @@ class SettingsViewModel(
         settingsRepository.setDnsFilter(filter)
     }
 
+    fun setEntryHopEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setEntryHopEnabled(enabled)
+    }
+
     fun setAutoConnectOnLaunch(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setAutoConnectOnLaunch(enabled)
     }

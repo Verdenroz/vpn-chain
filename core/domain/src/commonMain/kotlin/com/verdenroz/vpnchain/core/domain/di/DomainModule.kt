@@ -23,7 +23,7 @@ val domainModule = module {
     factory { DisconnectChainUseCase(get()) }
     factory { ImportProfileUseCase(get()) }
     // Singleton so origin-probe throttling holds across collectors.
-    single { ObserveChainRouteUseCase(get(), get(), get(), get(), get()) }
+    single { ObserveChainRouteUseCase(get(), get(), get(), get(), get(), get()) }
     // Eager and app-scoped: it has to be watching before the first drop, and it
     // must outlive any ViewModel that happens to be on screen when one happens.
     single(createdAtStart = true) {

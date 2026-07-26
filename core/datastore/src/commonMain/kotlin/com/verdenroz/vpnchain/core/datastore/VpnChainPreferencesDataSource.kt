@@ -67,6 +67,7 @@ class VpnChainPreferencesDataSource(
             dnsFilter = prefs[DNS_FILTER_KEY]
                 ?.let { raw -> runCatching { DnsFilter.valueOf(raw) }.getOrNull() }
                 ?: DnsFilter.AdsAndTrackers,
+            entryHopEnabled = prefs[ENTRY_HOP_ENABLED_KEY] ?: true,
             autoConnectOnLaunch = prefs[AUTO_CONNECT_ON_LAUNCH_KEY] ?: false,
             autoReconnect = prefs[AUTO_RECONNECT_KEY] ?: true,
             autoStartOnLogin = prefs[AUTO_START_ON_LOGIN_KEY] ?: false,
@@ -131,6 +132,10 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { it[DNS_FILTER_KEY] = filter.name }
     }
 
+    suspend fun setEntryHopEnabled(enabled: Boolean) {
+        dataStore.edit { it[ENTRY_HOP_ENABLED_KEY] = enabled }
+    }
+
     suspend fun setAutoConnectOnLaunch(enabled: Boolean) {
         dataStore.edit { it[AUTO_CONNECT_ON_LAUNCH_KEY] = enabled }
     }
@@ -156,6 +161,7 @@ class VpnChainPreferencesDataSource(
         val SYSTEM_WIDE_TUN_KEY = booleanPreferencesKey("system_wide_tun")
         val KILL_SWITCH_ENABLED_KEY = booleanPreferencesKey("kill_switch_enabled")
         val DNS_FILTER_KEY = stringPreferencesKey("dns_filter")
+        val ENTRY_HOP_ENABLED_KEY = booleanPreferencesKey("entry_hop_enabled")
         val LAST_ORIGIN_IP_KEY = stringPreferencesKey("last_origin_ip")
         val AUTO_CONNECT_ON_LAUNCH_KEY = booleanPreferencesKey("auto_connect_on_launch")
         val AUTO_RECONNECT_KEY = booleanPreferencesKey("auto_reconnect")

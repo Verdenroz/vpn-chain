@@ -4,10 +4,12 @@ import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.OriginRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
+import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.geoip.NetworkProbe
 import com.verdenroz.vpnchain.core.geoip.RouteGeolocator
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.effectiveFor
 import com.verdenroz.vpnchain.core.model.TunnelState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.transformLatest
  */
 class ObserveChainRouteUseCase(
     private val profileRepository: ProfileRepository,
+    private val settingsRepository: SettingsRepository,
     private val chainRepository: ChainRepository,
     private val originRepository: OriginRepository,
     private val geolocator: RouteGeolocator,
@@ -42,10 +45,16 @@ class ObserveChainRouteUseCase(
 
     private var lastSample: Sample? = null
 
+    /** The topology as dialed, not as stored — a disabled entry hop is not a hop. */
+    private val effectiveProfile: Flow<ChainProfile?> =
+        combine(profileRepository.profile, settingsRepository.settings) { profile, settings ->
+            profile?.effectiveFor(settings)
+        }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     operator fun invoke(): Flow<ChainRoute> =
         combine(
-            profileRepository.profile,
+            effectiveProfile,
             chainRepository.status,
             originRepository.lastKnownOriginIp,
             samples(),
@@ -69,7 +78,7 @@ class ObserveChainRouteUseCase(
     private fun samples(): Flow<Sample?> =
         combine(
             chainRepository.status.map { it.state == TunnelState.Connected }.distinctUntilChanged(),
-            profileRepository.profile,
+            effectiveProfile,
         ) { connected, profile -> connected to profile }
             .transformLatest { (connected, profile) ->
                 while (true) {

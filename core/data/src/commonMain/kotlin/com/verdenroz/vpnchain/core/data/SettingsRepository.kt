@@ -13,6 +13,7 @@ interface SettingsRepository {
     suspend fun setSystemWideTun(enabled: Boolean)
     suspend fun setKillSwitchEnabled(enabled: Boolean)
     suspend fun setDnsFilter(filter: DnsFilter)
+    suspend fun setEntryHopEnabled(enabled: Boolean)
     suspend fun setAutoConnectOnLaunch(enabled: Boolean)
     suspend fun setAutoReconnect(enabled: Boolean)
     suspend fun setCloseToTray(enabled: Boolean)
@@ -45,6 +46,8 @@ internal class DefaultSettingsRepository(
         preferences.setKillSwitchEnabled(enabled)
     override suspend fun setDnsFilter(filter: DnsFilter) =
         preferences.setDnsFilter(filter)
+    override suspend fun setEntryHopEnabled(enabled: Boolean) =
+        preferences.setEntryHopEnabled(enabled)
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) =
         preferences.setAutoConnectOnLaunch(enabled)
     override suspend fun setAutoReconnect(enabled: Boolean) =
