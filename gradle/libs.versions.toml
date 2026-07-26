@@ -26,9 +26,12 @@ androidxGlance = "1.1.1"
 okio = "3.17.0"
 # Genuine prebuilt sing-box mobile core (gomobile AAR); tag == sing-box version.
 libbox = "1.13.14"
-# QR encode
+# QR encode (desktop)
 zxing = "3.5.3"
-zxingAndroidEmbedded = "4.3.0"
+# QR scan (Android). ML Kit's bundled barcode model ships libbarhopper in the
+# AAR, so scanning works on de-Googled ROMs without Play Services installed.
+camerax = "1.6.1"
+mlkitBarcode = "17.3.0"
 
 [libraries]
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -51,7 +54,11 @@ androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidge
 okio = { group = "com.squareup.okio", name = "okio", version.ref = "okio" }
 libbox = { group = "com.github.singbox-android", name = "libbox", version.ref = "libbox" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
-zxing-android-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingAndroidEmbedded" }
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+androidx-camera-mlkit-vision = { group = "androidx.camera", name = "camera-mlkit-vision", version.ref = "camerax" }
+mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcode" }
 # Gradle plugin artifacts, used by build-logic convention plugins (compileOnly).
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
 android-tools-common = { group = "com.android.tools", name = "common", version.ref = "androidTools" }

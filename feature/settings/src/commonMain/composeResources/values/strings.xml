@@ -51,6 +51,9 @@
     <string name="settings_show_qr">show qr</string>
     <string name="settings_hide_qr">hide qr</string>
     <string name="settings_qr_warning">Contains your VPN credentials. Keep this screen private.</string>
+    <string name="settings_scan_hint">Fill the frame with the desktop app's QR code. Pinch to zoom.</string>
+    <string name="settings_scan_cancel">cancel</string>
+    <string name="settings_scan_no_camera_permission">Camera permission is required to scan a pairing code.</string>
     <string name="settings_field_vps_ip">vps ip</string>
     <string name="settings_field_vless_uuid">vless uuid</string>
     <string name="settings_field_reality_public_key">reality public key</string>

@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.verdenroz.vpnchain.core.common.Platform
@@ -98,6 +99,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_secr
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_show_qr
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_window_title
+import kotlin.math.max
+import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -531,13 +534,19 @@ private fun QrPairingPanel(profile: ChainProfile) {
         )
         Spacer(Modifier.height(12.dp))
         bitmap?.let {
+            // Round to a whole number of device pixels per module. Any fractional
+            // scale makes neighbouring modules differ in width, and that uneven
+            // grid is what a phone camera fails to lock onto.
+            val density = LocalDensity.current
+            val modulePx = with(density) { QR_TARGET_SIZE.toPx() } / it.width
+            val scale = max(QR_MIN_MODULE_PX, modulePx.roundToInt())
             Image(
                 bitmap = it,
                 contentDescription = null,
-                // Nearest-neighbor, not the default bilinear: the QR is a phone
-                // camera's target, so blurred module edges hurt scan reliability.
+                // Nearest-neighbor, not the default bilinear: the integer upscale
+                // above keeps every module square, which filtering would blur back out.
                 filterQuality = FilterQuality.None,
-                modifier = Modifier.size(280.dp),
+                modifier = Modifier.size(with(density) { (it.width * scale).toDp() }),
             )
         }
     }
