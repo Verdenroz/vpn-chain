@@ -1,0 +1,70 @@
+# Converts hagezi's DNS blocklists to sing-box .srs and publishes them to the
+# rolling `blocklists` release the app's DNS filter points at.
+#
+# Sources (see docs/dns-filtering.md for the tier rationale):
+#   ads-trackers.srs  hagezi Pro++    (ads, trackers, telemetry)
+#   threats.srs       hagezi TIF med  (malware, phishing, scam)
+name: blocklists
+
+on:
+  schedule:
+    - cron: "17 3 * * 1" # weekly, Mon 03:17 UTC; hagezi updates daily
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/blocklists.yml"]
+    branches: [main]
+
+permissions:
+  contents: write
+
+env:
+  # Keep in step with the sing-box the app ships/spawns; the .srs format is
+  # versioned and an old runtime can't read a newer compilation.
+  SING_BOX_VERSION: "1.13.14"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install sing-box
+        run: |
+          curl -fsSL -o sb.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v${SING_BOX_VERSION}/sing-box-${SING_BOX_VERSION}-linux-amd64.tar.gz"
+          tar -xzf sb.tar.gz --strip-components=1
+          ./sing-box version
+
+      - name: Download hagezi lists
+        run: |
+          curl -fsSL -o ads-trackers.txt "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.plus.txt"
+          curl -fsSL -o threats.txt "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.medium.txt"
+          wc -l ads-trackers.txt threats.txt
+
+      - name: Convert to .srs
+        run: |
+          ./sing-box rule-set convert --type adguard ads-trackers.txt
+          ./sing-box rule-set convert --type adguard threats.txt
+          ls -l ads-trackers.srs threats.srs
+
+      - name: Canary checks
+        run: |
+          # Rule counts collapse if a download was truncated to an error page.
+          for f in ads-trackers.txt threats.txt; do
+            [ "$(wc -l < "$f")" -gt 100000 ] || { echo "$f suspiciously small"; exit 1; }
+          done
+          match() { ./sing-box rule-set match --format binary "$1" "$2" 2>&1 | grep -q match; }
+          match ads-trackers.srs scorecardresearch.com || { echo "ads canary not blocked"; exit 1; }
+          match ads-trackers.srs app-measurement.com || { echo "ads canary not blocked"; exit 1; }
+          match threats.srs malware.wicar.org || { echo "threat canary not blocked"; exit 1; }
+          # An overbroad list is as unshippable as an empty one.
+          if match ads-trackers.srs github.com || match threats.srs github.com; then
+            echo "benign canary blocked"; exit 1
+          fi
+
+      - name: Publish to rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Compiled $(date -u +%F) from hagezi/dns-blocklists (Pro++ / TIF medium) with sing-box ${SING_BOX_VERSION}."$'\n'"Rules: $(wc -l < ads-trackers.txt) ads-trackers, $(wc -l < threats.txt) threats."
+          gh release view blocklists -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create blocklists -R "$GITHUB_REPOSITORY" --title "DNS blocklists (rolling)" --notes "$notes" --latest=false
+          gh release edit blocklists -R "$GITHUB_REPOSITORY" --notes "$notes" --latest=false
+          gh release upload blocklists ads-trackers.srs threats.srs -R "$GITHUB_REPOSITORY" --clobber
