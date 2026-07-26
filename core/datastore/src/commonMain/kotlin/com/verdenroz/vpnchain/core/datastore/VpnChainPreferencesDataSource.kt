@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
@@ -63,6 +64,9 @@ class VpnChainPreferencesDataSource(
                 ?: ThemeConfig.FOLLOW_SYSTEM,
             systemWideTun = prefs[SYSTEM_WIDE_TUN_KEY] ?: true,
             killSwitchEnabled = prefs[KILL_SWITCH_ENABLED_KEY] ?: true,
+            dnsFilter = prefs[DNS_FILTER_KEY]
+                ?.let { raw -> runCatching { DnsFilter.valueOf(raw) }.getOrNull() }
+                ?: DnsFilter.AdsAndTrackers,
             autoConnectOnLaunch = prefs[AUTO_CONNECT_ON_LAUNCH_KEY] ?: false,
             autoReconnect = prefs[AUTO_RECONNECT_KEY] ?: true,
             autoStartOnLogin = prefs[AUTO_START_ON_LOGIN_KEY] ?: false,
@@ -123,6 +127,10 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { it[KILL_SWITCH_ENABLED_KEY] = enabled }
     }
 
+    suspend fun setDnsFilter(filter: DnsFilter) {
+        dataStore.edit { it[DNS_FILTER_KEY] = filter.name }
+    }
+
     suspend fun setAutoConnectOnLaunch(enabled: Boolean) {
         dataStore.edit { it[AUTO_CONNECT_ON_LAUNCH_KEY] = enabled }
     }
@@ -147,6 +155,7 @@ class VpnChainPreferencesDataSource(
         val THEME_KEY = stringPreferencesKey("theme_config")
         val SYSTEM_WIDE_TUN_KEY = booleanPreferencesKey("system_wide_tun")
         val KILL_SWITCH_ENABLED_KEY = booleanPreferencesKey("kill_switch_enabled")
+        val DNS_FILTER_KEY = stringPreferencesKey("dns_filter")
         val LAST_ORIGIN_IP_KEY = stringPreferencesKey("last_origin_ip")
         val AUTO_CONNECT_ON_LAUNCH_KEY = booleanPreferencesKey("auto_connect_on_launch")
         val AUTO_RECONNECT_KEY = booleanPreferencesKey("auto_reconnect")

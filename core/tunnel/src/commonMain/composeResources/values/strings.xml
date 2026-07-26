@@ -7,6 +7,10 @@
     <string name="tunnel_error_cannot_launch">cannot launch '%1$s': is sing-box installed and on PATH?</string>
     <string name="tunnel_error_exit_kill_switch_engaged">sing-box exited (%1$d). Kill switch engaged, network is blocked. Reconnect, or Disconnect to restore normal routing.</string>
     <string name="tunnel_error_exit_generic">sing-box exited (%1$d): see Logs for details</string>
+    <string name="tunnel_error_no_traffic">the chain came up but carried no traffic — the entry hop never completed a handshake. Retrying.</string>
+    <string name="tunnel_log_awaiting_traffic">tunnel up, waiting for the chain to carry traffic…</string>
+    <string name="tunnel_log_chain_stalled">chain stopped carrying traffic — tearing it down so it can be rebuilt</string>
+    <string name="tunnel_error_stopped_carrying">the chain stopped carrying traffic — the entry hop went silent. Reconnecting.</string>
     <string name="tunnel_status_tun_adopted">system-wide (TUN), adopted running relay</string>
     <string name="tunnel_status_tun">system-wide (TUN)</string>
     <string name="tunnel_status_sharing_cli">sharing relay with CLI</string>

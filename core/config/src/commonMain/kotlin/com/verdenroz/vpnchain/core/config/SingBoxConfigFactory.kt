@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
@@ -27,7 +28,7 @@ object SingBoxConfigFactory {
     /** Relay-only config for desktop/CLI (mixed inbound → VLESS). */
     fun mixedProxyConfig(profile: ChainProfile, clashApi: ClashApi? = null): String = render {
         putInfoLog()
-        putClashApi(clashApi)
+        putExperimental(clashApi, cacheFile = false, cachePath = null)
         putJsonArray("inbounds") {
             addJsonObject {
                 put("type", "mixed")
@@ -52,12 +53,23 @@ object SingBoxConfigFactory {
      * When [ChainProfile.protonEntry] is null the chain is relay-only (VLESS
      * dialed directly), which is simpler but exposes the device's IP to the VPS.
      */
-    fun androidChainConfig(profile: ChainProfile, clashApi: ClashApi? = null): String {
+    fun androidChainConfig(
+        profile: ChainProfile,
+        clashApi: ClashApi? = null,
+        dnsFilter: DnsFilter = DnsFilter.Off,
+        cachePath: String? = null,
+    ): String {
         val entry = profile.protonEntry
+        val filtering = dnsFilter != DnsFilter.Off
         return render {
             putInfoLog()
-            putClashApi(clashApi)
-            putJsonObject("dns") { putDnsServers(entry) }
+            // The rule-set is remote, so it needs somewhere to persist between
+            // runs; without the cache every connect re-downloads it.
+            putExperimental(clashApi, cacheFile = filtering, cachePath = cachePath)
+            putJsonObject("dns") {
+                putDnsServers(entry)
+                if (filtering) putBlocklistRules(dnsFilter)
+            }
             putJsonArray("inbounds") {
                 addJsonObject {
                     put("type", "tun")
@@ -94,6 +106,7 @@ object SingBoxConfigFactory {
             }
             putJsonObject("route") {
                 put("auto_detect_interface", true)
+                if (filtering) putBlocklistRuleSet(dnsFilter)
                 putJsonArray("rules") {
                     addJsonObject { put("action", "sniff") }
                     addJsonObject { put("protocol", "dns"); put("action", "hijack-dns") }
@@ -115,17 +128,76 @@ object SingBoxConfigFactory {
 
     // info (not warn) so the Logs screen shows connection/handshake activity.
     /**
-     * Read-only on our side, but the same API can close connections and switch
-     * outbounds — hence the secret, and the loopback-only bind.
+     * sing-box allows one `experimental` block, so the clash API and the
+     * rule-set cache have to be written together or the second wins.
+     *
+     * The API is read-only on our side, but the same one can close connections
+     * and switch outbounds — hence the secret, and the loopback-only bind.
      */
-    private fun JsonObjectBuilder.putClashApi(clashApi: ClashApi?) {
-        if (clashApi == null) return
+    private fun JsonObjectBuilder.putExperimental(
+        clashApi: ClashApi?,
+        cacheFile: Boolean,
+        cachePath: String?,
+    ) {
+        if (clashApi == null && !cacheFile) return
         putJsonObject("experimental") {
-            putJsonObject("clash_api") {
-                put("external_controller", clashApi.externalController)
-                put("secret", clashApi.secret)
+            if (clashApi != null) {
+                putJsonObject("clash_api") {
+                    put("external_controller", clashApi.externalController)
+                    put("secret", clashApi.secret)
+                }
+            }
+            if (cacheFile) {
+                putJsonObject("cache_file") {
+                    put("enabled", true)
+                    // Relative by default, which resolves against a working
+                    // directory we don't control — at login it can be `/`.
+                    if (cachePath != null) put("path", cachePath)
+                }
             }
         }
+    }
+
+    /**
+     * NetShield's job, done client-side: reject the lookup outright rather than
+     * answer with an address. `refused` fails callers fast instead of leaving
+     * them to time out on a black-holed connection. One rule covers every
+     * rule-set of the level — a name is refused if any of them lists it.
+     */
+    private fun JsonObjectBuilder.putBlocklistRules(filter: DnsFilter) {
+        putJsonArray("rules") {
+            addJsonObject {
+                putJsonArray("rule_set") { blocklistsFor(filter).forEach { add(it.tag) } }
+                put("action", "reject")
+                put("method", "default")
+            }
+        }
+    }
+
+    /**
+     * Downloaded through the chain, never around it — a blocklist fetched over
+     * the bare link would announce the app to the network it is hiding from.
+     * Binary `.srs` is the compiled form sing-box loads directly.
+     */
+    private fun JsonObjectBuilder.putBlocklistRuleSet(filter: DnsFilter) {
+        putJsonArray("rule_set") {
+            blocklistsFor(filter).forEach { list ->
+                addJsonObject {
+                    put("type", "remote")
+                    put("tag", list.tag)
+                    put("format", "binary")
+                    put("url", list.url)
+                    put("download_detour", VLESS_TAG)
+                    put("update_interval", "168h")
+                }
+            }
+        }
+    }
+
+    private fun blocklistsFor(filter: DnsFilter): List<Blocklist> = when (filter) {
+        DnsFilter.Off -> emptyList()
+        DnsFilter.Malware -> listOf(THREATS_LIST)
+        DnsFilter.AdsAndTrackers -> listOf(THREATS_LIST, GEOSITE_ADS_LIST, ADS_TRACKERS_LIST)
     }
 
     private fun JsonObjectBuilder.putInfoLog() =
@@ -208,4 +280,32 @@ object SingBoxConfigFactory {
 
     private const val VLESS_TAG = "vless-proxy"
     private const val PROTON_ENTRY_TAG = "proton-entry"
+
+    private data class Blocklist(val tag: String, val url: String)
+
+    /**
+     * These files decide what the chain refuses to resolve, so each comes from
+     * a party we already trust: sing-box's own geosite mirror (the upstream
+     * that ships the binary we run), and our own `blocklists` release, where
+     * CI converts hagezi's lists with a pinned sing-box — no third-party
+     * conversion repo in between. See `.github/workflows/blocklists.yml`.
+     */
+    private const val BLOCKLISTS_RELEASE =
+        "https://github.com/Verdenroz/vpn-chain/releases/download/blocklists"
+
+    /** hagezi TIF medium: malware, phishing, and scam domains. */
+    private val THREATS_LIST = Blocklist("blocklist-threats", "$BLOCKLISTS_RELEASE/threats.srs")
+
+    /** hagezi Pro++: ads, trackers, telemetry. 99% on d3ward's adblock test. */
+    private val ADS_TRACKERS_LIST =
+        Blocklist("blocklist-ads-trackers", "$BLOCKLISTS_RELEASE/ads-trackers.srs")
+
+    /**
+     * v2fly's ad list, kept alongside hagezi's: it blocks apex domains hagezi
+     * deliberately spares (e.g. `doubleclick.net`), and it costs 8 KB.
+     */
+    private val GEOSITE_ADS_LIST = Blocklist(
+        "blocklist-ads",
+        "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs",
+    )
 }

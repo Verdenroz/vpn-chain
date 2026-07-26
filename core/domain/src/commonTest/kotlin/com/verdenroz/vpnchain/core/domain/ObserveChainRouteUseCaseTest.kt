@@ -17,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -161,6 +162,21 @@ class ObserveChainRouteUseCaseTest {
         assertEquals(2, world.probe.calls)
     }
 
+    /** The stall this exists to prevent: the periodic refresh used to cancel the
+     *  probe in flight, so on a link slower than one tick — a tunnel still
+     *  warming up — the route never resolved at all. */
+    @Test
+    fun `a probe slower than the refresh interval still resolves`() = runTest {
+        val world = TestWorld(status = connectedStatus(exitIp = null))
+        world.probe.next = PublicIpSample(VPS_IP, elapsedMs = 7_000)
+        world.probe.takesMs = 7_000
+
+        val exit = world.resolve().hop(HopRole.Exit)
+
+        assertEquals(VPS_IP, exit?.ip)
+        assertEquals(HopEvidence.Measured, exit?.evidence)
+    }
+
     @Test
     fun `a failed probe keeps the last reading for the same path rather than blanking it`() = runTest {
         val world = TestWorld(status = ChainStatus(state = TunnelState.Disconnected))
@@ -218,9 +234,11 @@ private class TestWorld(
 
 private class FakeProbe : NetworkProbe {
     var next: PublicIpSample? = null
+    var takesMs = 0L
     var calls = 0
     override suspend fun samplePublicIp(): PublicIpSample? {
         calls++
+        if (takesMs > 0) delay(takesMs)
         return next
     }
 }

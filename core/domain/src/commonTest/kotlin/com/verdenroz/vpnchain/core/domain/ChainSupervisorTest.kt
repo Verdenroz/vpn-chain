@@ -6,6 +6,7 @@ import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.ThemeConfig
@@ -287,6 +288,7 @@ private class FakeSettingsRepository(value: UserSettings) : SettingsRepository {
     override suspend fun setThemeConfig(themeConfig: ThemeConfig) = Unit
     override suspend fun setSystemWideTun(enabled: Boolean) = Unit
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
+    override suspend fun setDnsFilter(filter: DnsFilter) = Unit
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
     override suspend fun setCloseToTray(enabled: Boolean) = Unit

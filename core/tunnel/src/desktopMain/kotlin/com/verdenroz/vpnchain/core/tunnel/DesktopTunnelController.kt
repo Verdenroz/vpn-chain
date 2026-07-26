@@ -13,11 +13,15 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_canno
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_exit_generic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_exit_kill_switch_engaged
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_kill_switch_unavailable
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_no_traffic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_relay_already_running_pid
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_stopped_carrying
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_tun_privilege_hint
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted_relay_port
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted_system_wide
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_already_state
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_awaiting_traffic
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_chain_stalled
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_disengaged
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_engaged
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_helper_error
@@ -105,6 +109,7 @@ class DesktopTunnelController(
     private var process: Process? = null
     private var readerJob: Job? = null
     private var logTailJob: Job? = null
+    private var healthJob: Job? = null
 
     @Volatile
     private var proxyPort: Int = DEFAULT_PROXY_PORT
@@ -122,6 +127,11 @@ class DesktopTunnelController(
     /** True once the nftables kill-switch table has been installed for this session. */
     @Volatile
     private var killSwitchEngaged: Boolean = false
+
+    /** Set while a Disconnect is queued, so a start still checking whether the
+     *  chain carries traffic gives up the lock instead of making the user wait. */
+    @Volatile
+    private var stopRequested: Boolean = false
 
     /**
      * Resolves a log string, never throwing — a resource-loading hiccup (rare,
@@ -171,7 +181,7 @@ class DesktopTunnelController(
         val proc = spawnSingBox(configJson) ?: return
         // Readiness isn't a log line (the "started" message is buried), so watch
         // for the proxy port to come up. If the process dies the reader reports it.
-        awaitReady(proc) { isRelayListening(proxyPort) }
+        if (awaitListening(proc) { isRelayListening(proxyPort) }) confirmCarrying(proc)
     }
 
     private suspend fun startTun(configJson: String) {
@@ -197,16 +207,14 @@ class DesktopTunnelController(
             emitLog(Res.string.tunnel_error_already_running_hint)
             return
         }
-        // Only the WG-entry-hop path needs this: relay-only relies on the real
-        // ProtonVPN app's own kill switch instead (see markConnected).
-        if (tunHasEntry && killSwitchEnabled) engageKillSwitch(configJson)
+        if (killSwitchEnabled && firewallIsOurs()) engageKillSwitch(configJson)
         val proc = spawnSingBox(configJson)
         if (proc == null) {
             // Never actually started - nothing to protect, don't leave traffic blocked.
             disengageKillSwitch()
             return
         }
-        awaitReady(proc) { tunInterfaceUp() }
+        if (awaitListening(proc) { tunInterfaceUp() }) confirmCarrying(proc)
     }
 
     /**
@@ -249,6 +257,17 @@ class DesktopTunnelController(
         markConnected(adopted = true)
         return true
     }
+
+    /**
+     * Whether fail-closed protection is this app's job for the chain being
+     * dialed. It is for any TUN chain we dial ourselves — including a
+     * single-hop one, which has no entry hop to lean on.
+     *
+     * The exception is the real ProtonVPN app carrying our entry hop: its own
+     * kill switch already covers us, and our table would blackhole its
+     * WireGuard endpoint, which the config never lists as an exemption.
+     */
+    private fun firewallIsOurs(): Boolean = tunHasEntry || !protonInterfaceUp()
 
     /**
      * Installs an nftables OUTPUT-chain table that drops all outbound traffic
@@ -388,7 +407,7 @@ class DesktopTunnelController(
                         emitLog(Res.string.tunnel_error_tun_privilege_hint)
                     }
                 }
-                stopLogTail()
+                stopSessionJobs()
                 // A crash after Connected keeps the kill switch engaged — that leak is
                 // exactly what it exists to stop. A startup that never got there
                 // protected nothing, so leave networking as we found it instead.
@@ -408,47 +427,93 @@ class DesktopTunnelController(
         return proc
     }
 
-    private suspend fun awaitReady(proc: Process, ready: () -> Boolean) {
+    /** Waits for the relay to accept traffic at all — the tun device to exist,
+     *  or the proxy port to bind. @return false once the process is gone. */
+    private suspend fun awaitListening(proc: Process, ready: () -> Boolean): Boolean {
         repeat(STARTUP_POLLS) {
-            if (!proc.isAlive) return
-            if (ready()) {
-                markConnected(adopted = false)
-                return
-            }
+            if (!proc.isAlive) return false
+            if (ready()) return true
             delay(STARTUP_POLL_MS)
         }
-        // Still alive but never signalled ready — surface it rather than hang.
-        if (proc.isAlive && _status.value.state == TunnelState.Connecting) {
-            markConnected(adopted = false)
+        // Still alive but never signalled ready — carry on to the traffic check
+        // rather than hang; that is what decides it either way.
+        return proc.isAlive
+    }
+
+    /**
+     * Connected has to mean the chain carries traffic. The tun device exists
+     * within milliseconds — long before the WireGuard entry hop has handshaked
+     * — and reporting that as up hands the user a tunnel that swallows every
+     * request, most often when auto-connect fires at login and nothing is warm.
+     */
+    private suspend fun confirmCarrying(proc: Process) {
+        emitLog(Res.string.tunnel_log_awaiting_traffic)
+        repeat(READINESS_ATTEMPTS) {
+            if (!stillWaitingToCarry(proc)) return
+            val exitIp = probeExitIp(READINESS_PROBE_TIMEOUT_MS)
+            if (exitIp != null) {
+                markConnected(adopted = false, exitIp = exitIp)
+                return
+            }
+            delay(READINESS_RETRY_MS)
+        }
+        // The reader job owns the dead-process case; this is the live-but-dead
+        // one. Tearing it down lets the supervisor retry from a clean state
+        // instead of leaving a tunnel that will never carry anything.
+        if (!stillWaitingToCarry(proc)) return
+        tearDown()
+        _status.value = ChainStatus(
+            state = TunnelState.Error,
+            detail = UiText.Resource(Res.string.tunnel_error_no_traffic),
+        )
+    }
+
+    /** Whether the traffic check should keep going: the relay is still ours, the
+     *  status is still ours to set, and the user hasn't asked to come down. */
+    private fun stillWaitingToCarry(proc: Process): Boolean =
+        proc.isAlive && !stopRequested && _status.value.state == TunnelState.Connecting
+
+    override suspend fun stop() = withContext(Dispatchers.IO) {
+        // Raised before queueing for the lock: the traffic check can hold it for
+        // half a minute, and Disconnect has to answer sooner than that.
+        stopRequested = true
+        try {
+            startStopLock.withLock { tearDown() }
+        } finally {
+            stopRequested = false
         }
     }
 
-    override suspend fun stop() = withContext(Dispatchers.IO) {
-        startStopLock.withLock {
-            // Forced: after a GUI restart this process didn't install the table but
-            // still has to be able to restore networking — Disconnect is the user's
-            // documented way out of a fail-closed state.
-            disengageKillSwitch(force = true)
-            // Set before killing so the reader job doesn't report the shutdown as a crash.
-            _status.value = ChainStatus(state = TunnelState.Disconnected)
-            readerJob?.cancel()
-            readerJob = null
-            process?.let { own ->
-                own.destroy()
-                if (!own.waitFor(PROCESS_EXIT_TIMEOUT_S, TimeUnit.SECONDS)) own.destroyForcibly()
-            }
-            process = null
-            // Adopted relay (the CLI's, or a previous GUI run): stop it via the shared
-            // pidfile so Disconnect is one consistent control across both front-ends.
-            livePidFileProcess()?.let { adopted ->
-                adopted.destroy()
-                runCatching { adopted.onExit().get(PROCESS_EXIT_TIMEOUT_S, TimeUnit.SECONDS) }
-                if (adopted.isAlive) adopted.destroyForcibly()
-            }
-            stopLogTail()
-            removePidFile()
-            Unit
+    /**
+     * The teardown itself, for callers already holding [startStopLock] — the
+     * mutex is not reentrant, and a failed start has to unwind from inside it.
+     * [restoreNetworking] is false when the chain is coming down *because* it
+     * failed, where lifting the kill switch would leak the traffic it exists
+     * to hold.
+     */
+    private suspend fun tearDown(restoreNetworking: Boolean = true) {
+        // Forced: after a GUI restart this process didn't install the table but
+        // still has to be able to restore networking — Disconnect is the user's
+        // documented way out of a fail-closed state.
+        if (restoreNetworking) disengageKillSwitch(force = true)
+        // Set before killing so the reader job doesn't report the shutdown as a crash.
+        _status.value = ChainStatus(state = TunnelState.Disconnected)
+        readerJob?.cancel()
+        readerJob = null
+        process?.let { own ->
+            own.destroy()
+            if (!own.waitFor(PROCESS_EXIT_TIMEOUT_S, TimeUnit.SECONDS)) own.destroyForcibly()
         }
+        process = null
+        // Adopted relay (the CLI's, or a previous GUI run): stop it via the shared
+        // pidfile so Disconnect is one consistent control across both front-ends.
+        livePidFileProcess()?.let { adopted ->
+            adopted.destroy()
+            runCatching { adopted.onExit().get(PROCESS_EXIT_TIMEOUT_S, TimeUnit.SECONDS) }
+            if (adopted.isAlive) adopted.destroyForcibly()
+        }
+        stopSessionJobs()
+        removePidFile()
     }
 
     /** Reflects relay up/down driven from outside this process (the CLI, or a
@@ -463,7 +528,7 @@ class DesktopTunnelController(
                     TunnelState.Disconnected, TunnelState.Error -> adoptRunningSession()
                     TunnelState.Connected ->
                         if (detectRunningSession() == null) {
-                            stopLogTail()
+                            stopSessionJobs()
                             _status.value = ChainStatus(state = TunnelState.Disconnected)
                         }
                     TunnelState.Connecting -> Unit
@@ -474,21 +539,27 @@ class DesktopTunnelController(
         }
     }
 
-    private fun markConnected(adopted: Boolean) {
+    /** [exitIp] is set when readiness already measured it; an adopted relay has
+     *  not been probed yet, so it is looked up below instead. */
+    private fun markConnected(adopted: Boolean, exitIp: String? = null) {
         val realProtonAppUp = protonInterfaceUp()
         _status.value = ChainStatus(
             state = TunnelState.Connected,
+            exitIp = exitIp,
             // Entry is via Proton whether sing-box dialed the WireGuard entry
             // itself, or the real Proton app happens to be the OS default route.
             entryThroughProton = tunHasEntry || realProtonAppUp,
-            // Two independent mechanisms, depending on which entry-hop mode is
-            // active: relay-only leans on the real Proton app's own kill switch;
-            // the WG-entry-hop path gets its own nftables helper instead.
+            // Two independent mechanisms: our own nftables table for any TUN
+            // chain we dial, and the real Proton app's kill switch when that
+            // app is the entry hop. Reported by what actually holds, not by
+            // which mode was configured.
             killSwitch = when {
-                !tunHasEntry ->
-                    if (realProtonAppUp) KillSwitchState.Active else KillSwitchState.ProtonAppRequired
                 killSwitchEngaged -> KillSwitchState.Active
+                realProtonAppUp -> KillSwitchState.Active
                 !killSwitchEnabled -> KillSwitchState.Disabled
+                // Proxy mode captures nothing system-wide, so there is nothing
+                // for a firewall of ours to fail closed around.
+                !tunMode -> KillSwitchState.ProtonAppRequired
                 // Enabled and attempted, but the helper never came back happy.
                 else -> KillSwitchState.HelperUnavailable
             },
@@ -501,16 +572,17 @@ class DesktopTunnelController(
         )
         startLogTail()
         startStatsPoll()
+        startHealthWatch()
+        if (exitIp != null) return
         scope.launch(Dispatchers.IO) {
-            // The first request after a fresh relay often times out while the
-            // VLESS connection warms up, so retry a few times. In TUN mode all
-            // traffic is captured, so probe directly; in proxy mode go via SOCKS.
+            // An adopted relay was never probed, and the first request after a
+            // fresh one often times out while the VLESS connection warms up.
             repeat(EXIT_IP_ATTEMPTS) {
                 if (_status.value.state != TunnelState.Connected) return@launch
-                val exitIp = if (tunMode) probeExitIpDirect() else probeExitIp(proxyPort)
-                if (exitIp != null) {
+                val probed = probeExitIp()
+                if (probed != null) {
                     if (_status.value.state == TunnelState.Connected) {
-                        _status.value = _status.value.copy(exitIp = exitIp)
+                        _status.value = _status.value.copy(exitIp = probed)
                     }
                     return@launch
                 }
@@ -587,16 +659,66 @@ class DesktopTunnelController(
         }
     }
 
+    /**
+     * Watches a live session for the failure the readiness gate cannot catch: a
+     * chain that came up carrying traffic and later went silent. sing-box stays
+     * alive and the tun device stays present through that, so nothing else
+     * notices — which is why it takes a manual reconnect to clear today.
+     */
+    private fun startHealthWatch() {
+        healthJob?.cancel()
+        healthJob = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(HEALTH_INTERVAL_MS)
+                if (_status.value.state != TunnelState.Connected) return@launch
+                // Only relays we started: an adopted one belongs to the CLI or an
+                // older run, and is not ours to tear down.
+                if (process?.isAlive != true) return@launch
+                if (carriesTraffic()) continue
+                // Handed to a sibling job so cancelling this one mid-teardown
+                // (stopSessionJobs does exactly that) cannot leave it half done.
+                scope.launch(Dispatchers.IO) { failStalledChain() }
+                return@launch
+            }
+        }
+    }
+
+    /** One lost probe is a blip; the verdict needs a couple in a row to miss. */
+    private suspend fun carriesTraffic(): Boolean {
+        repeat(HEALTH_CONFIRM_ATTEMPTS) {
+            if (probeExitIp(READINESS_PROBE_TIMEOUT_MS) != null) return true
+            if (_status.value.state != TunnelState.Connected) return true
+            delay(HEALTH_CONFIRM_RETRY_MS)
+        }
+        return false
+    }
+
+    private suspend fun failStalledChain() = startStopLock.withLock {
+        if (_status.value.state != TunnelState.Connected) return@withLock
+        emitLog(Res.string.tunnel_log_chain_stalled)
+        // The session did reach Connected, so the kill switch stays up: traffic
+        // stays blocked until something carries it again, which is the whole
+        // point of it. Disconnect remains the documented way out.
+        tearDown(restoreNetworking = false)
+        _status.value = ChainStatus(
+            state = TunnelState.Error,
+            detail = UiText.Resource(Res.string.tunnel_error_stopped_carrying),
+        )
+    }
+
     private fun stopStatsPoll() {
         statsJob?.cancel()
         statsJob = null
         _stats.value = SessionStats()
     }
 
-    private fun stopLogTail() {
+    /** Everything that only makes sense while a session is live. */
+    private fun stopSessionJobs() {
         stopStatsPoll()
         logTailJob?.cancel()
         logTailJob = null
+        healthJob?.cancel()
+        healthJob = null
     }
 
     private fun emitRecentLog() =
@@ -614,20 +736,20 @@ class DesktopTunnelController(
             Socket().use { it.connect(InetSocketAddress("127.0.0.1", port), PROBE_TIMEOUT_MS); true }
         }.getOrDefault(false)
 
-    /** Best-effort exit IP via the local SOCKS5 proxy, like `vpn-chain status`. */
-    private fun probeExitIp(port: Int): String? = runCatching {
-        val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", port))
-        val conn = URI("https://api.ipify.org").toURL().openConnection(proxy) as HttpURLConnection
-        conn.connectTimeout = HTTP_TIMEOUT_MS
-        conn.readTimeout = HTTP_TIMEOUT_MS
-        conn.inputStream.bufferedReader().use { it.readText().trim() }.ifBlank { null }
-    }.getOrNull()
-
-    /** In TUN mode all traffic is already captured, so probe the exit IP directly. */
-    private fun probeExitIpDirect(): String? = runCatching {
-        val conn = URI("https://api.ipify.org").toURL().openConnection() as HttpURLConnection
-        conn.connectTimeout = HTTP_TIMEOUT_MS
-        conn.readTimeout = HTTP_TIMEOUT_MS
+    /**
+     * The exit address as the far end sees it — proof the whole chain carries
+     * traffic, not just that a device exists. TUN mode captures everything, so
+     * it probes directly; proxy mode goes via the local SOCKS listener.
+     */
+    private fun probeExitIp(timeoutMs: Int = HTTP_TIMEOUT_MS): String? = runCatching {
+        val url = URI("https://api.ipify.org").toURL()
+        val conn = if (tunMode) {
+            url.openConnection()
+        } else {
+            url.openConnection(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", proxyPort)))
+        } as HttpURLConnection
+        conn.connectTimeout = timeoutMs
+        conn.readTimeout = timeoutMs
         conn.inputStream.bufferedReader().use { it.readText().trim() }.ifBlank { null }
     }.getOrNull()
 
@@ -700,6 +822,12 @@ class DesktopTunnelController(
         const val STARTUP_POLL_MS = 300L
         const val EXIT_IP_ATTEMPTS = 4
         const val EXIT_IP_RETRY_MS = 2_000L
+        const val READINESS_PROBE_TIMEOUT_MS = 5_000
+        const val READINESS_ATTEMPTS = 5
+        const val READINESS_RETRY_MS = 1_500L
+        const val HEALTH_INTERVAL_MS = 45_000L
+        const val HEALTH_CONFIRM_ATTEMPTS = 2
+        const val HEALTH_CONFIRM_RETRY_MS = 3_000L
         const val LOG_TAIL_LINES = 200
         const val LOG_FOLLOW_MS = 500L
         val ANSI_REGEX = Regex("\u001B\\[[0-9;]*m")

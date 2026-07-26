@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ProtonWireGuardEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -170,6 +171,119 @@ class SingBoxConfigFactoryTest {
 
         val server = config.getValue("dns").jsonObject.array("servers").single().jsonObject
         assertEquals("vless-proxy", server.getValue("detour").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `dns filtering rejects the blocklist and leaves resolution otherwise alone`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(profile(), dnsFilter = DnsFilter.AdsAndTrackers),
+        )
+
+        val dns = config.getValue("dns").jsonObject
+        val rule = dns.array("rules").single().jsonObject
+        assertEquals(
+            listOf("blocklist-threats", "blocklist-ads", "blocklist-ads-trackers"),
+            rule.array("rule_set").map { it.jsonPrimitive.content },
+        )
+        assertEquals("reject", rule.getValue("action").jsonPrimitive.content)
+        // The upstream server is untouched; only matching names are refused.
+        assertEquals("dns-remote", dns.getValue("final").jsonPrimitive.content)
+    }
+
+    /** NetShield's level 1: threats blocked, ads left to resolve. */
+    @Test
+    fun `malware-only filtering renders just the threat list`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(profile(), dnsFilter = DnsFilter.Malware),
+        )
+
+        val ruleSets = config.getValue("route").jsonObject.array("rule_set")
+        assertEquals(
+            listOf("blocklist-threats"),
+            ruleSets.map { it.jsonObject.getValue("tag").jsonPrimitive.content },
+        )
+        val rule = config.getValue("dns").jsonObject.array("rules").single().jsonObject
+        assertEquals(
+            listOf("blocklist-threats"),
+            rule.array("rule_set").map { it.jsonPrimitive.content },
+        )
+    }
+
+    /** A blocklist fetched around the chain would announce the app to the very
+     *  network the chain exists to hide it from. */
+    @Test
+    fun `the blocklist is downloaded through the relay`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(profile(), dnsFilter = DnsFilter.AdsAndTrackers),
+        )
+
+        val ruleSets = config.getValue("route").jsonObject.array("rule_set").map { it.jsonObject }
+        assertEquals(3, ruleSets.size)
+        for (ruleSet in ruleSets) {
+            assertEquals("remote", ruleSet.getValue("type").jsonPrimitive.content)
+            assertEquals("vless-proxy", ruleSet.getValue("download_detour").jsonPrimitive.content)
+        }
+    }
+
+    @Test
+    fun `no filtering renders no rule-set and no dns rules`() {
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(), dnsFilter = DnsFilter.Off))
+
+        assertFalse("rules" in config.getValue("dns").jsonObject)
+        assertFalse("rule_set" in config.getValue("route").jsonObject)
+        assertFalse("experimental" in config)
+    }
+
+    /**
+     * sing-box takes one `experimental` block. Rendering the cache separately
+     * from the clash API would silently drop whichever came first — the stats
+     * readout, or the rule-set cache that keeps the blocklist off the wire.
+     */
+    @Test
+    fun `the rule-set cache and the clash api share one experimental block`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile = profile(),
+                clashApi = ClashApi(port = 41739, secret = "s3cret"),
+                dnsFilter = DnsFilter.AdsAndTrackers,
+                cachePath = "/home/u/.config/vpn-chain/singbox-cache.db",
+            ),
+        )
+
+        val experimental = config.getValue("experimental").jsonObject
+        assertEquals(
+            41739,
+            experimental.getValue("clash_api").jsonObject.getValue("external_controller")
+                .jsonPrimitive.content.substringAfter(':').toInt(),
+        )
+        val cache = experimental.getValue("cache_file").jsonObject
+        assertTrue(cache.getValue("enabled").jsonPrimitive.boolean)
+        assertEquals(
+            "/home/u/.config/vpn-chain/singbox-cache.db",
+            cache.getValue("path").jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `filtering applies to a single-hop chain the same as one with an entry hop`() {
+        val singleHop = parse(
+            SingBoxConfigFactory.androidChainConfig(profile(), dnsFilter = DnsFilter.AdsAndTrackers),
+        )
+        val withEntry = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(entry(dns = "10.2.0.1")),
+                dnsFilter = DnsFilter.AdsAndTrackers,
+            ),
+        )
+
+        assertEquals(
+            singleHop.getValue("route").jsonObject.array("rule_set"),
+            withEntry.getValue("route").jsonObject.array("rule_set"),
+        )
+        assertEquals(
+            singleHop.getValue("dns").jsonObject.array("rules"),
+            withEntry.getValue("dns").jsonObject.array("rules"),
+        )
     }
 
     @Test
