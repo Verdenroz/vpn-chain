@@ -55,6 +55,10 @@ class ChainNotificationUpdater(
                     if (state == TunnelState.Connected) telemetry() else emptyFlow()
                 }
                 .collect { (route, stats) ->
+                    // The service owns this notification outside Connected — it
+                    // says "reconnecting" there. A telemetry frame already in
+                    // flight when the chain drops must not paint over that.
+                    if (chainRepository.status.first().state != TunnelState.Connected) return@collect
                     context.getSystemService(NotificationManager::class.java)
                         .notify(VpnChainService.NOTIFICATION_ID, build(route, stats))
                 }

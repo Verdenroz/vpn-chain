@@ -4,7 +4,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
 import android.net.VpnService
@@ -12,12 +15,15 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.Res
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_engine_stopped
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_no_config_provided
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_no_traffic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_start_failed
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_stopped_carrying
 import io.nekohasekai.libbox.CommandClient
 import io.nekohasekai.libbox.CommandClientHandler
 import io.nekohasekai.libbox.CommandClientOptions
@@ -32,12 +38,36 @@ import io.nekohasekai.libbox.SetupOptions
 import io.nekohasekai.libbox.StatusMessage
 import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.SystemProxyStatus
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * The single Android VpnService. It runs sing-box in-process via libbox's
  * command server: [CommandServer.startOrReloadService] boots the engine, which
  * calls back into [VpnPlatformInterface.openTun] to establish the TUN. A local
  * [CommandClient] streams the engine's logs to the UI.
+ *
+ * The service's lifetime is the *user's* connection intent, not the engine's.
+ * A drop tears down the engine and keeps the service in the foreground, because
+ * a service that stops itself here leaves the process cached — where Doze kills
+ * it, taking the reconnect loop with it — and Android 12+ then refuses the
+ * background foreground-service start that would bring it back. Only an explicit
+ * stop or an OS revoke ends it.
  */
 class VpnChainService : VpnService(), CommandServerHandler {
 
@@ -46,7 +76,32 @@ class VpnChainService : VpnService(), CommandServerHandler {
     private var logClient: CommandClient? = null
     private var statusClient: CommandClient? = null
     private var tunDescriptor: ParcelFileDescriptor? = null
-    private var worker: Thread? = null
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val lifecycleLock = Mutex()
+    private val healthLock = Mutex()
+    private var healthJob: Job? = null
+
+    /** Debounces triggers that arrive together; see [verifyCarrying]. */
+    @Volatile private var lastVerifiedAt = 0L
+
+    /**
+     * Which start attempt owns the status. A boot that is still unwinding when
+     * the next one begins must not report the state of an engine that is gone.
+     */
+    private val generation = AtomicInteger(0)
+
+    private val networkMonitor by lazy { AndroidNetworkMonitor(applicationContext) }
+    private val wakeGuard by lazy { AndroidWakeGuard(applicationContext) }
+
+    /**
+     * Kept hot rather than sampled per check: a fresh collection has to wait for
+     * the system's first callback, and reading it cold would answer "offline"
+     * for every health check — which is the one answer that suppresses them all.
+     */
+    private val online by lazy {
+        networkMonitor.online.stateIn(serviceScope, SharingStarted.Eagerly, initialValue = true)
+    }
 
     private val lockdownPoller = Handler(Looper.getMainLooper())
 
@@ -97,61 +152,169 @@ class VpnChainService : VpnService(), CommandServerHandler {
     }
 
     private fun startTunnel() {
-        if (worker != null) return
-        val config = TunnelBridge.pendingConfig
-        if (config.isNullOrBlank()) {
-            TunnelBridge.setState(TunnelState.Error, UiText.Resource(Res.string.tunnel_error_no_config_provided))
-            stopSelf()
-            return
-        }
-
-        tearingDown = false
+        // Synchronous, and before anything that can suspend: a service started
+        // with startForegroundService has about five seconds to post this.
         startForegroundNotification()
+        val gen = generation.incrementAndGet()
+        tearingDown = false
         TunnelBridge.setState(TunnelState.Connecting)
         refreshLockdownState()
         lockdownPoller.removeCallbacks(lockdownCheck)
         lockdownPoller.postDelayed(lockdownCheck, LOCKDOWN_POLL_MS)
 
-        worker = Thread {
-            try {
+        serviceScope.launch {
+            wakeGuard.awake {
+                val booted = lifecycleLock.withLock {
+                    if (commandServer != null) return@withLock true
+                    bootEngine(gen)
+                }
+                // Outside the lock: confirming traffic takes tens of seconds, and
+                // a Disconnect arriving meanwhile has to be able to tear it down.
+                if (booted) confirmCarrying(gen)
+            }
+        }
+    }
+
+    /** @return whether the engine is running and streaming. Call under [lifecycleLock]. */
+    private suspend fun bootEngine(gen: Int): Boolean {
+        val config = resolveConfig()
+        if (config.isNullOrBlank()) {
+            dropEngineLocked(gen, UiText.Resource(Res.string.tunnel_error_no_config_provided))
+            return false
+        }
+        return runCatching {
+            withContext(Dispatchers.IO) {
                 ensureSetup()
-                val server = CommandServer(this, platformInterface)
+                val server = CommandServer(this@VpnChainService, platformInterface)
                 server.start()
                 commandServer = server
                 server.startOrReloadService(config, OverrideOptions())
                 startLogClient()
                 startStatusClient()
-                TunnelBridge.setState(TunnelState.Connected)
-                updateNotification(getString(R.string.tunnel_notification_connected))
-            } catch (t: Throwable) {
-                TunnelBridge.log("start failed: ${t.message}")
-                TunnelBridge.setState(
-                    TunnelState.Error,
-                    t.message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.tunnel_error_start_failed),
-                )
-                cleanup()
-                stopSelf()
             }
-        }.also { it.start() }
+            // A stop that landed while the engine was booting cannot reach in and
+            // close a server that did not exist yet, so the boot has to check.
+            if (!owns(gen)) {
+                cleanup()
+                false
+            } else {
+                true
+            }
+        }.getOrElse { t ->
+            TunnelBridge.log("start failed: ${t.message}")
+            dropEngineLocked(
+                gen,
+                t.message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.tunnel_error_start_failed),
+            )
+            false
+        }
     }
 
     /**
-     * Reports an unexpected stop as [TunnelState.Error] rather than
-     * Disconnected: that is what tells ChainSupervisor to reconnect, where a
-     * clean Disconnected would read as the user having asked for it.
+     * A sticky restart or an Always-on start hands us a null intent and an empty
+     * bridge: the process that held the rendered config is gone. Rendering a
+     * fresh one from the stored profile is what makes an OS-driven start work at
+     * all — without it those starts died on "no configuration provided".
      */
-    private fun onEngineDied() {
-        if (TunnelBridge.status.value.state != TunnelState.Connected) return
-        TunnelBridge.setState(
-            TunnelState.Error,
-            UiText.Resource(Res.string.tunnel_error_engine_stopped),
-        )
-        cleanup()
-        stopForegroundCompat()
-        stopSelf()
+    private suspend fun resolveConfig(): String? =
+        TunnelBridge.pendingConfig ?: TunnelBridge.renderConfig()
+
+    /**
+     * Connected has to mean the chain carries traffic. The TUN exists within
+     * milliseconds — long before the entry hop has handshaked — and reporting
+     * that as up hands the user a tunnel that swallows every request.
+     */
+    private suspend fun confirmCarrying(gen: Int) {
+        TunnelBridge.log("tunnel up, waiting for the chain to carry traffic…")
+        repeat(READINESS_ATTEMPTS) {
+            if (!owns(gen) || TunnelBridge.status.value.state != TunnelState.Connecting) return
+
+            if (ChainProbe.carriesTraffic(READINESS_PROBE_TIMEOUT_MS)) {
+                if (!owns(gen)) return
+                TunnelBridge.setState(TunnelState.Connected)
+                updateNotification(getString(R.string.tunnel_notification_connected))
+                startHealthWatch(gen)
+                return
+            }
+            delay(READINESS_RETRY_MS)
+        }
+        if (!owns(gen) || TunnelBridge.status.value.state != TunnelState.Connecting) return
+        dropEngine(gen, UiText.Resource(Res.string.tunnel_error_no_traffic))
     }
 
+    /**
+     * Watches a live session for the failure nothing else can see: a chain that
+     * came up carrying traffic and later went silent. The engine stays alive and
+     * the TUN stays present through that, which is why it takes a manual
+     * reconnect to clear today.
+     */
+    private fun startHealthWatch(gen: Int) {
+        healthJob?.cancel()
+        healthJob = serviceScope.launch {
+            launch { networkMonitor.linkChanges.collect { verifyCarrying(gen) } }
+            launch { screenWakes().collect { verifyCarrying(gen) } }
+            while (isActive) {
+                delay(HEALTH_INTERVAL_MS)
+                verifyCarrying(gen)
+            }
+        }
+    }
+
+    /** `ACTION_SCREEN_ON` is not deliverable to a manifest receiver, only a live one. */
+    private fun screenWakes(): Flow<Unit> = callbackFlow {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                trySend(Unit)
+            }
+        }
+        registerReceiver(receiver, IntentFilter(Intent.ACTION_SCREEN_ON))
+        awaitClose { runCatching { unregisterReceiver(receiver) } }
+    }
+
+    private suspend fun verifyCarrying(gen: Int) {
+        healthLock.withLock {
+            if (!owns(gen) || TunnelBridge.status.value.state != TunnelState.Connected) return
+
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastVerifiedAt < HEALTH_MIN_GAP_MS) return
+            if (!online.value) return
+
+            val carries = wakeGuard.awake { ChainProbe.carriesTraffic() }
+            lastVerifiedAt = SystemClock.elapsedRealtime()
+            if (carries) return
+            if (!owns(gen) || TunnelBridge.status.value.state != TunnelState.Connected) return
+            TunnelBridge.log("chain stopped carrying traffic — tearing it down so it can be rebuilt")
+            dropEngine(gen, UiText.Resource(Res.string.tunnel_error_stopped_carrying))
+        }
+    }
+
+    /**
+     * Reports a drop as [TunnelState.Error] rather than Disconnected: that is
+     * what tells ChainSupervisor to reconnect, where a clean Disconnected would
+     * read as the user having asked for it. The foreground notification stays —
+     * see the class comment for why the service must not stop itself here.
+     */
+    private suspend fun dropEngine(gen: Int, detail: UiText) =
+        lifecycleLock.withLock { dropEngineLocked(gen, detail) }
+
+    /** [dropEngine] for callers already holding [lifecycleLock] — it is not reentrant. */
+    private fun dropEngineLocked(gen: Int, detail: UiText) {
+        if (!owns(gen)) return
+        cleanup()
+        TunnelBridge.setState(TunnelState.Error, detail)
+        updateNotification(getString(R.string.tunnel_notification_reconnecting))
+    }
+
+    private fun onEngineDied() {
+        if (TunnelBridge.status.value.state != TunnelState.Connected) return
+        val gen = generation.get()
+        serviceScope.launch { dropEngine(gen, UiText.Resource(Res.string.tunnel_error_engine_stopped)) }
+    }
+
+    private fun owns(gen: Int): Boolean = generation.get() == gen
+
     private fun stopTunnel() {
+        generation.incrementAndGet()
         TunnelBridge.setState(TunnelState.Disconnected)
         cleanup()
         stopForegroundCompat()
@@ -160,6 +323,8 @@ class VpnChainService : VpnService(), CommandServerHandler {
 
     private fun cleanup() {
         tearingDown = true
+        healthJob?.cancel()
+        healthJob = null
         lockdownPoller.removeCallbacks(lockdownCheck)
         runCatching { logClient?.disconnect() }
         logClient = null
@@ -170,7 +335,6 @@ class VpnChainService : VpnService(), CommandServerHandler {
         commandServer = null
         runCatching { tunDescriptor?.close() }
         tunDescriptor = null
-        worker = null
     }
 
     private fun ensureSetup() {
@@ -212,6 +376,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
 
     override fun onDestroy() {
         cleanup()
+        serviceScope.cancel()
         super.onDestroy()
     }
 
@@ -331,7 +496,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
 
         /**
          * The engine going away underneath us. Nothing else on Android notices
-         * a post-start death: the worker thread has long since returned, so
+         * a post-start death: the boot coroutine has long since returned, so
          * without this the tunnel reads Connected while carrying no traffic.
          */
         override fun disconnected(message: String?) {
@@ -379,6 +544,11 @@ class VpnChainService : VpnService(), CommandServerHandler {
         private const val LEGACY_CHANNEL_ID = "vpn-chain"
         private const val LOCKDOWN_POLL_MS = 3_000L
         private const val STATUS_INTERVAL_NS = 1_000_000_000L
+        private const val READINESS_ATTEMPTS = 5
+        private const val READINESS_RETRY_MS = 1_500L
+        private const val READINESS_PROBE_TIMEOUT_MS = 3_000
+        private const val HEALTH_INTERVAL_MS = 45_000L
+        private const val HEALTH_MIN_GAP_MS = 10_000L
 
         @Volatile
         private var didSetup = false

@@ -68,7 +68,8 @@ pieces, all in `core/tunnel/src/androidMain`:
   through libbox's command server: `CommandServer.startOrReloadService(config)`
   boots the engine, which calls back into `openTun` to establish the TUN. A local
   `CommandClient` (subscribed to `CommandLog`) streams engine output to the Logs
-  screen; `status` is driven from the service lifecycle.
+  screen; `status` is driven from the service lifecycle. See
+  [Staying connected](#staying-connected) for the invariants that keep it up.
 - **`VpnPlatformInterface`** — implements libbox's `PlatformInterface`: builds the
   Android TUN from the engine's `TunOptions`, `protect()`s the box's own sockets
   so they skip the tunnel, and reports the default network for
@@ -93,6 +94,46 @@ reached via that detour (mirrors `sing-box-android.template.json`). Supply the
 `ENTRY_*` fields (secrets.env or the Settings form) to enable the entry
 hop; omit them for a relay-only chain. All shapes are validated against
 `sing-box check` 1.13.14 (the version libbox embeds).
+
+## Staying connected
+
+**1. The service outlives the engine.** `VpnChainService`'s lifetime is the
+*user's* connection intent, not the engine's. A drop tears down the engine and
+keeps the foreground notification (`dropEngine`, reporting `TunnelState.Error`);
+only `ACTION_STOP`, `ACTION_STOP_BY_USER`, `onRevoke`, or
+`ChainRepository.release()` end the service. This is not cosmetic — a service
+that stops itself here leaves the process *cached*, which is what Doze kills
+first, and the reconnect loop lives in that process. Android 12+ then refuses
+the background foreground-service start that would bring it back, so the
+session was unrecoverable without opening the app. An app already running a
+foreground service is exempt from that restriction, which is the other reason
+to hold it.
+
+**2. Connected means it carries traffic.** The TUN exists within milliseconds,
+long before the entry hop has handshaked, and libbox's status stream is a
+*loopback* socket — it stays healthy while the entry hop's UDP socket sits on a
+network that is gone. So `ChainProbe` makes a real request through the TUN
+(this app's own sockets are not `protect()`ed, so they take the chain): once as
+a readiness gate before reporting Connected, then as a watchdog on a 45s tick,
+on every underlying-link change, and on screen-on. That last one matters
+because the tick runs off a clock Doze stops: without it, a chain that died in
+a pocket would go unexamined until well after the phone came back out. Two
+independent probe targets, so one host being blocked can't read as a dead
+chain, and a 10s debounce so triggers landing together cost one verdict.
+Mirrors what `DesktopTunnelController` already did.
+
+**3. Handovers are a first-class signal.** `NetworkMonitor.linkChanges` reports
+the *identity* of the non-VPN default link changing. A boolean `online` cannot:
+across a Wi-Fi → cellular handover both links are usable, so it never leaves
+`true` while every socket bound to the old one black-holes. It drives both the
+watchdog and the end of a reconnect backoff.
+
+**4. Doze does not get to suspend an attempt.** `AndroidWakeGuard` holds a
+partial wake lock across the dial and across a health probe — Doze otherwise
+stops the clock between the handshake and the first packet, and a probe that
+times out because the phone was asleep reads as a dead chain. Backoff waits are
+deliberately left outside it: what ends them early is a network callback, which
+wakes the device on its own.
 
 **Security to harden:** the `ChainProfile` persists in app-private DataStore
 (`core/datastore`). Move the credential fields behind the Android Keystore / an

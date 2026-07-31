@@ -15,6 +15,7 @@ import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -22,6 +23,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChainSupervisorTest {
@@ -192,6 +194,102 @@ class ChainSupervisorTest {
         assertEquals(1, world.chain.reconnectCalls, "network return should short-circuit the backoff")
     }
 
+    /**
+     * A Wi-Fi to cellular handover never leaves `online` — both links are usable
+     * across it — so the only thing that says "every socket the last attempt made
+     * is bound to a link that is gone" is the handover itself.
+     */
+    @Test
+    fun `retries immediately when the link changes under a backoff`() = runTest {
+        val world = SupervisorWorld(this, initialState = TunnelState.Connected)
+        world.chain.connectionIntent.value = true
+        world.chain.reconnectKeepsFailing = true
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(ReconnectPolicy.delayForAttemptMillis(1) / 4)
+        assertEquals(0, world.chain.reconnectCalls, "backoff should not have elapsed yet")
+
+        world.network.handovers.emit(Unit)
+        advanceTimeBy(10)
+
+        assertEquals(1, world.chain.reconnectCalls, "a handover should short-circuit the backoff")
+    }
+
+    /**
+     * Measured on a device: an attempt with no link to dial on still holds the
+     * tunnel's wake lock until its readiness check times out — longer than the
+     * capped backoff, so an outage kept the CPU awake continuously. Waiting
+     * costs nothing, because the link returning already ends a backoff early.
+     */
+    @Test
+    fun `does not dial while there is no link to dial on`() = runTest {
+        val world = SupervisorWorld(this, initialState = TunnelState.Connected)
+        world.chain.connectionIntent.value = true
+        world.chain.reconnectKeepsFailing = true
+        world.network.reachable.value = false
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(ReconnectPolicy.MAX_DELAY_MS * 4)
+
+        assertEquals(0, world.chain.reconnectCalls, "an offline attempt can only burn battery")
+    }
+
+    /** The cap exists so a link that never reports usable can't stall retries forever. */
+    @Test
+    fun `dials anyway once the offline wait is capped out`() = runTest {
+        val world = SupervisorWorld(this, initialState = TunnelState.Connected)
+        world.chain.connectionIntent.value = true
+        world.chain.reconnectKeepsFailing = true
+        world.network.reachable.value = false
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(OFFLINE_WAIT_CAP_MS + ReconnectPolicy.MAX_DELAY_MS)
+
+        assertTrue(world.chain.reconnectCalls > 0, "the cap has to release the attempt")
+    }
+
+    /**
+     * Android holds its VpnService in the foreground across a drop so a retry is
+     * possible at all. When none is coming, something has to let go — otherwise
+     * the user keeps a notification promising a reconnect that will never happen.
+     */
+    @Test
+    fun `releases the tunnel after a drop it will not retry`() = runTest {
+        val world = SupervisorWorld(
+            this,
+            settings = settings(autoReconnect = false),
+            initialState = TunnelState.Connected,
+        )
+        world.chain.connectionIntent.value = true
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(SETTLE_MS)
+
+        assertEquals(1, world.chain.releaseCalls)
+    }
+
+    @Test
+    fun `holds the tunnel while a retry is still coming`() = runTest {
+        val world = SupervisorWorld(this, initialState = TunnelState.Connected)
+        world.chain.connectionIntent.value = true
+        world.chain.reconnectKeepsFailing = true
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(ReconnectPolicy.MAX_DELAY_MS * 2)
+
+        assertEquals(0, world.chain.releaseCalls, "a chain still being retried must stay held")
+    }
+
     @Test
     fun `leaves a connecting tunnel alone`() = runTest {
         val world = SupervisorWorld(this, initialState = TunnelState.Connected)
@@ -208,6 +306,9 @@ class ChainSupervisorTest {
 
 /** Enough virtual time for the supervisor's non-delayed work to run. */
 private const val SETTLE_MS = 100L
+
+/** Mirrors ChainSupervisor's own cap on waiting for a link. */
+private const val OFFLINE_WAIT_CAP_MS = 5 * 60 * 1000L
 
 private fun settings(
     autoConnectOnLaunch: Boolean = false,
@@ -259,6 +360,7 @@ private class FakeChainRepository(initialState: TunnelState) : ChainRepository {
 
     var connectCalls = 0
     var reconnectCalls = 0
+    var releaseCalls = 0
     var reconnectKeepsFailing = false
 
     fun emit(state: TunnelState) {
@@ -285,6 +387,11 @@ private class FakeChainRepository(initialState: TunnelState) : ChainRepository {
 
     override suspend fun disconnect() {
         connectionIntent.value = false
+        emit(TunnelState.Disconnected)
+    }
+
+    override suspend fun release() {
+        releaseCalls++
         emit(TunnelState.Disconnected)
     }
 }
@@ -322,5 +429,7 @@ private class FakeSettingsRepository(value: UserSettings) : SettingsRepository {
 
 private class FakeConnectivity : ConnectivityRepository {
     val reachable = MutableStateFlow(true)
+    val handovers = MutableSharedFlow<Unit>()
     override val online: Flow<Boolean> = reachable
+    override val linkChanges: Flow<Unit> = handovers
 }

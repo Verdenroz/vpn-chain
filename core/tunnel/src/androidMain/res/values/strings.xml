@@ -4,5 +4,6 @@
     <string name="tunnel_notification_title">vpn-chain</string>
     <string name="tunnel_notification_connecting">Bringing the chain up…</string>
     <string name="tunnel_notification_connected">Chain connected</string>
+    <string name="tunnel_notification_reconnecting">Chain dropped — reconnecting…</string>
     <string name="tunnel_notification_action_disconnect">Disconnect</string>
 </resources>

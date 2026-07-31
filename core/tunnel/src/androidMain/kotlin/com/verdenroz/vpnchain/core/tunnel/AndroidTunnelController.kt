@@ -8,6 +8,7 @@ import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.Res
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_background_start_refused
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_vpn_permission_denied
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,6 +42,10 @@ class AndroidTunnelController(
         )
     }
 
+    override fun installConfigProvider(provider: suspend () -> String?) {
+        TunnelBridge.configProvider = provider
+    }
+
     override suspend fun start(configJson: String, killSwitchEnabled: Boolean) {
         // killSwitchEnabled is desktop-only (see TunnelController) - Android's
         // kill switch is the system Always-on VPN setting, unrelated to this.
@@ -55,8 +60,22 @@ class AndroidTunnelController(
         val intent = Intent(context, VpnChainService::class.java).apply {
             action = VpnChainService.ACTION_START
         }
-        context.startForegroundService(intent)
+        // API 31+ refuses a foreground service started from the background
+        runCatching { context.startForegroundService(intent) }
+            .onFailure {
+                TunnelBridge.setState(
+                    TunnelState.Error,
+                    UiText.Resource(Res.string.tunnel_error_background_start_refused),
+                )
+            }
     }
+
+    /**
+     * The same teardown as [stop]. The service keeps its foreground notification
+     * across a drop so a reconnect is possible at all; when none is coming, that
+     * notification is a promise nothing will keep.
+     */
+    override suspend fun release() = stop()
 
     override suspend fun stop() {
         val intent = Intent(context, VpnChainService::class.java).apply {
