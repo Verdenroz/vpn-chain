@@ -12,10 +12,14 @@ import kotlinx.coroutines.flow.Flow
  */
 interface ConnectivityRepository {
     val online: Flow<Boolean>
+
+    /** See [NetworkMonitor.linkChanges]: the link swapped under a chain that never went offline. */
+    val linkChanges: Flow<Unit>
 }
 
 internal class DefaultConnectivityRepository(
     monitor: NetworkMonitor,
 ) : ConnectivityRepository {
     override val online: Flow<Boolean> = monitor.online
+    override val linkChanges: Flow<Unit> = monitor.linkChanges
 }

@@ -50,6 +50,16 @@ interface ChainRepository {
 
     /** Opens the platform's VPN settings screen, if [killSwitchGuidanceSupported]. */
     fun openSystemVpnSettings()
+
+    /**
+     * Hand the platform tunnel back without touching intent.
+     *
+     * For a drop nothing is going to retry. Android keeps its VpnService in the
+     * foreground across a drop precisely so a reconnect can happen, so something
+     * has to let go when no reconnect is coming — otherwise the user is left
+     * with a notification promising one forever.
+     */
+    suspend fun release()
 }
 
 internal class DefaultChainRepository(
@@ -67,6 +77,10 @@ internal class DefaultChainRepository(
         // disconnect(), so clear intent here or it reads as a drop to reconnect.
         scope.launch {
             controller.userStops.collect { preferences.setConnectionIntent(false) }
+        }
+        controller.installConfigProvider {
+            preferences.setConnectionIntent(true)
+            renderConfig()
         }
     }
 
@@ -87,25 +101,35 @@ internal class DefaultChainRepository(
     override suspend fun reconnect(): Result<Unit> = start()
 
     private suspend fun start(): Result<Unit> {
-        val profile: ChainProfile = profileRepository.profile.first()
+        val settings = settingsRepository.settings.first()
+        val configJson = renderConfig()
             ?: return Result.failure(IllegalStateException("No chain profile configured"))
+        return runCatching { controller.start(configJson, settings.killSwitchEnabled) }
+            .onFailure { logger.e(TAG, "connect failed", it) }
+    }
+
+    /** @return null when there is nothing to dial, or the render itself failed. */
+    private suspend fun renderConfig(): String? {
+        val profile: ChainProfile = profileRepository.profile.first() ?: return null
         val settings = settingsRepository.settings.first()
         // Registration talks to Cloudflare over the untunnelled link, so it
         // happens here rather than at render time — and a failure costs the
         // tail, never the connect.
         val warp = if (settings.warpMode == WarpMode.Off) null else warpRepository.exit()
-
-        return runCatching {
-            val configJson =
-                renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp)
-            controller.start(configJson, settings.killSwitchEnabled)
-        }.onFailure { logger.e(TAG, "connect failed", it) }
+        return runCatching { renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp) }
+            .onFailure { logger.e(TAG, "config render failed", it) }
+            .getOrNull()
     }
 
     override suspend fun disconnect() {
         preferences.setConnectionIntent(false)
         runCatching { controller.stop() }
             .onFailure { logger.e(TAG, "disconnect failed", it) }
+    }
+
+    override suspend fun release() {
+        runCatching { controller.release() }
+            .onFailure { logger.e(TAG, "release failed", it) }
     }
 
     private companion object {

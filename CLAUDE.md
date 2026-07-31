@@ -94,6 +94,23 @@ prebuilt `libbox` AAR inside a `VpnService` (`VpnChainService` +
 constraint means the app performs *both* chain hops itself instead of
 delegating the entry hop to a separate VPN app.
 
+**Android connection resilience** (`VpnChainService`, `ChainProbe`,
+`AndroidWakeGuard`, `NetworkMonitor.linkChanges`, `ChainSupervisor`): four
+invariants keep a long-running session alive, and breaking any one of them
+reintroduces a failure that is invisible in testing and obvious in a pocket.
+(1) The service's lifetime is the *user's* intent, not the engine's — a drop
+keeps the foreground service, because stopping it leaves the process cached for
+Doze to kill and makes the Android 12+ background FGS start illegal. (2)
+Connected means the chain carries traffic, proven by a real request through the
+TUN — libbox's status stream is loopback and stays healthy through a dead
+tunnel. (3) `linkChanges` (link *identity*, not the boolean `online`) is what
+catches a Wi-Fi/cellular handover. (4) A wake lock spans the dial and the health
+probe so Doze cannot suspend either half-done — and, the measured corollary,
+the supervisor waits for a usable link before dialling, because an attempt that
+cannot succeed still holds that lock until its readiness gate times out. Read
+**[docs/android.md](docs/android.md)**'s "Staying connected" before touching any
+of it.
+
 **Kill switch** has two independent implementations depending on platform and
 mode — Android relies on OS-level Always-on VPN (no app code can enable it,
 only detect it), desktop's WireGuard-entry-hop mode uses a narrow setuid-free

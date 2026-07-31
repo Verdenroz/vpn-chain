@@ -28,6 +28,19 @@ interface TunnelController {
     suspend fun stop()
 
     /**
+     * Let go of a tunnel that dropped and will not be retried — distinct from
+     * [stop], which is the user asking to come down.
+     *
+     * No-op by default, and deliberately so on desktop: a chain that stalled
+     * leaves the kill switch engaged, because traffic staying blocked until
+     * something carries it again is the whole point of it (see
+     * `docs/kill-switch.md`). Disconnect is the documented way out of that.
+     * Android overrides it, where holding on means holding a foreground service
+     * that promises a reconnect nobody is going to make.
+     */
+    suspend fun release() {}
+
+    /**
      * Whether this platform has an OS-level kill switch worth guiding the user
      * toward. Neither platform lets an app enable one silently - Android's is a
      * system Settings toggle, desktop's is the external VPN app's own switch.
@@ -53,4 +66,15 @@ interface TunnelController {
 
     /** Opens the platform's VPN settings screen, if [killSwitchGuidanceSupported]. */
     fun openSystemVpnSettings() {}
+
+    /**
+     * Supplies a config for a start this app did not initiate: Android's sticky
+     * restart after the process was killed, or the OS launching us as the
+     * Always-on VPN. Those arrive at a platform tunnel holding nothing, because
+     * the process that was handed the rendered config is gone — before this,
+     * they failed outright with "no configuration provided".
+     *
+     * No-op where every start comes through [start].
+     */
+    fun installConfigProvider(provider: suspend () -> String?) {}
 }

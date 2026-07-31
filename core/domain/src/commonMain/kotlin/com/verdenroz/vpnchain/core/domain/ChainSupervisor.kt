@@ -14,8 +14,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -81,6 +83,7 @@ class ChainSupervisor(
                             val wait = ReconnectPolicy.delayForAttemptMillis(attempt)
                             _state.value = ReconnectState.Waiting(attempt, wait)
                             awaitBackoffOrNetworkReturn(wait)
+                            awaitUsableLink()
                             // Re-checked after the wait: the user can disconnect
                             // during a backoff, and that has to win.
                             if (!shouldReconnect()) break
@@ -90,6 +93,11 @@ class ChainSupervisor(
                             withContext(NonCancellable) { chain.reconnect() }
                         }
                         _state.value = ReconnectState.Idle
+                        // A drop nobody is going to retry must not leave the
+                        // platform tunnel held: Android keeps its VpnService in
+                        // the foreground across a drop precisely so a retry can
+                        // happen, and something has to let go when none is coming.
+                        if (state == TunnelState.Error && !shouldReconnect()) chain.release()
                     }
 
                     TunnelState.Connecting -> Unit
@@ -102,12 +110,40 @@ class ChainSupervisor(
             settings.settings.first().autoReconnect &&
             profiles.profile.first() != null
 
-    /** Whichever comes first: the backoff elapsing, or the link returning. */
+    /**
+     * Holds an attempt back until there is a link to dial on.
+     *
+     * Measured on a device: without this, an outage runs attempts that cannot
+     * succeed, and each one holds the tunnel's wake lock until its readiness
+     * check times out — longer than the capped backoff, so the CPU never gets
+     * to sleep. Waiting costs nothing, because the link returning is already
+     * what ends a backoff early.
+     *
+     * Capped rather than open-ended: a link that is up but never reports as
+     * usable — a captive portal has no validated capability — must not be able
+     * to stall reconnects forever.
+     */
+    private suspend fun awaitUsableLink() {
+        if (network.online.first()) return
+        withTimeoutOrNull(OFFLINE_WAIT_CAP_MS) { network.online.first { it } }
+    }
+
+    /** Whichever comes first: the backoff elapsing, or the link moving under us. */
     private suspend fun awaitBackoffOrNetworkReturn(waitMillis: Long) {
         withTimeoutOrNull(waitMillis) {
-            // dropWhile skips the current online run, so an already-online link
-            // waits out the full backoff instead of retrying instantly.
-            network.online.distinctUntilChanged().dropWhile { it }.first { it }
+            merge(
+                // dropWhile skips the current online run, so an already-online
+                // link waits out the full backoff instead of retrying instantly.
+                network.online.distinctUntilChanged().dropWhile { it }.filter { it }.map { },
+                // A handover never leaves `online`, and it is the change most
+                // worth retrying on: every socket the last attempt made is bound
+                // to a link that is gone.
+                network.linkChanges,
+            ).first()
         }
+    }
+
+    private companion object {
+        const val OFFLINE_WAIT_CAP_MS = 5 * 60 * 1000L
     }
 }

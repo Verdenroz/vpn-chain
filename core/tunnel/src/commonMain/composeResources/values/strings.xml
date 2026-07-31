@@ -18,6 +18,7 @@
     <string name="tunnel_error_no_config_provided">no configuration provided</string>
     <string name="tunnel_error_start_failed">start failed</string>
     <string name="tunnel_error_engine_stopped">the tunnel engine stopped unexpectedly</string>
+    <string name="tunnel_error_background_start_refused">Android refused to start the tunnel from the background. Open the app or use the tile to reconnect.</string>
     <string name="tunnel_log_already_state">already %1$s, ignoring connect</string>
     <string name="tunnel_log_adopted_system_wide">adopted running system-wide relay (started outside this app)</string>
     <string name="tunnel_log_adopted_relay_port">adopted existing relay on 127.0.0.1:%1$d</string>

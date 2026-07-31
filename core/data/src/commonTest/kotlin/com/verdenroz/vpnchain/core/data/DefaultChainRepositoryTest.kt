@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -66,14 +67,70 @@ class DefaultChainRepositoryTest {
 
         assertTrue(world.repository.connectionIntent.first())
     }
+
+    /**
+     * Android's sticky restart and its Always-on VPN start both arrive at a
+     * service holding no config, because the process that was handed one is
+     * gone. Before the provider they failed outright on "no configuration".
+     */
+    @Test
+    fun `installs a config provider the platform can start from unattended`() = runTest {
+        val world = RepositoryWorld(backgroundScope)
+        world.profiles.stored.value = REPOSITORY_PROFILE
+        runCurrent()
+
+        val config = world.controller.configProvider?.invoke()
+
+        assertNotNull(config, "an unattended start has to be able to render its own config")
+    }
+
+    /**
+     * A start the OS made on a standing instruction is still the user wanting
+     * to be connected — without recording it, the first drop afterwards reads
+     * as a disconnect they chose, and nothing reconnects.
+     */
+    @Test
+    fun `an unattended start records connection intent`() = runTest {
+        val world = RepositoryWorld(backgroundScope)
+        world.profiles.stored.value = REPOSITORY_PROFILE
+        runCurrent()
+
+        world.controller.configProvider?.invoke()
+        runCurrent()
+
+        assertTrue(world.repository.connectionIntent.first())
+    }
+
+    @Test
+    fun `release stops the controller without touching intent`() = runTest {
+        val world = RepositoryWorld(backgroundScope)
+        world.preferences.setConnectionIntent(true)
+        runCurrent()
+
+        world.repository.release()
+
+        assertEquals(1, world.controller.releaseCalls)
+        assertEquals(0, world.controller.stopCalls, "release is the platform's call, not a stop")
+        assertTrue(world.repository.connectionIntent.first(), "release is not a disconnect")
+    }
 }
+
+private val REPOSITORY_PROFILE = ChainProfile(
+    vpsIp = "203.0.113.10",
+    serverPort = 443,
+    vlessUuid = "8f1c6d2e-4b7a-4c31-9f0e-2a5d6c8b1e33",
+    realityPublicKey = "0KcF1hV0Qm5wZ1YHc2xJ8s3nT4pR7uD9eA2bC6gK1lM",
+    shortId = "a1b2c3d4",
+    sni = "www.example.com",
+)
 
 private class RepositoryWorld(scope: CoroutineScope) {
     val controller = FakeTunnelController()
+    val profiles = StubProfileRepository()
     val preferences = VpnChainPreferencesDataSource(InMemoryPreferences())
     val repository: ChainRepository = DefaultChainRepository(
         controller = controller,
-        profileRepository = StubProfileRepository(),
+        profileRepository = profiles,
         settingsRepository = StubSettingsRepository(),
         warpRepository = StubWarpRepository(),
         preferences = preferences,
@@ -94,15 +151,26 @@ private class FakeTunnelController : TunnelController {
     override val logs = MutableSharedFlow<String>()
     override val userStops = MutableSharedFlow<Unit>()
     var stopCalls = 0
+    var releaseCalls = 0
+    var configProvider: (suspend () -> String?)? = null
 
     override suspend fun start(configJson: String, killSwitchEnabled: Boolean) = Unit
     override suspend fun stop() {
         stopCalls++
     }
+
+    override suspend fun release() {
+        releaseCalls++
+    }
+
+    override fun installConfigProvider(provider: suspend () -> String?) {
+        configProvider = provider
+    }
 }
 
 private class StubProfileRepository : ProfileRepository {
-    override val profile: Flow<ChainProfile?> = MutableStateFlow(null)
+    val stored = MutableStateFlow<ChainProfile?>(null)
+    override val profile: Flow<ChainProfile?> = stored
     override val profiles: Flow<List<SavedProfile>> = MutableStateFlow(emptyList())
     override val activeProfileId: Flow<String?> = MutableStateFlow(null)
     override suspend fun save(profile: ChainProfile) = Unit

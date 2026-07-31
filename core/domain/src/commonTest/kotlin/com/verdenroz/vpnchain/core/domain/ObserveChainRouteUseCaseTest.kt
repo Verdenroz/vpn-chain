@@ -350,6 +350,7 @@ private class FakeChain(override val status: Flow<ChainStatus>) : ChainRepositor
     override suspend fun connect() = Result.success(Unit)
     override suspend fun reconnect() = Result.success(Unit)
     override suspend fun disconnect() = Unit
+    override suspend fun release() = Unit
     override val connectionIntent: Flow<Boolean> = MutableStateFlow(false)
     override val stats: Flow<SessionStats> = MutableStateFlow(SessionStats())
     override val killSwitchGuidanceSupported = false

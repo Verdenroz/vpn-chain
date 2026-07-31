@@ -25,6 +25,16 @@ internal object TunnelBridge {
     var pendingConfig: String? = null
 
     /**
+     * Renders a config for a start the app did not initiate. Installed by the
+     * data layer, which owns the profile and settings the service cannot reach.
+     * See [TunnelController.installConfigProvider].
+     */
+    @Volatile
+    var configProvider: (suspend () -> String?)? = null
+
+    suspend fun renderConfig(): String? = configProvider?.invoke()
+
+    /**
      * Whether Always-on VPN lockdown is currently protecting this app. Live and
      * bidirectional on API 29+, where [VpnChainService] polls the real, queryable
      * `VpnService.isLockdownEnabled()` — the setting can be flipped at any time
