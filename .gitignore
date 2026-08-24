@@ -29,3 +29,8 @@ google-services.json
 secrets.env
 secrets.properties
 *.local.json
+
+# Built by cli/killswitch/build.sh. Tracking the binary means every checkout
+# rewrites the inode, and a file capability granted with setcap lives on the
+# inode, so the kill switch silently loses its privilege.
+cli/killswitch/vpn-chain-killswitch
