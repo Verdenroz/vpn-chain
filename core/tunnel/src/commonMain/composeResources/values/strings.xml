@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="tunnel_error_tun_privilege_hint">TUN mode needs elevated privileges. Grant them once with:  sudo setcap cap_net_admin,cap_net_bind_service=+ep $(command -v sing-box)</string>
+    <string name="tunnel_error_tun_privilege_hint">TUN mode needs elevated privileges. Run cli/setup-desktop.sh, or grant them directly with:  sudo setcap cap_net_admin,cap_net_bind_service=+ep $(command -v sing-box)</string>
     <string name="tunnel_error_already_running_hint">a relay is already running. Disconnect first, then reconnect</string>
     <string name="tunnel_error_kill_switch_unavailable">kill switch helper not found, connecting without fail-closed protection. Build cli/killswitch/ and setcap it to enable.</string>
     <string name="tunnel_error_relay_already_running_pid">a relay is already running (pid %1$s). Disconnect first</string>
     <string name="tunnel_error_cannot_launch">cannot launch '%1$s': is sing-box installed and on PATH?</string>
+    <string name="tunnel_error_managed_config_write">cannot write %1$s. Are you in the vpn-chain group? Log out and back in after setup.</string>
+    <string name="tunnel_error_managed_start">could not start the relay service: %1$s</string>
+    <string name="tunnel_log_managed_unusable">relay service installed but not usable yet (the vpn-chain group needs a fresh login) — starting sing-box directly instead</string>
     <string name="tunnel_error_exit_kill_switch_engaged">sing-box exited (%1$d). Kill switch engaged, network is blocked. Reconnect, or Disconnect to restore normal routing.</string>
     <string name="tunnel_error_exit_generic">sing-box exited (%1$d): see Logs for details</string>
     <string name="tunnel_error_no_traffic">the chain came up but carried no traffic — the entry hop never completed a handshake. Retrying.</string>

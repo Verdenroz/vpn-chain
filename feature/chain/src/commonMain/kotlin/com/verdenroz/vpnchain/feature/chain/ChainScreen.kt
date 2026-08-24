@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -450,14 +451,18 @@ private fun StatusStrip(status: ChainStatus, rttMs: Int?) {
                 alignEnd = true,
                 modifier = Modifier.weight(1.4f),
             ) {
-                Text(
-                    status.detail?.asString() ?: stringResource(Res.string.chain_row_placeholder),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (status.state == TunnelState.Error) colors.lampRed else colors.muted,
-                    textAlign = TextAlign.End,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                // Errors here carry commands to run, which are no use unless they
+                // can be copied out.
+                SelectionContainer {
+                    Text(
+                        status.detail?.asString() ?: stringResource(Res.string.chain_row_placeholder),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (status.state == TunnelState.Error) colors.lampRed else colors.muted,
+                        textAlign = TextAlign.End,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
 

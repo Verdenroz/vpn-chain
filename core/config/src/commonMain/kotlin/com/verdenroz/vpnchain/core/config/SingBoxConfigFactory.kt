@@ -82,6 +82,7 @@ object SingBoxConfigFactory {
         warpMode: WarpMode = WarpMode.Off,
         warpDomains: List<String> = emptyList(),
         allowLocalNetworks: Boolean = false,
+        logPath: String? = null,
     ): String {
         val entry = profile.entryHop
         val filtering = dnsFilter != DnsFilter.Off
@@ -91,7 +92,7 @@ object SingBoxConfigFactory {
         // to come up — one hop shorter, not not at all.
         val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains) }
         return render {
-            putInfoLog()
+            putInfoLog(logPath)
             // The rule-set is remote, so it needs somewhere to persist between
             // runs; without the cache every connect re-downloads it.
             putExperimental(clashApi, cacheFile = filtering, cachePath = cachePath)
@@ -249,8 +250,14 @@ object SingBoxConfigFactory {
         DnsFilter.AdsAndTrackers -> listOf(THREATS_LIST, GEOSITE_ADS_LIST, ADS_TRACKERS_LIST)
     }
 
-    private fun JsonObjectBuilder.putInfoLog() =
-        putJsonObject("log") { put("level", "info"); put("timestamp", true) }
+    private fun JsonObjectBuilder.putInfoLog(output: String? = null) =
+        putJsonObject("log") {
+            put("level", "info")
+            put("timestamp", true)
+            // Under systemd the app can't read the process's stdout, so sing-box
+            // writes the log itself and the app tails that file.
+            if (output != null) put("output", output)
+        }
 
     /**
      * A resolver on the entry peer's internal network — a provider's filtering

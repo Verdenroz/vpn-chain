@@ -2,6 +2,7 @@ package com.verdenroz.vpnchain.core.tunnel
 
 import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.config.ClashApi
+import com.verdenroz.vpnchain.core.config.SystemdRelay
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.KillSwitchState
@@ -13,6 +14,8 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_canno
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_exit_generic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_exit_kill_switch_engaged
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_kill_switch_unavailable
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_managed_config_write
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_managed_start
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_no_traffic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_relay_already_running_pid
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_stopped_carrying
@@ -23,6 +26,7 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_already
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_awaiting_traffic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_chain_stalled
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_disengaged
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_managed_unusable
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_engaged
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_helper_error
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_no_exempt
@@ -38,6 +42,8 @@ import java.net.NetworkInterface
 import java.net.Proxy
 import java.net.Socket
 import java.net.URI
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -98,15 +104,18 @@ class DesktopTunnelController(
     // relays, which are always relay-only with no kill switch.
     private val stateFile = File(runtimeDir, "relay.state")
     // Shared log sink: the GUI redirects its own relay here, and the CLI's nohup
-    // writes here too, so tailing it shows logs whoever started the relay.
-    private val relayLog = File(runtimeDir, "relay.log")
+    // writes here too, so tailing it shows logs whoever started the relay. A relay
+    // under systemd runs as another user and writes the unit's log instead, which
+    // the rendered config points it at.
+    @Volatile
+    private var relayLog = File(runtimeDir, "relay.log")
 
     /** Serializes connect/disconnect against each other and the state poller —
      *  two sing-box instances on one TUN take the machine offline. */
     private val startStopLock = Mutex()
 
     /** Non-null only when this controller launched the relay itself. */
-    private var process: Process? = null
+    private var process: RelayProcess? = null
     private var readerJob: Job? = null
     private var logTailJob: Job? = null
     private var healthJob: Job? = null
@@ -196,7 +205,9 @@ class DesktopTunnelController(
         // TUN owns system routing — exclusive, no port adoption. Needs CAP_NET_ADMIN.
         // TUN is now the default, so check up front rather than let sing-box fail
         // silently into a log line the user has to go find.
-        if (!hasNetAdminPrivilege()) {
+        // Under systemd the capability comes from the unit, so the binary having
+        // none is the expected state rather than a reason to refuse.
+        if (!ManagedRelay.available && !hasNetAdminPrivilege()) {
             _status.value = ChainStatus(
                 state = TunnelState.Error,
                 detail = UiText.Resource(Res.string.tunnel_error_tun_privilege_hint),
@@ -253,6 +264,12 @@ class DesktopTunnelController(
      *  a competing one. Returns false when nothing is running. */
     private suspend fun adoptRunningSession(): Boolean {
         val session = detectRunningSession() ?: return false
+        // Only asked once something is actually up, so the idle poll stays in-process.
+        relayLog = if (ManagedRelay.available && ManagedRelay.isActive()) {
+            SystemdRelay.logFile
+        } else {
+            File(runtimeDir, "relay.log")
+        }
         tunMode = session.tun
         tunHasEntry = session.entry
         killSwitchEngaged = session.killSwitch
@@ -359,7 +376,7 @@ class DesktopTunnelController(
         out.ifBlank { null }
     }.getOrNull()
 
-    private fun spawnSingBox(configJson: String): Process? {
+    private suspend fun spawnSingBox(configJson: String): RelayProcess? {
         // Last line of defence behind start()'s adoption check: never launch over a
         // live relay, and never overwrite its pidfile — that would orphan a process
         // neither the GUI nor the CLI could stop afterwards.
@@ -373,6 +390,13 @@ class DesktopTunnelController(
             )
             return null
         }
+        if (SystemdRelay.unitInstalled && !ManagedRelay.available) {
+            emitLog(Res.string.tunnel_log_managed_unusable)
+        }
+        return if (ManagedRelay.available) startManagedRelay(configJson) else startOwnedRelay(configJson)
+    }
+
+    private suspend fun startOwnedRelay(configJson: String): RelayProcess? {
         // The rendered config carries credentials — keep it owner-only and ephemeral.
         val cfg = File.createTempFile("vpn-chain-", ".json").apply {
             setReadable(false, false)
@@ -381,6 +405,7 @@ class DesktopTunnelController(
             writeText(configJson)
         }
         runtimeDir.mkdirs()
+        relayLog = File(runtimeDir, "relay.log")
 
         val proc = try {
             ProcessBuilder(singBoxBin, "run", "-c", cfg.absolutePath)
@@ -395,50 +420,96 @@ class DesktopTunnelController(
             )
             return null
         }
-        process = proc
-        writePidFile(proc.pid())
+        val relay = OwnedRelayProcess(proc)
+        process = relay
+        writePidFile(relay.pid)
         writeSessionState()
 
         readerJob = scope.launch(Dispatchers.IO) {
-            val exit = proc.waitFor()
+            val exit = relay.awaitExit()
             cfg.delete()
-            removePidFileIfMatches(proc.pid())
-            // A non-zero exit while we still believe we're up means the tunnel died.
-            val state = _status.value.state
-            if (state == TunnelState.Connecting || state == TunnelState.Connected) {
-                // Only blame CAP_NET_ADMIN when the log actually says so — a nonzero
-                // exit in TUN mode can just as easily be a stale interface, a bad
-                // WireGuard peer, or anything else, and mislabeling it wastes time.
-                val permissionDenied = exit != 0 && tunMode && recentLogIndicatesPermissionDenied()
-                if (exit != 0) {
-                    emitRecentLog() // surface sing-box's failure reason
-                    if (permissionDenied) {
-                        emitLog(Res.string.tunnel_error_tun_privilege_hint)
-                    }
-                }
-                stopSessionJobs()
-                // A crash after Connected keeps the kill switch engaged — that leak is
-                // exactly what it exists to stop. A startup that never got there
-                // protected nothing, so leave networking as we found it instead.
-                if (state == TunnelState.Connecting) disengageKillSwitch()
-                _status.value = ChainStatus(
-                    state = if (exit == 0) TunnelState.Disconnected else TunnelState.Error,
-                    detail = when {
-                        exit == 0 -> null
-                        permissionDenied -> UiText.Resource(Res.string.tunnel_error_tun_privilege_hint)
-                        killSwitchEngaged ->
-                            UiText.Resource(Res.string.tunnel_error_exit_kill_switch_engaged, listOf(exit))
-                        else -> UiText.Resource(Res.string.tunnel_error_exit_generic, listOf(exit))
-                    },
-                )
-            }
+            removePidFileIfMatches(relay.pid)
+            handleRelayExit(exit)
         }
-        return proc
+        return relay
+    }
+
+    /**
+     * Hands the config to the unit and starts it. No pidfile: the relay belongs to
+     * systemd, and the CLI's `down` could not signal it across users anyway.
+     */
+    private suspend fun startManagedRelay(configJson: String): RelayProcess? {
+        relayLog = SystemdRelay.logFile
+        val wrote = runCatching { writeManagedConfig(configJson) }
+        if (wrote.isFailure) {
+            failManagedStart(Res.string.tunnel_error_managed_config_write, SystemdRelay.configFile.path)
+            return null
+        }
+        val result = ManagedRelay.start()
+        if (!result.succeeded) {
+            failManagedStart(Res.string.tunnel_error_managed_start, result.output.trim())
+            return null
+        }
+        val relay = ManagedRelayProcess()
+        process = relay
+        writeSessionState()
+        readerJob = scope.launch(Dispatchers.IO) { handleRelayExit(relay.awaitExit()) }
+        return relay
+    }
+
+    /** Group-readable, not owner-only: the service user reads it through the
+     *  `vpn-chain` group. Permissions are set before the credentials go in. */
+    private fun writeManagedConfig(configJson: String) {
+        val path = SystemdRelay.configFile.toPath()
+        Files.deleteIfExists(path)
+        Files.createFile(path)
+        Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rw-r-----"))
+        SystemdRelay.configFile.writeText(configJson)
+    }
+
+    private suspend fun failManagedStart(message: StringResource, detail: String) {
+        _status.value = ChainStatus(
+            state = TunnelState.Error,
+            detail = UiText.Resource(message, listOf(detail)),
+        )
+        emitLog(message, detail)
+    }
+
+    private suspend fun handleRelayExit(exit: Int) {
+        // A non-zero exit while we still believe we're up means the tunnel died.
+        val state = _status.value.state
+        if (state == TunnelState.Connecting || state == TunnelState.Connected) {
+            // Only blame CAP_NET_ADMIN when the log actually says so — a nonzero
+            // exit in TUN mode can just as easily be a stale interface, a bad
+            // WireGuard peer, or anything else, and mislabeling it wastes time.
+            val permissionDenied = exit != 0 && tunMode && recentLogIndicatesPermissionDenied()
+            if (exit != 0) {
+                emitRecentLog() // surface sing-box's failure reason
+                if (permissionDenied) {
+                    emitLog(Res.string.tunnel_error_tun_privilege_hint)
+                }
+            }
+            stopSessionJobs()
+            // A crash after Connected keeps the kill switch engaged — that leak is
+            // exactly what it exists to stop. A startup that never got there
+            // protected nothing, so leave networking as we found it instead.
+            if (state == TunnelState.Connecting) disengageKillSwitch()
+            _status.value = ChainStatus(
+                state = if (exit == 0) TunnelState.Disconnected else TunnelState.Error,
+                detail = when {
+                    exit == 0 -> null
+                    permissionDenied -> UiText.Resource(Res.string.tunnel_error_tun_privilege_hint)
+                    killSwitchEngaged ->
+                        UiText.Resource(Res.string.tunnel_error_exit_kill_switch_engaged, listOf(exit))
+                    else -> UiText.Resource(Res.string.tunnel_error_exit_generic, listOf(exit))
+                },
+            )
+        }
     }
 
     /** Waits for the relay to accept traffic at all — the tun device to exist,
      *  or the proxy port to bind. @return false once the process is gone. */
-    private suspend fun awaitListening(proc: Process, ready: () -> Boolean): Boolean {
+    private suspend fun awaitListening(proc: RelayProcess, ready: () -> Boolean): Boolean {
         repeat(STARTUP_POLLS) {
             if (!proc.isAlive) return false
             if (ready()) return true
@@ -455,7 +526,7 @@ class DesktopTunnelController(
      * — and reporting that as up hands the user a tunnel that swallows every
      * request, most often when auto-connect fires at login and nothing is warm.
      */
-    private suspend fun confirmCarrying(proc: Process) {
+    private suspend fun confirmCarrying(proc: RelayProcess) {
         emitLog(Res.string.tunnel_log_awaiting_traffic)
         repeat(READINESS_ATTEMPTS) {
             if (!stillWaitingToCarry(proc)) return
@@ -479,7 +550,7 @@ class DesktopTunnelController(
 
     /** Whether the traffic check should keep going: the relay is still ours, the
      *  status is still ours to set, and the user hasn't asked to come down. */
-    private fun stillWaitingToCarry(proc: Process): Boolean =
+    private fun stillWaitingToCarry(proc: RelayProcess): Boolean =
         proc.isAlive && !stopRequested && _status.value.state == TunnelState.Connecting
 
     override suspend fun stop() = withContext(Dispatchers.IO) {
@@ -509,11 +580,11 @@ class DesktopTunnelController(
         _status.value = ChainStatus(state = TunnelState.Disconnected)
         readerJob?.cancel()
         readerJob = null
-        process?.let { own ->
-            own.destroy()
-            if (!own.waitFor(PROCESS_EXIT_TIMEOUT_S, TimeUnit.SECONDS)) own.destroyForcibly()
-        }
+        process?.stop(PROCESS_EXIT_TIMEOUT_S)
         process = null
+        // An adopted relay under systemd has no pidfile and runs as another user,
+        // so signalling it would fail silently. Ask the service manager instead.
+        if (ManagedRelay.available && ManagedRelay.isActive()) ManagedRelay.stop()
         // Adopted relay (the CLI's, or a previous GUI run): stop it via the shared
         // pidfile so Disconnect is one consistent control across both front-ends.
         livePidFileProcess()?.let { adopted ->
