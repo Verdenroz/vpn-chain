@@ -81,6 +81,7 @@ object SingBoxConfigFactory {
         warp: WarpExit? = null,
         warpMode: WarpMode = WarpMode.Off,
         warpDomains: List<String> = emptyList(),
+        allowLocalNetworks: Boolean = false,
     ): String {
         val entry = profile.entryHop
         val filtering = dnsFilter != DnsFilter.Off
@@ -115,6 +116,13 @@ object SingBoxConfigFactory {
                     put("mtu", if (entry != null || tail != null) 1280 else 1400)
                     put("auto_route", true)
                     put("strict_route", true)
+                    // auto_route otherwise pulls bridge and LAN destinations into the
+                    // tun, so Docker containers and local hosts never see a reply.
+                    if (allowLocalNetworks) {
+                        putJsonArray("route_exclude_address") {
+                            LOCAL_ROUTE_EXCLUDES.forEach { add(it) }
+                        }
+                    }
                     // gVisor terminates TCP and clamps MSS itself, avoiding kernel PMTU
                     // discovery, which black-holes large packets over a nested tunnel.
                     put("stack", "gvisor")
@@ -376,6 +384,9 @@ object SingBoxConfigFactory {
         .removePrefix("*")
         .trim('.')
         .takeIf { it.isNotEmpty() && '.' in it }
+
+    private val LOCAL_ROUTE_EXCLUDES =
+        listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16")
 
     private const val VLESS_TAG = "vless-proxy"
     private const val ENTRY_HOP_TAG = "entry-hop"

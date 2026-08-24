@@ -23,8 +23,14 @@ interface TunnelController {
     /**
      * @param killSwitchEnabled Desktop-only, WG-entry-hop-mode-only: whether to
      * install the nftables kill switch. Ignored everywhere else.
+     * @param allowLocalNetworks Desktop-only: whether that kill switch leaves
+     * RFC1918 and link-local destinations reachable. Ignored everywhere else.
      */
-    suspend fun start(configJson: String, killSwitchEnabled: Boolean = true)
+    suspend fun start(
+        configJson: String,
+        killSwitchEnabled: Boolean = true,
+        allowLocalNetworks: Boolean = true,
+    )
     suspend fun stop()
 
     /**

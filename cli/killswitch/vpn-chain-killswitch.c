@@ -15,8 +15,11 @@
  * confuses that detection. nftables leaves the routing table untouched.
  *
  * Usage:
- *   vpn-chain-killswitch up <exempt_ip> [<exempt_ip> ...]
+ *   vpn-chain-killswitch up [--allow-local] <exempt_ip> [<exempt_ip> ...]
  *   vpn-chain-killswitch down
+ *
+ * --allow-local additionally accepts RFC1918 and link-local destinations, so
+ * Docker bridges and LAN hosts stay reachable while the chain is up.
  *
  * All exempt IPs are validated as strict IPv4 dotted-quads before touching
  * anything - nothing is passed through a shell (every `nft` invocation uses
@@ -44,6 +47,12 @@
 #define TABLE_NAME "vpn_chain_killswitch"
 
 static const char *NFT_PATHS[] = {"/usr/sbin/nft", "/sbin/nft", "/usr/bin/nft", NULL};
+
+/* Docker bridges, LAN, link-local. Without them the reject RSTs host-to-container
+ * and host-to-LAN traffic the tunnel was never meant to carry. */
+static const char *LOCAL_RANGES[] = {
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", NULL,
+};
 
 static const char *find_nft(void) {
     for (int i = 0; NFT_PATHS[i] != NULL; i++) {
@@ -118,7 +127,7 @@ int main(int argc, char *argv[]) {
     if (argc < 2 || (strcmp(argv[1], "up") != 0 && strcmp(argv[1], "down") != 0)) {
         fprintf(
             stderr,
-            "usage: %s up <exempt_ip> [<exempt_ip> ...]\n"
+            "usage: %s up [--allow-local] <exempt_ip> [<exempt_ip> ...]\n"
             "       %s down\n",
             prog, prog
         );
@@ -126,8 +135,9 @@ int main(int argc, char *argv[]) {
     }
 
     int up = strcmp(argv[1], "up") == 0;
-    char **exempt_ips = &argv[2];
-    int exempt_count = argc - 2;
+    int allow_local = up && argc > 2 && strcmp(argv[2], "--allow-local") == 0;
+    char **exempt_ips = &argv[2 + allow_local];
+    int exempt_count = argc - 2 - allow_local;
 
     if (up) {
         if (exempt_count < 1) {
@@ -203,6 +213,16 @@ int main(int argc, char *argv[]) {
             (char *)"ip", (char *)"daddr", exempt_ips[i], (char *)"accept", NULL,
         };
         if (run_nft(nft_bin, ip_argv) != 0) rc = 1;
+    }
+
+    if (allow_local) {
+        for (int i = 0; LOCAL_RANGES[i] != NULL; i++) {
+            char *local_argv[] = {
+                (char *)"nft", (char *)"add", (char *)"rule", (char *)"inet", (char *)TABLE_NAME, (char *)"output",
+                (char *)"ip", (char *)"daddr", (char *)LOCAL_RANGES[i], (char *)"accept", NULL,
+            };
+            if (run_nft(nft_bin, local_argv) != 0) rc = 1;
+        }
     }
 
     /* Bare `reject` (no address family) catches IPv4 and IPv6 alike, since our

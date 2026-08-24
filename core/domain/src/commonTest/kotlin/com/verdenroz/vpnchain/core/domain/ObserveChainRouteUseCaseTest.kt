@@ -335,6 +335,7 @@ private class FakeSettings(settings: UserSettings) : SettingsRepository {
     override suspend fun setThemeConfig(themeConfig: ThemeConfig) = Unit
     override suspend fun setSystemWideTun(enabled: Boolean) = Unit
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
+    override suspend fun setAllowLocalNetworks(enabled: Boolean) = Unit
     override suspend fun setDnsFilter(filter: DnsFilter) = Unit
     override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
     override suspend fun setWarpMode(mode: WarpMode) = Unit

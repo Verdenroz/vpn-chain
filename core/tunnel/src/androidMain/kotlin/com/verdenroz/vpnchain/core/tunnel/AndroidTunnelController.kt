@@ -46,7 +46,7 @@ class AndroidTunnelController(
         TunnelBridge.configProvider = provider
     }
 
-    override suspend fun start(configJson: String, killSwitchEnabled: Boolean) {
+    override suspend fun start(configJson: String, killSwitchEnabled: Boolean, allowLocalNetworks: Boolean) {
         // killSwitchEnabled is desktop-only (see TunnelController) - Android's
         // kill switch is the system Always-on VPN setting, unrelated to this.
         val current = TunnelBridge.status.value.state
