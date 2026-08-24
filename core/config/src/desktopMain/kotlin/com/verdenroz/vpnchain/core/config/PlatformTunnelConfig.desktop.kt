@@ -23,11 +23,14 @@ actual fun renderPlatformTunnelConfig(
             profile = profile,
             clashApi = clashApi,
             dnsFilter = settings.dnsFilter,
-            cachePath = cacheFilePath(),
+            // The unit runs sing-box as its own user, which can reach neither
+            // this user's home nor its stdout.
+            cachePath = if (SystemdRelay.available) SystemdRelay.cachePath else cacheFilePath(),
             warp = warp,
             warpMode = settings.warpMode,
             warpDomains = settings.warpDomains,
             allowLocalNetworks = settings.allowLocalNetworks,
+            logPath = if (SystemdRelay.available) SystemdRelay.logFile.absolutePath else null,
         )
     } else {
         SingBoxConfigFactory.mixedProxyConfig(

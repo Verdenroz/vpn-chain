@@ -1,0 +1,32 @@
+// vpn-chain: let the locally-present, active user start and stop the relay unit
+// without a password prompt.
+//
+// org.freedesktop.systemd1.manage-units defaults to auth_admin, which would ask
+// for a password on every connect and disconnect. This narrows that to exactly
+// one unit, three verbs, and a session that is both active (foreground) and
+// local (not remote/SSH) — the same physically-present-user pattern used in
+// 10-vpn-chain-resolve1.rules and in systemd's own built-in rules.
+//
+// Scoped to a unit whose contents are fixed on disk on purpose. Authorizing
+// something like systemd-run instead would let any active local process choose
+// its own ExecStart and User, which is a local root escalation.
+//
+// One-time install:
+//   sudo cp cli/polkit/10-vpn-chain-systemd.rules /etc/polkit-1/rules.d/
+//   sudo chown root:polkitd /etc/polkit-1/rules.d/10-vpn-chain-systemd.rules
+//   sudo chmod 640 /etc/polkit-1/rules.d/10-vpn-chain-systemd.rules
+polkit.addRule(function(action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return;
+    }
+    if (action.lookup("unit") !== "vpn-chain-relay.service") {
+        return;
+    }
+    const VERBS = ["start", "stop", "restart"];
+    if (VERBS.indexOf(action.lookup("verb")) === -1) {
+        return;
+    }
+    if (subject.active && subject.local && subject.isInGroup("vpn-chain")) {
+        return polkit.Result.YES;
+    }
+});
