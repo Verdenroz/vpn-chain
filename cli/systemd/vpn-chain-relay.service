@@ -35,4 +35,8 @@ ExecStart=/usr/bin/sing-box -D /var/lib/vpn-chain -c /run/vpn-chain/relay.json r
 # The app supervises reconnects itself and needs a failed dial to surface as a
 # failure, not as a restart loop behind its back.
 Restart=no
+# The app reads the log this writes but does not share a group with the service,
+# so the file has to stay other-readable. The 2770 handoff directory is what
+# actually keeps it private.
+UMask=0022
 LimitNOFILE=infinity

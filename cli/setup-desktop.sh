@@ -52,25 +52,20 @@ elif [ -d /usr/lib/systemd/system ] && command -v systemctl >/dev/null; then
         "$REPO/cli/systemd/vpn-chain-relay.service" \
         | sudo tee /etc/systemd/system/vpn-chain-relay.service >/dev/null
     sudo chmod 644 /etc/systemd/system/vpn-chain-relay.service
-    sudo install -m 0644 "$REPO/cli/systemd/vpn-chain-tmpfiles.conf" /etc/tmpfiles.d/vpn-chain.conf
+    # Owned by the invoking user so the app can write the config without joining
+    # a group, which would not reach their running desktop session until relogin.
+    sed "s|^d /run/vpn-chain 2770 sing-box|d /run/vpn-chain 2770 $USER|" \
+        "$REPO/cli/systemd/vpn-chain-tmpfiles.conf" \
+        | sudo tee /etc/tmpfiles.d/vpn-chain.conf >/dev/null
+    sudo chmod 644 /etc/tmpfiles.d/vpn-chain.conf
     sudo systemd-tmpfiles --create /etc/tmpfiles.d/vpn-chain.conf
     sudo systemctl daemon-reload
     ok "Relay service installed. sing-box itself needs no capability grant."
-    if ! getent group vpn-chain | awk -F: '{print $4}' | tr ',' '\n' | grep -qx "$USER"; then
-        sudo gpasswd -a "$USER" vpn-chain
-        log "Added $USER to the 'vpn-chain' group."
-    fi
-    # A session picks up group membership only at login, so the handoff directory
-    # stays unwritable until the user logs back in.
-    if id -nG | tr ' ' '\n' | grep -qx vpn-chain; then
-        ok "The 'vpn-chain' group is active here. The service is ready to use."
+    if [ -w /run/vpn-chain ]; then
+        ok "Handoff directory ready at /run/vpn-chain. No logout needed."
     else
-        warn "The 'vpn-chain' group is not active in this session yet." \
-             "Log out and back in to activate it (a new terminal is not enough)."
-        log "Granting a temporary capability so TUN keeps working until then..."
-        sudo setcap cap_net_admin,cap_net_bind_service=+ep "$SINGBOX_PATH"
-        warn "That grant is a stopgap, not the fix: the next sing-box upgrade wipes it." \
-             "Once you log back in the service takes over and it stops mattering."
+        warn "/run/vpn-chain is not writable by $USER — the app will fall back to" \
+             "starting sing-box itself. Check the owner: ls -ld /run/vpn-chain"
     fi
 else
     warn "No systemd here — falling back to a file capability on sing-box."
