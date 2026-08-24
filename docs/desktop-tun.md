@@ -12,25 +12,51 @@ platform; desktop's TUN chain mirrors the CLI's
 `you → entry hop → VPS → internet` chain, so the GUI and CLI are functionally
 equivalent.
 
-## One-time privilege grant
+## One-time privileged setup
 
-TUN needs a capability grant on the `sing-box` binary. Run
-`cli/setup-desktop.sh` to handle this, the kill-switch helper (see
-`docs/kill-switch.md`), and the polkit rule below in one guided pass (safe to
-re-run) — or just the sing-box grant by itself:
+TUN needs `CAP_NET_ADMIN`. Run `cli/setup-desktop.sh` for this, the kill-switch
+helper (see `docs/kill-switch.md`), and the polkit rules, in one guided pass.
+Safe to re-run.
+
+On systemd it installs `cli/systemd/vpn-chain-relay.service`, which carries the
+capability as an `AmbientCapabilities=` grant and runs sing-box as the
+unprivileged `sing-box` user. **This is genuinely one-time.** The older approach
+of `setcap`-ing the binary is not: a file capability lives on the inode, so every
+package upgrade of sing-box replaces the binary and silently drops the grant,
+leaving TUN broken until someone re-runs the command. The unit grants the
+capability to the process instead, so the binary is never touched.
+
+The app hands the rendered config to the service through `/run/vpn-chain`, which
+setup creates owned by you with group `vpn-chain`. You own it, so writing the
+config needs no group membership and no logout: the service reaches the same
+directory through the group instead. If that directory is ever not writable, the
+app treats the unit as unavailable, falls back to running sing-box itself, and
+says so in the log rather than failing the connect.
+
+Where there is no systemd, the script falls back to the file capability and says
+so:
 
 ```
 sudo setcap cap_net_admin,cap_net_bind_service=+ep $(command -v sing-box)
 ```
 
-Without it, connect fails with `TUNSETIFF: operation not permitted` — the app
-detects the missing capability before attempting to connect and shows this
-exact command as the error.
+Connect then fails with `TUNSETIFF: operation not permitted` whenever an upgrade
+has cleared it. The app detects the missing capability before connecting and
+shows the command as the error. That check is skipped when the unit is installed,
+where the binary having no capability is the expected state.
 
-TUN mode also asks `systemd-resolved` to set/revert DNS on the tunnel
-interface on every connect and disconnect, which by default means a polkit
-password prompt each time. `cli/setup-desktop.sh` installs a rule scoped to
-just that (`cli/polkit/10-vpn-chain-resolve1.rules`) so it stops prompting.
+With the service in play, Disconnect has to come from the app or from
+`systemctl stop vpn-chain-relay` — `cli/vpn-chain down` signals a pid it does not
+own, so it cannot stop a relay running under the unit (it still tears down the
+kill switch).
+
+TUN mode also asks `systemd-resolved` to set/revert DNS on the tunnel interface
+on every connect and disconnect, which by default means a polkit password prompt
+each time. `cli/setup-desktop.sh` installs rules scoped to just that and to
+starting the unit (`cli/polkit/`) so it stops prompting. The resolved rule has to
+cover the `sing-box` service user as well as your own session: a system service
+has no logind session, so it is neither active nor local, and without that branch
+DNS setup fails on every connect.
 
 ## Adding the WireGuard entry hop
 

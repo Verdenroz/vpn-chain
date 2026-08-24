@@ -1,0 +1,42 @@
+# vpn-chain: runs the relay's sing-box under systemd instead of as a child of
+# the desktop app.
+#
+# The point is AmbientCapabilities. A file capability (`setcap` on the sing-box
+# binary) lives on the inode, so every package upgrade replaces the binary and
+# silently drops the grant, leaving TUN mode broken until someone re-runs setcap
+# by hand. Capabilities granted here attach to the process at exec time, so the
+# binary stays untouched and upgrades stop mattering.
+#
+# Modelled on the unit sing-box's own packaging ships
+# (/usr/lib/systemd/system/sing-box.service), including running as the
+# unprivileged `sing-box` user rather than root.
+#
+# Install: cli/setup-desktop.sh (which also rewrites ExecStart below to wherever
+# sing-box actually lives on this machine).
+#
+# There is deliberately no [Install] section: the config this reads is ephemeral
+# and written per-connect by the app, so the unit must never be enabled at boot.
+
+[Unit]
+Description=vpn-chain relay (sing-box)
+Documentation=https://github.com/Verdenroz/vpn-chain
+After=network.target nss-lookup.target
+
+[Service]
+Type=simple
+User=sing-box
+# Read the app-written config out of the shared handoff directory. The group is
+# granted by cli/systemd/vpn-chain-tmpfiles.conf.
+SupplementaryGroups=vpn-chain
+StateDirectory=vpn-chain
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+ExecStart=/usr/bin/sing-box -D /var/lib/vpn-chain -c /run/vpn-chain/relay.json run
+# The app supervises reconnects itself and needs a failed dial to surface as a
+# failure, not as a restart loop behind its back.
+Restart=no
+# The app reads the log this writes but does not share a group with the service,
+# so the file has to stay other-readable. The 2770 handoff directory is what
+# actually keeps it private.
+UMask=0022
+LimitNOFILE=infinity

@@ -124,6 +124,21 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
+    fun `log gains an output path when one is given`() {
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(), logPath = "/run/vpn-chain/relay.log"))
+
+        val log = config.getValue("log").jsonObject
+        assertEquals("/run/vpn-chain/relay.log", log.getValue("output").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `log writes to stdout by default`() {
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile()))
+
+        assertFalse(config.getValue("log").jsonObject.containsKey("output"))
+    }
+
+    @Test
     fun `mtu drops to fit inside the wireguard entry when one is configured`() {
         val withEntry = parse(SingBoxConfigFactory.androidChainConfig(profile(entry())))
         val relayOnly = parse(SingBoxConfigFactory.androidChainConfig(profile()))

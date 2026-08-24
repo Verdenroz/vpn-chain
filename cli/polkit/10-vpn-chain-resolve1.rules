@@ -9,6 +9,11 @@
 // same pattern systemd's own built-in polkit rules use for physically-
 // present-user checks. Does not touch any other polkit action.
 //
+// The `sing-box` branch below covers the relay running under
+// vpn-chain-relay.service. A system service has no logind session, so it is
+// neither active nor local, and without it every connect fails to set DNS with
+// no agent around to prompt.
+//
 // One-time install:
 //   sudo cp cli/polkit/10-vpn-chain-resolve1.rules /etc/polkit-1/rules.d/
 //   sudo chown root:polkitd /etc/polkit-1/rules.d/10-vpn-chain-resolve1.rules
@@ -22,7 +27,13 @@ polkit.addRule(function(action, subject) {
         "org.freedesktop.resolve1.set-default-route",
         "org.freedesktop.resolve1.revert",
     ];
-    if (RESOLVE1_DNS_ACTIONS.indexOf(action.id) !== -1 && subject.active && subject.local) {
+    if (RESOLVE1_DNS_ACTIONS.indexOf(action.id) === -1) {
+        return;
+    }
+    if (subject.active && subject.local) {
+        return polkit.Result.YES;
+    }
+    if (subject.user === "sing-box") {
         return polkit.Result.YES;
     }
 });
