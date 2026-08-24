@@ -107,6 +107,23 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
+    fun `local ranges are excluded from the tun route when allowed`() {
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(), allowLocalNetworks = true))
+
+        val excluded = config.array("inbounds").single().jsonObject
+            .array("route_exclude_address").map { it.jsonPrimitive.content }
+        assertEquals(listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"), excluded)
+    }
+
+    @Test
+    fun `tun route excludes nothing by default`() {
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile()))
+
+        val tun = config.array("inbounds").single().jsonObject
+        assertFalse(tun.containsKey("route_exclude_address"))
+    }
+
+    @Test
     fun `mtu drops to fit inside the wireguard entry when one is configured`() {
         val withEntry = parse(SingBoxConfigFactory.androidChainConfig(profile(entry())))
         val relayOnly = parse(SingBoxConfigFactory.androidChainConfig(profile()))

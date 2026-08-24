@@ -88,6 +88,10 @@ class SettingsViewModel(
         settingsRepository.setSystemWideTun(enabled)
     }
 
+    fun setAllowLocalNetworks(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setAllowLocalNetworks(enabled)
+    }
+
     fun setKillSwitchEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setKillSwitchEnabled(enabled)
     }

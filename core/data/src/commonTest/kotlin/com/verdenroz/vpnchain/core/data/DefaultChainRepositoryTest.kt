@@ -154,7 +154,7 @@ private class FakeTunnelController : TunnelController {
     var releaseCalls = 0
     var configProvider: (suspend () -> String?)? = null
 
-    override suspend fun start(configJson: String, killSwitchEnabled: Boolean) = Unit
+    override suspend fun start(configJson: String, killSwitchEnabled: Boolean, allowLocalNetworks: Boolean) = Unit
     override suspend fun stop() {
         stopCalls++
     }
@@ -190,6 +190,7 @@ private class StubSettingsRepository : SettingsRepository {
     override suspend fun setThemeConfig(themeConfig: ThemeConfig) = Unit
     override suspend fun setSystemWideTun(enabled: Boolean) = Unit
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
+    override suspend fun setAllowLocalNetworks(enabled: Boolean) = Unit
     override suspend fun setDnsFilter(filter: DnsFilter) = Unit
     override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
     override suspend fun setWarpMode(mode: WarpMode) = Unit

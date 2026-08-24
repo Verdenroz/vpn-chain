@@ -74,6 +74,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_chai
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_configured_for
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_edit_fields
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_enter_manually
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_allow_local_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_allow_local_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_fail_closed_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_fail_closed_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_hide_fields
@@ -159,6 +161,7 @@ fun SettingsRoute(
         onToggleSystemWide = viewModel::setSystemWideTun,
         onToggleEntryHop = viewModel::setEntryHopEnabled,
         onToggleKillSwitch = viewModel::setKillSwitchEnabled,
+        onToggleAllowLocalNetworks = viewModel::setAllowLocalNetworks,
         onSetDnsFilter = viewModel::setDnsFilter,
         onSetWarpMode = viewModel::setWarpMode,
         onSetWarpDomains = viewModel::setWarpDomains,
@@ -186,6 +189,7 @@ fun SettingsScreen(
     onToggleSystemWide: (Boolean) -> Unit,
     onToggleEntryHop: (Boolean) -> Unit,
     onToggleKillSwitch: (Boolean) -> Unit,
+    onToggleAllowLocalNetworks: (Boolean) -> Unit,
     onSetDnsFilter: (DnsFilter) -> Unit,
     onSetWarpMode: (WarpMode) -> Unit,
     onSetWarpDomains: (String) -> Unit,
@@ -398,6 +402,13 @@ fun SettingsScreen(
                         detail = stringResource(Res.string.settings_fail_closed_detail),
                         checked = uiState.settings.killSwitchEnabled,
                         onCheckedChange = onToggleKillSwitch,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    SettingRow(
+                        title = stringResource(Res.string.settings_allow_local_title),
+                        detail = stringResource(Res.string.settings_allow_local_detail),
+                        checked = uiState.settings.allowLocalNetworks,
+                        onCheckedChange = onToggleAllowLocalNetworks,
                     )
                     Spacer(Modifier.height(16.dp))
                 }

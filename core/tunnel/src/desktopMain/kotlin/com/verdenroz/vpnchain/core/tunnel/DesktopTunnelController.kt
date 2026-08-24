@@ -124,6 +124,9 @@ class DesktopTunnelController(
     @Volatile
     private var killSwitchEnabled: Boolean = true
 
+    @Volatile
+    private var allowLocalNetworks: Boolean = true
+
     /** True once the nftables kill-switch table has been installed for this session. */
     @Volatile
     private var killSwitchEngaged: Boolean = false
@@ -154,7 +157,11 @@ class DesktopTunnelController(
         }
     }
 
-    override suspend fun start(configJson: String, killSwitchEnabled: Boolean) = withContext(Dispatchers.IO) {
+    override suspend fun start(
+        configJson: String,
+        killSwitchEnabled: Boolean,
+        allowLocalNetworks: Boolean,
+    ) = withContext(Dispatchers.IO) {
         startStopLock.withLock {
             val current = _status.value.state
             if (current == TunnelState.Connecting || current == TunnelState.Connected) {
@@ -167,6 +174,7 @@ class DesktopTunnelController(
             tunHasEntry = tunMode && RelayConfig.hasWireGuardEntry(configJson)
             proxyPort = RelayConfig.proxyPort(configJson, DEFAULT_PROXY_PORT)
             this@DesktopTunnelController.killSwitchEnabled = killSwitchEnabled
+            this@DesktopTunnelController.allowLocalNetworks = allowLocalNetworks
             // A relay left running by the CLI or a previous GUI run is invisible to
             // a fresh process. Launching a second sing-box over the same TUN makes
             // it tear down the live instance's routing on exit, which strands the
@@ -284,7 +292,8 @@ class DesktopTunnelController(
             emitLog(Res.string.tunnel_log_kill_switch_no_exempt)
             return
         }
-        val result = runKillSwitchHelper(listOf("up") + exemptIps)
+        val localArgs = if (allowLocalNetworks) listOf("--allow-local") else emptyList()
+        val result = runKillSwitchHelper(listOf("up") + localArgs + exemptIps)
         killSwitchEngaged = result == 0
         if (!killSwitchEngaged) {
             emitLog(Res.string.tunnel_error_kill_switch_unavailable)

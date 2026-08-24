@@ -104,7 +104,7 @@ internal class DefaultChainRepository(
         val settings = settingsRepository.settings.first()
         val configJson = renderConfig()
             ?: return Result.failure(IllegalStateException("No chain profile configured"))
-        return runCatching { controller.start(configJson, settings.killSwitchEnabled) }
+        return runCatching { controller.start(configJson, settings.killSwitchEnabled, settings.allowLocalNetworks) }
             .onFailure { logger.e(TAG, "connect failed", it) }
     }
 

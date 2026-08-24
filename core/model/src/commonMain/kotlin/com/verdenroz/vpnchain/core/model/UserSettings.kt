@@ -24,6 +24,13 @@ data class UserSettings(
      */
     val killSwitchEnabled: Boolean = true,
     /**
+     * Desktop only: keeps RFC1918 and link-local destinations reachable while
+     * the chain is up. They are exempted from the kill switch and excluded
+     * from the TUN's routes, so Docker bridges and LAN hosts still answer.
+     * Off is strictly fail-closed and severs both.
+     */
+    val allowLocalNetworks: Boolean = true,
+    /**
      * Blocklist filtering on the chain's resolver. On by default: a chain
      * with no entry hop has no upstream filter behind it, and losing the
      * filtering silently is worse than filtering something you wanted.

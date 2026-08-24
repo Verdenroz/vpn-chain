@@ -13,6 +13,7 @@ interface SettingsRepository {
     suspend fun setThemeConfig(themeConfig: ThemeConfig)
     suspend fun setSystemWideTun(enabled: Boolean)
     suspend fun setKillSwitchEnabled(enabled: Boolean)
+    suspend fun setAllowLocalNetworks(enabled: Boolean)
     suspend fun setDnsFilter(filter: DnsFilter)
     suspend fun setEntryHopEnabled(enabled: Boolean)
     suspend fun setWarpMode(mode: WarpMode)
@@ -47,6 +48,9 @@ internal class DefaultSettingsRepository(
         preferences.setSystemWideTun(enabled)
     override suspend fun setKillSwitchEnabled(enabled: Boolean) =
         preferences.setKillSwitchEnabled(enabled)
+
+    override suspend fun setAllowLocalNetworks(enabled: Boolean) =
+        preferences.setAllowLocalNetworks(enabled)
     override suspend fun setDnsFilter(filter: DnsFilter) =
         preferences.setDnsFilter(filter)
     override suspend fun setEntryHopEnabled(enabled: Boolean) =
