@@ -43,8 +43,8 @@ then put `vpn-chain-killswitch` on `PATH`. Enabled by default — flip
 
 Before connecting, the app installs an **nftables** table on the `OUTPUT`
 hook — not a routing-table change — that rejects all outbound traffic except
-loopback, anything already routed to `tun0`, and the VPS/entry-endpoint
-exemptions.
+loopback, anything already routed to `tun0`, the VPS/entry-endpoint
+exemptions, and (by default) local networks.
 
 - **Firewall, not routing.** sing-box's own `auto_detect_interface` watches
   the routing table via netlink to find "the real" interface; a route with no
@@ -62,6 +62,15 @@ exemptions.
   sing-box crashes and `tun0` stops existing; leaked traffic then falls back
   to the physical link, where only the VPS/entry IPs still get through and
   everything else is rejected.
+- **Local networks are exempt by default.** RFC1918 and link-local
+  destinations are accepted, so Docker bridges, LAN hosts and printers stay
+  reachable while the chain is up. Without it the `reject` RSTs
+  host-to-container traffic that never reaches the physical link in the first
+  place, and a container the host cannot talk to looks exactly like a crashed
+  service. The chain's TUN carries a matching `route_exclude_address` list so
+  `auto_route` doesn't pull those same destinations into `tun0` and swallow
+  the replies. **Settings → Allow local networks** turns both off together for
+  a strictly fail-closed switch.
 - **Torn down on disconnect, not on crash.** On Disconnect the app tears the
   table down — but *not* on an unexpected crash, since that's exactly when
   it's supposed to keep blocking traffic.

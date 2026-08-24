@@ -67,6 +67,7 @@ class VpnChainPreferencesDataSource(
                 ?: ThemeConfig.FOLLOW_SYSTEM,
             systemWideTun = prefs[SYSTEM_WIDE_TUN_KEY] ?: true,
             killSwitchEnabled = prefs[KILL_SWITCH_ENABLED_KEY] ?: true,
+            allowLocalNetworks = prefs[ALLOW_LOCAL_NETWORKS_KEY] ?: true,
             dnsFilter = prefs[DNS_FILTER_KEY]
                 ?.let { raw -> runCatching { DnsFilter.valueOf(raw) }.getOrNull() }
                 ?: DnsFilter.AdsAndTrackers,
@@ -139,6 +140,10 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { it[KILL_SWITCH_ENABLED_KEY] = enabled }
     }
 
+    suspend fun setAllowLocalNetworks(enabled: Boolean) {
+        dataStore.edit { it[ALLOW_LOCAL_NETWORKS_KEY] = enabled }
+    }
+
     suspend fun setDnsFilter(filter: DnsFilter) {
         dataStore.edit { it[DNS_FILTER_KEY] = filter.name }
     }
@@ -193,6 +198,7 @@ class VpnChainPreferencesDataSource(
         val THEME_KEY = stringPreferencesKey("theme_config")
         val SYSTEM_WIDE_TUN_KEY = booleanPreferencesKey("system_wide_tun")
         val KILL_SWITCH_ENABLED_KEY = booleanPreferencesKey("kill_switch_enabled")
+        val ALLOW_LOCAL_NETWORKS_KEY = booleanPreferencesKey("allow_local_networks")
         val DNS_FILTER_KEY = stringPreferencesKey("dns_filter")
         val ENTRY_HOP_ENABLED_KEY = booleanPreferencesKey("entry_hop_enabled")
         val WARP_MODE_KEY = stringPreferencesKey("warp_mode")

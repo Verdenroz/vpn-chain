@@ -27,6 +27,7 @@ actual fun renderPlatformTunnelConfig(
             warp = warp,
             warpMode = settings.warpMode,
             warpDomains = settings.warpDomains,
+            allowLocalNetworks = settings.allowLocalNetworks,
         )
     } else {
         SingBoxConfigFactory.mixedProxyConfig(
