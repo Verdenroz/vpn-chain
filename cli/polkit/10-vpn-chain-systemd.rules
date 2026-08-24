@@ -3,9 +3,13 @@
 //
 // org.freedesktop.systemd1.manage-units defaults to auth_admin, which would ask
 // for a password on every connect and disconnect. This narrows that to exactly
-// one unit, three verbs, and a session that is both active (foreground) and
-// local (not remote/SSH) — the same physically-present-user pattern used in
+// one unit and a session that is both active (foreground) and local (not
+// remote/SSH) — the same physically-present-user pattern used in
 // 10-vpn-chain-resolve1.rules and in systemd's own built-in rules.
+//
+// Deliberately not gated on group membership: polkitd resolves groups from a
+// cache that a fresh `gpasswd` does not invalidate, so the rule silently failed
+// to match and prompted anyway. Nothing else here needs the group either.
 //
 // Scoped to a unit whose contents are fixed on disk on purpose. Authorizing
 // something like systemd-run instead would let any active local process choose
@@ -22,11 +26,7 @@ polkit.addRule(function(action, subject) {
     if (action.lookup("unit") !== "vpn-chain-relay.service") {
         return;
     }
-    const VERBS = ["start", "stop", "restart"];
-    if (VERBS.indexOf(action.lookup("verb")) === -1) {
-        return;
-    }
-    if (subject.active && subject.local && subject.isInGroup("vpn-chain")) {
+    if (subject.active && subject.local) {
         return polkit.Result.YES;
     }
 });
