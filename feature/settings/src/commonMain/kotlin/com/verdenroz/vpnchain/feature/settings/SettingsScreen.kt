@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -527,7 +528,9 @@ private fun SettingRow(
         Column(Modifier.weight(1f).padding(end = 16.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.readout)
             Spacer(Modifier.height(5.dp))
-            Text(detail, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+            SelectionContainer {
+                Text(detail, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+            }
         }
         PanelToggle(checked = checked, onCheckedChange = onCheckedChange)
     }
@@ -542,16 +545,18 @@ private fun AlwaysOnGuidance(detected: Boolean, onOpenSystemVpnSettings: () -> U
             lit = true,
             size = 8.dp,
         )
-        Text(
-            if (detected) {
-                stringResource(Res.string.settings_always_on_active)
-            } else {
-                stringResource(Res.string.settings_always_on_not_armed)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (detected) colors.readout else colors.muted,
-            modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp),
-        )
+        SelectionContainer(Modifier.weight(1f)) {
+            Text(
+                if (detected) {
+                    stringResource(Res.string.settings_always_on_active)
+                } else {
+                    stringResource(Res.string.settings_always_on_not_armed)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (detected) colors.readout else colors.muted,
+                modifier = Modifier.padding(start = 4.dp, end = 12.dp),
+            )
+        }
         // Android's own setting, not something this app can flip directly — the
         // toggle mirrors real status, and either direction opens system VPN
         // settings rather than changing anything here. Always visible (not just
