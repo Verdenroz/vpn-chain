@@ -29,8 +29,18 @@ object SystemdRelay {
      * overridden one. Checked per call: installing the unit shouldn't require
      * restarting the app to take effect.
      */
-    val available: Boolean
+    val unitInstalled: Boolean
         get() = UNIT_PATHS.any { File(it, UNIT).exists() }
+
+    /**
+     * Installed *and* usable. Setup grants the `vpn-chain` group that makes the
+     * handoff directory writable, and group membership never reaches a session
+     * that was already logged in, so an installed unit is unusable until the
+     * next login. Treating that as unavailable falls back to spawning sing-box
+     * instead of failing the connect outright.
+     */
+    val available: Boolean
+        get() = unitInstalled && runDir.canWrite()
 
     private val UNIT_PATHS = listOf("/usr/lib/systemd/system", "/etc/systemd/system")
 }

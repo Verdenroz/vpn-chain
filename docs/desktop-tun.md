@@ -27,9 +27,15 @@ leaving TUN broken until someone re-runs the command. The unit grants the
 capability to the process instead, so the binary is never touched.
 
 The setup script adds you to a `vpn-chain` group so the app can hand the rendered
-config to the service through `/run/vpn-chain`. **Group membership does not apply
-to sessions that are already logged in** — run `newgrp vpn-chain`, or log out and
-back in, before connecting for the first time.
+config to the service through `/run/vpn-chain`. **Group membership only takes
+effect at login**, and opening a new terminal does not count: the desktop session
+that launches the app keeps the groups it started with, so `newgrp` in a shell
+does not help an app started from a launcher.
+
+Until you log out and back in, the app treats the unit as unavailable, falls back
+to running sing-box itself, and says so in the log. Setup covers that gap by
+granting the file capability anyway and telling you it is a stopgap. After the
+next login the service takes over and the stale capability stops mattering.
 
 Where there is no systemd, the script falls back to the file capability and says
 so:

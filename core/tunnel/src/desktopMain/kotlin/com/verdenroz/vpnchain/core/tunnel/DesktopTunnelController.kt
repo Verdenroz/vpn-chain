@@ -15,7 +15,6 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_exit_
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_exit_kill_switch_engaged
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_kill_switch_unavailable
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_managed_config_write
-import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_managed_dir_missing
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_managed_start
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_no_traffic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_relay_already_running_pid
@@ -27,6 +26,7 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_already
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_awaiting_traffic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_chain_stalled
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_disengaged
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_managed_unusable
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_engaged
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_helper_error
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_no_exempt
@@ -390,6 +390,9 @@ class DesktopTunnelController(
             )
             return null
         }
+        if (SystemdRelay.unitInstalled && !ManagedRelay.available) {
+            emitLog(Res.string.tunnel_log_managed_unusable)
+        }
         return if (ManagedRelay.available) startManagedRelay(configJson) else startOwnedRelay(configJson)
     }
 
@@ -436,10 +439,6 @@ class DesktopTunnelController(
      * systemd, and the CLI's `down` could not signal it across users anyway.
      */
     private suspend fun startManagedRelay(configJson: String): RelayProcess? {
-        if (!SystemdRelay.runDir.isDirectory) {
-            failManagedStart(Res.string.tunnel_error_managed_dir_missing, SystemdRelay.runDir.path)
-            return null
-        }
         relayLog = SystemdRelay.logFile
         val wrote = runCatching { writeManagedConfig(configJson) }
         if (wrote.isFailure) {
