@@ -473,18 +473,20 @@ private fun StatusStrip(status: ChainStatus, rttMs: Int?) {
         ) {
             // The remedy differs per cause, and pointing at Settings when the
             // setting is already on just sends the user in a circle.
-            Text(
-                stringResource(
-                    when (status.killSwitch) {
-                        KillSwitchState.HelperUnavailable -> Res.string.chain_kill_switch_hint_helper
-                        KillSwitchState.ExternalAppRequired -> Res.string.chain_kill_switch_hint_external_app
-                        else -> Res.string.chain_kill_switch_hint
-                    },
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.lampRed,
-                modifier = Modifier.padding(top = 10.dp),
-            )
+            SelectionContainer {
+                Text(
+                    stringResource(
+                        when (status.killSwitch) {
+                            KillSwitchState.HelperUnavailable -> Res.string.chain_kill_switch_hint_helper
+                            KillSwitchState.ExternalAppRequired -> Res.string.chain_kill_switch_hint_external_app
+                            else -> Res.string.chain_kill_switch_hint
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.lampRed,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
         }
     }
 }
