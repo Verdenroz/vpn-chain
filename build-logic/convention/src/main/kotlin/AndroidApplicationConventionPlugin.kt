@@ -14,13 +14,15 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             apply("org.jetbrains.kotlin.android")
         }
 
+        val version = providers.gradleProperty("vpnchain.version").getOrElse("0.1.0")
+
         extensions.configure<ApplicationExtension> {
             compileSdk = 36
             defaultConfig {
                 minSdk = 26
                 targetSdk = 36
-                versionCode = 1
-                versionName = providers.gradleProperty("vpnchain.version").getOrElse("0.1.0")
+                versionCode = versionCodeOf(version)
+                versionName = version
             }
             compileOptions {
                 sourceCompatibility = JavaVersion.VERSION_17
@@ -32,4 +34,13 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
         }
     }
+}
+
+/**
+ * Android compares builds by version code alone, so it has to rise with the
+ * version name. Allows up to 99 minor and 99 patch releases per major.
+ */
+private fun versionCodeOf(version: String): Int {
+    val (major, minor, patch) = version.split(".").map(String::toInt)
+    return major * 10_000 + minor * 100 + patch
 }
