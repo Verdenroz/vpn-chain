@@ -405,7 +405,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
     override fun setSystemProxyEnabled(isEnabled: Boolean) = Unit
 
     override fun writeDebugMessage(message: String) {
-        TunnelBridge.log(message)
+        TunnelBridge.logRelay(message)
     }
 
     private fun startForegroundNotification() {
@@ -518,7 +518,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
     /** Forwards engine log lines onto the shared bridge for the Logs screen. */
     private inner class LogHandler : CommandClientHandler {
         override fun writeLogs(messageList: LogIterator) {
-            while (messageList.hasNext()) TunnelBridge.log(messageList.next().message)
+            while (messageList.hasNext()) TunnelBridge.logRelay(messageList.next().message)
         }
         override fun connected() = Unit
         override fun disconnected(message: String?) = Unit
