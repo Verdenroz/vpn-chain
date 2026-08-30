@@ -2,8 +2,12 @@ package com.verdenroz.vpnchain.core.tunnel
 
 import java.net.HttpURLConnection
 import java.net.URI
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -28,17 +32,31 @@ internal object ChainProbe {
     )
 
     /**
-     * The overall bound matters because this runs under a wake lock: connect and
-     * read timeouts do not cover name resolution, and a lookup left hanging in a
-     * dead tunnel measured 20s against a 5s-per-target budget. Timing out is a
+     * Probes run here rather than under the caller's job so one that overruns is
+     * abandoned instead of awaited. Name resolution obeys neither the connect nor
+     * the read timeout, and no JVM call can interrupt a thread blocked in it.
+     */
+    private val probeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * The bound matters because this runs under a wake lock. Timing out is a
      * "no" — a chain that cannot answer in this long is not carrying traffic.
      */
-    suspend fun carriesTraffic(timeoutMs: Int = TIMEOUT_MS): Boolean =
-        withContext(Dispatchers.IO) {
-            withTimeoutOrNull(timeoutMs.toLong() * TARGETS.size + GRACE_MS) {
-                TARGETS.any { reaches(it, timeoutMs) }
-            } ?: false
+    suspend fun carriesTraffic(timeoutMs: Int = TIMEOUT_MS): Boolean {
+        val reached = CompletableDeferred<Boolean>()
+        // Concurrent, and the first success wins: awaiting them in order would
+        // let one hung target spend the whole budget the other could answer in.
+        val probes = TARGETS.map { target ->
+            probeScope.launch { if (reaches(target, timeoutMs)) reached.complete(true) }
         }
+        probeScope.launch {
+            probes.joinAll()
+            reached.complete(false)
+        }
+        // The connect and read budgets apply in sequence, so one target spends up
+        // to twice timeoutMs before the bound has any business firing.
+        return withTimeoutOrNull(2 * timeoutMs.toLong() + GRACE_MS) { reached.await() } ?: false
+    }
 
     private fun reaches(url: String, timeoutMs: Int): Boolean = runCatching {
         val conn = URI(url).toURL().openConnection() as HttpURLConnection
@@ -59,6 +77,6 @@ internal object ChainProbe {
 
     const val TIMEOUT_MS = 5_000
 
-    /** Room for the last target's own timeout to fire before the outer bound does. */
+    /** Room for a target's own timeouts to fire before the outer bound does. */
     private const val GRACE_MS = 1_000L
 }
