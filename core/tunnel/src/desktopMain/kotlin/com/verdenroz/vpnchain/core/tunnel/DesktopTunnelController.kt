@@ -265,15 +265,19 @@ class DesktopTunnelController(
     private suspend fun adoptRunningSession(): Boolean {
         val session = detectRunningSession() ?: return false
         // Only asked once something is actually up, so the idle poll stays in-process.
-        relayLog = if (ManagedRelay.available && ManagedRelay.isActive()) {
-            SystemdRelay.logFile
-        } else {
-            File(runtimeDir, "relay.log")
-        }
+        val managed = ManagedRelay.available && ManagedRelay.isActive()
+        val recorded = readSessionState() != null
+        relayLog = if (managed) SystemdRelay.logFile else File(runtimeDir, "relay.log")
         tunMode = session.tun
         tunHasEntry = session.entry
         killSwitchEngaged = session.killSwitch
         killSwitchEnabled = session.killSwitchEnabled
+        if (shouldRestoreKillSwitch(managed, recorded)) {
+            adoptedManagedConfig()?.let {
+                engageKillSwitch(it)
+                writeSessionState()
+            }
+        }
         if (session.tun) {
             emitLog(Res.string.tunnel_log_adopted_system_wide)
         } else {
@@ -282,6 +286,23 @@ class DesktopTunnelController(
         markConnected(adopted = true)
         return true
     }
+
+    /**
+     * Whether adoption should install the firewall the adopted session lacks.
+     *
+     * A relay outlives the GUI under systemd, so every launch after the first
+     * adopts, and inheriting an unprotected session leaves the setting on with
+     * nothing left to act on it. Narrowed to a TUN session this app recorded:
+     * proxy mode captures nothing to fail closed around, and an unrecorded
+     * session carries this controller's default, not the user's setting.
+     */
+    private fun shouldRestoreKillSwitch(managed: Boolean, recorded: Boolean): Boolean =
+        tunMode && managed && recorded && killSwitchEnabled && !killSwitchEngaged && firewallIsOurs()
+
+    /** The live config of a systemd-managed relay, which is the only adopted
+     *  relay whose config outlives the process that rendered it. */
+    private fun adoptedManagedConfig(): String? =
+        runCatching { SystemdRelay.configFile.readText() }.getOrNull()
 
     /**
      * Whether fail-closed protection is this app's job for the chain being
