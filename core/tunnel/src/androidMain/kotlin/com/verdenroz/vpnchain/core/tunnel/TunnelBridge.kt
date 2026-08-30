@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.tunnel
 
 import android.content.Context
+import android.util.Log
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.KillSwitchState
 import com.verdenroz.vpnchain.core.model.SessionStats
@@ -89,7 +90,22 @@ internal object TunnelBridge {
         }
     }
 
+    /**
+     * This app's own lines. Mirrored to logcat because the Logs screen is
+     * otherwise the only place they appear, leaving a session that failed while
+     * unattended unreadable. Only for text written here, never [logRelay]'s.
+     */
     fun log(line: String) {
+        Log.i(TAG, line)
+        logs.tryEmit(line)
+    }
+
+    /**
+     * The relay's own stream. Kept out of logcat: it names every destination the
+     * chain dials, and logcat is a shared buffer that `adb bugreport` captures
+     * verbatim, where app-private storage is the only place that belongs.
+     */
+    fun logRelay(line: String) {
         logs.tryEmit(line)
     }
 
@@ -113,6 +129,7 @@ internal object TunnelBridge {
             .edit().putBoolean(KEY_ALWAYS_ON_DETECTED, true).apply()
     }
 
+    private const val TAG = "TunnelBridge"
     private const val PREFS_NAME = "vpn_chain_tunnel_bridge"
     private const val KEY_ALWAYS_ON_DETECTED = "always_on_detected"
 }
