@@ -5,7 +5,6 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.verdenroz.vpnchain.core.model.DEFAULT_WARP_DOMAINS
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.ThemeConfig
@@ -110,11 +109,12 @@ class VpnChainPreferencesDataSource(
             warpMode = prefs[WARP_MODE_KEY]
                 ?.let { raw -> runCatching { WarpMode.valueOf(raw) }.getOrNull() }
                 ?: WarpMode.BlockedSites,
-            // Absent means never edited, so it seeds from the built-in list; a
-            // list the user emptied is stored as "[]" and stays empty.
+            // The old seed pinned sites to the tail that it can't reach either,
+            // so a stored list that is still exactly that seed reads as empty.
             warpDomains = prefs[WARP_DOMAINS_KEY]
                 ?.let { raw -> runCatching { json.decodeFromString<List<String>>(raw) }.getOrNull() }
-                ?: DEFAULT_WARP_DOMAINS,
+                ?.takeUnless { it == LEGACY_WARP_SEED }
+                ?: emptyList(),
             autoConnectOnLaunch = prefs[AUTO_CONNECT_ON_LAUNCH_KEY] ?: false,
             autoReconnect = prefs[AUTO_RECONNECT_KEY] ?: true,
             autoStartOnLogin = prefs[AUTO_START_ON_LOGIN_KEY] ?: false,
@@ -233,6 +233,16 @@ class VpnChainPreferencesDataSource(
         val PROFILES_KEY = stringPreferencesKey("chain_profiles_json")
         val ACTIVE_PROFILE_ID_KEY = stringPreferencesKey("active_profile_id")
         const val LEGACY_PROFILE_ID = "legacy"
+        val LEGACY_WARP_SEED = listOf(
+            "reddit.com",
+            "redd.it",
+            "redditmedia.com",
+            "redditstatic.com",
+            "chatgpt.com",
+            "openai.com",
+            "oaistatic.com",
+            "oaiusercontent.com",
+        )
         val THEME_KEY = stringPreferencesKey("theme_config")
         val SYSTEM_WIDE_TUN_KEY = booleanPreferencesKey("system_wide_tun")
         val KILL_SWITCH_ENABLED_KEY = booleanPreferencesKey("kill_switch_enabled")

@@ -1,7 +1,6 @@
 package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.model.ChainProfile
-import com.verdenroz.vpnchain.core.model.DEFAULT_WARP_DOMAINS
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.WarpExit
 import com.verdenroz.vpnchain.core.model.WarpMode
@@ -398,7 +397,7 @@ class SingBoxConfigFactoryTest {
                 profile(), entry(),
                 warp = warp(),
                 warpMode = WarpMode.BlockedSites,
-                warpDomains = DEFAULT_WARP_DOMAINS,
+                warpDomains = listOf("reddit.com", "chatgpt.com"),
             ),
         )
 

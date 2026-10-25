@@ -5,7 +5,6 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.verdenroz.vpnchain.core.model.DEFAULT_WARP_DOMAINS
 import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -24,12 +23,29 @@ class WarpSettingsTest {
      * refuse the relay keeps a box the user controls as the exit for the rest.
      */
     @Test
-    fun `a fresh install routes only the blocked sites through the tail`() = runTest {
+    fun `a fresh install routes only blocked sites and lists none by hand`() = runTest {
         val settings = VpnChainPreferencesDataSource(newStore()).settings.first()
 
         assertEquals(WarpMode.BlockedSites, settings.warpMode)
-        assertEquals(DEFAULT_WARP_DOMAINS, settings.warpDomains)
-        assertTrue("reddit.com" in settings.warpDomains)
+        assertTrue(settings.warpDomains.isEmpty())
+    }
+
+    @Test
+    fun `a list that is still the old seed reads as empty`() = runTest {
+        val source = VpnChainPreferencesDataSource(newStore())
+
+        source.setWarpDomains(OLD_SEED)
+
+        assertTrue(source.settings.first().warpDomains.isEmpty())
+    }
+
+    @Test
+    fun `an edited copy of the old seed is kept`() = runTest {
+        val source = VpnChainPreferencesDataSource(newStore())
+
+        source.setWarpDomains(OLD_SEED + "mychart.chsli.org")
+
+        assertEquals(OLD_SEED + "mychart.chsli.org", source.settings.first().warpDomains)
     }
 
     @Test
@@ -64,13 +80,18 @@ class WarpSettingsTest {
     }
 
     @Test
-    fun `an edited domain list replaces the built-in one outright`() = runTest {
+    fun `an edited domain list is stored as given`() = runTest {
         val source = VpnChainPreferencesDataSource(newStore())
 
         source.setWarpDomains(listOf("example.com"))
 
         assertEquals(listOf("example.com"), source.settings.first().warpDomains)
     }
+
+    private val OLD_SEED = listOf(
+        "reddit.com", "redd.it", "redditmedia.com", "redditstatic.com",
+        "chatgpt.com", "openai.com", "oaistatic.com", "oaiusercontent.com",
+    )
 
     private fun newStore(): DataStore<Preferences> {
         val file = File.createTempFile("warp-settings", ".preferences_pb").apply { delete() }

@@ -56,11 +56,10 @@ data class UserSettings(
      */
     val warpMode: WarpMode = WarpMode.BlockedSites,
     /**
-     * The domains [WarpMode.BlockedSites] routes down the tail — the whole
-     * list, seeded from [DEFAULT_WARP_DOMAINS] and editable in full. Suffix
-     * matches, so `example.com` covers its subdomains too.
+     * Domains [WarpMode.BlockedSites] always routes down the tail, whatever
+     * detection finds. Suffix matches, so `example.com` covers its subdomains.
      */
-    val warpDomains: List<String> = DEFAULT_WARP_DOMAINS,
+    val warpDomains: List<String> = emptyList(),
     /**
      * Probe new destinations through the relay, and through the tail when the
      * relay is refused, and route the sites only the tail can reach down it.

@@ -57,20 +57,3 @@ enum class WarpMode {
     /** Everything exits through WARP. */
     AllTraffic,
 }
-
-/**
- * The sites known to refuse the relay's datacenter address — each answers 403
- * through the VPS and 200 through WARP. Only a starting point: it is seeded
- * into settings as an ordinary editable list, not enforced underneath one, so
- * removing an entry here really does stop routing it.
- */
-val DEFAULT_WARP_DOMAINS: List<String> = listOf(
-    "reddit.com",
-    "redd.it",
-    "redditmedia.com",
-    "redditstatic.com",
-    "chatgpt.com",
-    "openai.com",
-    "oaistatic.com",
-    "oaiusercontent.com",
-)
