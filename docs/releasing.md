@@ -54,9 +54,8 @@ Keep the keystore. Lose it and installed copies can no longer update.
 Whoever can push a `v*` tag can ship an update to every installed copy.
 
 - [ ] A tag ruleset for `v*` that restricts creation, update and deletion.
-- [ ] A protected `release` environment with a required reviewer. The workflow
-      must also name it (`environment: release` on the `publish` job); it does
-      not yet, so the environment has no effect until it does.
+- [ ] Required reviewers on the `release` environment. The `publish` job runs
+      in it, and GitHub creates it unprotected on the first release otherwise.
 
 The workflow already limits `contents` to read-only outside the publish job,
 keeps no git credentials after checkout, and pins every action to a commit.
