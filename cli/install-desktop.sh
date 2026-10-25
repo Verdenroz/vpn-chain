@@ -30,7 +30,7 @@ entry="$(sed -n '/"linux-x64"/,/}/p' "$work/manifest.json")"
 name="$(sed -n 's/.*"path": *"\([^"]*\)".*/\1/p' <<<"$entry")"
 size="$(sed -n 's/.*"size": *\([0-9]*\).*/\1/p' <<<"$entry")"
 sha256="$(sed -n 's/.*"sha256": *"\([^"]*\)".*/\1/p' <<<"$entry")"
-case "$version" in '' | *[!0-9.]*) echo "unreadable version in the release manifest" >&2; exit 1 ;; esac
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "unreadable version in the release manifest" >&2; exit 1; }
 [ -n "$name" ] && [ -n "$size" ] && [ -n "$sha256" ] || { echo "the latest release has no linux-x64 build" >&2; exit 1; }
 
 versions="$root/versions"
