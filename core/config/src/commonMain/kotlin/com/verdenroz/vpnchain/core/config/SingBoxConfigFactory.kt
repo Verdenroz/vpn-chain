@@ -315,6 +315,7 @@ object SingBoxConfigFactory {
             }
         }
         put("packet_encoding", "xudp")
+        put("connect_timeout", "3s")
         if (detour != null) put("detour", detour)
     }
 
