@@ -11,19 +11,22 @@ import java.nio.channels.SocketChannel
  */
 internal class LineChannel(private val channel: SocketChannel) : Closeable {
     private var buffer = ByteBuffer.allocate(4096)
+    private var scanned = 0
     private val writeLock = Any()
 
     /** @return the next line without its newline, or null once the peer has closed. */
     fun readLine(): String? {
         while (true) {
-            for (i in 0 until buffer.position()) {
+            for (i in scanned until buffer.position()) {
                 if (buffer.get(i) == NEWLINE) {
                     val line = String(buffer.array(), 0, i, Charsets.UTF_8)
                     buffer.flip().position(i + 1)
                     buffer.compact()
+                    scanned = 0
                     return line
                 }
             }
+            scanned = buffer.position()
             if (!buffer.hasRemaining()) buffer = ByteBuffer.allocate(buffer.capacity() * 2).put(buffer.flip())
             if (channel.read(buffer) < 0) return null
         }

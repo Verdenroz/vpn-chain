@@ -7,7 +7,6 @@ import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.SwitchProfileUseCase
 import com.verdenroz.vpnchain.core.model.LogEntry
-import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.TunnelState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -41,7 +40,7 @@ class EngineHandler(
             Reply.Ok
         }
         Request.Profiles -> Reply.Profiles(summaries().first())
-        is Request.Use -> withProfile(request.profile) { switchProfile(it.id).toReply() }
+        is Request.Use -> switchTo(request.profile)
         is Request.Logs -> {
             val entries = logs.entries.value
             Reply.Logs((request.limit?.let { entries.takeLast(it.coerceAtLeast(0)) } ?: entries).map(LogEntry::toWire))
@@ -56,7 +55,7 @@ class EngineHandler(
 
     private suspend fun up(profile: String?): Reply {
         if (profile != null) {
-            val switched = withProfile(profile) { switchProfile(it.id).toReply() }
+            val switched = switchTo(profile)
             if (switched != Reply.Ok) return switched
         }
         val state = chain.status.first().state
@@ -64,14 +63,15 @@ class EngineHandler(
         return connect().toReply()
     }
 
-    private suspend fun withProfile(query: String, action: suspend (SavedProfile) -> Reply): Reply {
+    /** Makes the saved connection [query] names (an id, or a name in any case) the active one. */
+    private suspend fun switchTo(query: String): Reply {
         val saved = profiles.profiles.first()
         val byId = saved.firstOrNull { it.id == query }
-        if (byId != null) return action(byId)
+        if (byId != null) return switchProfile(byId.id).toReply()
         val byName = saved.filter { it.name.equals(query, ignoreCase = true) }
         return when (byName.size) {
             0 -> Reply.Failure(FailureCode.NotFound, "no saved connection is called \"$query\"")
-            1 -> action(byName.single())
+            1 -> switchProfile(byName.single().id).toReply()
             else -> Reply.Failure(FailureCode.Ambiguous, "${byName.size} saved connections are called \"$query\"; use an id")
         }
     }

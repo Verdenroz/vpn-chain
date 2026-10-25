@@ -27,7 +27,7 @@ class EngineClient private constructor(private val lines: LineChannel) : Closeab
     fun call(request: Request): Reply {
         val id = send(request)
         while (true) {
-            val message = receive()
+            val message = receiveOrNull() ?: throw IOException("the engine closed the connection")
             if (message.id == id) return message.reply
         }
     }
@@ -63,8 +63,6 @@ class EngineClient private constructor(private val lines: LineChannel) : Closeab
         lines.writeLine(engineJson.encodeToString(ClientMessage(id, request)))
         return id
     }
-
-    private fun receive(): ServerMessage = receiveOrNull() ?: throw IOException("the engine closed the connection")
 
     private fun receiveOrNull(): ServerMessage? =
         lines.readLine()?.let { engineJson.decodeFromString<ServerMessage>(it) }
