@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="nav_chain">chain</string>
-    <string name="nav_logs">logs</string>
-    <string name="nav_settings">settings</string>
+    <string name="nav_chain">Chain</string>
+    <string name="nav_logs">Logs</string>
+    <string name="nav_settings">Settings</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_connecting">Connecting</string>
+    <string name="status_unprotected">Not protected</string>
 </resources>

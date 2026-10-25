@@ -1,46 +1,32 @@
 package com.verdenroz.vpnchain.app
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.verdenroz.vpnchain.core.designsystem.component.IndicatorLamp
-import com.verdenroz.vpnchain.core.designsystem.component.machinedSurface
-import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
+import com.verdenroz.vpnchain.app.generated.resources.Res
+import com.verdenroz.vpnchain.app.generated.resources.status_connected
+import com.verdenroz.vpnchain.app.generated.resources.status_connecting
+import com.verdenroz.vpnchain.app.generated.resources.status_unprotected
+import com.verdenroz.vpnchain.core.designsystem.component.StatusBar
+import com.verdenroz.vpnchain.core.designsystem.component.StatusTone
 import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
+import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.ui.shouldUseDarkTheme
 import com.verdenroz.vpnchain.feature.chain.navigation.CHAIN_ROUTE
 import com.verdenroz.vpnchain.feature.chain.navigation.chainScreen
 import com.verdenroz.vpnchain.feature.logs.navigation.logsScreen
 import com.verdenroz.vpnchain.feature.settings.QrScanRequest
-import com.verdenroz.vpnchain.feature.settings.navigation.SETTINGS_ROUTE
 import com.verdenroz.vpnchain.feature.settings.navigation.settingsScreen
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
@@ -48,6 +34,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun VpnChainApp(appViewModel: AppViewModel = koinViewModel()) {
     val themeConfig by appViewModel.themeConfig.collectAsStateWithLifecycle()
+    val tunnelState by appViewModel.tunnelState.collectAsStateWithLifecycle()
 
     VpnChainTheme(darkTheme = shouldUseDarkTheme(themeConfig)) {
         val navController = rememberNavController()
@@ -61,26 +48,26 @@ fun VpnChainApp(appViewModel: AppViewModel = koinViewModel()) {
             if (scanRequested) navController.switchTo(TopLevelDestination.SETTINGS)
         }
 
-        Scaffold(
-            containerColor = PanelTheme.colors.shellDeep,
-            bottomBar = {
-                FaceplateSelector(
-                    isSelected = { destination ->
-                        currentDestination?.hierarchy?.any { it.route == destination.route } == true
-                    },
-                    onSelect = { destination -> navController.switchTo(destination) },
-                )
-            },
-        ) { padding ->
+        Column(Modifier.fillMaxSize().background(VpnChainTheme.colors.background)) {
+            StatusBar(
+                tone = tunnelState.tone(),
+                label = stringResource(tunnelState.labelRes()),
+            )
             NavHost(
                 navController = navController,
                 startDestination = CHAIN_ROUTE,
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
             ) {
-                chainScreen(onOpenSettings = { navController.navigate(SETTINGS_ROUTE) })
+                chainScreen(onOpenSettings = { navController.switchTo(TopLevelDestination.SETTINGS) })
                 logsScreen()
                 settingsScreen()
             }
+            BottomTabs(
+                isSelected = { destination ->
+                    currentDestination?.hierarchy?.any { it.route == destination.route } == true
+                },
+                onSelect = { destination -> navController.switchTo(destination) },
+            )
         }
     }
 }
@@ -93,66 +80,14 @@ private fun NavHostController.switchTo(destination: TopLevelDestination) {
     }
 }
 
-/**
- * Which faceplate is fitted. Selection is a lit lamp and a raised key rather
- * than Material's highlight pill — the chrome has to belong to the same object
- * as the panels it frames.
- */
-@Composable
-private fun FaceplateSelector(
-    isSelected: (TopLevelDestination) -> Boolean,
-    onSelect: (TopLevelDestination) -> Unit,
-) {
-    val colors = PanelTheme.colors
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(colors.shellDeep)
-            // The seam where the faceplate meets the base.
-            .drawBehind {
-                drawLine(colors.edgeShadow, Offset(0f, 0f), Offset(size.width, 0f), 1f)
-                drawLine(
-                    colors.edgeHighlight.copy(alpha = 0.35f),
-                    Offset(0f, 1f),
-                    Offset(size.width, 1f),
-                    1f,
-                )
-            }
-            .navigationBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        TopLevelDestination.entries.forEach { destination ->
-            val selected = isSelected(destination)
-            Column(
-                Modifier
-                    .weight(1f)
-                    .height(TabHeight)
-                    .machinedSurface(
-                        colors,
-                        corner = 2.dp,
-                        recessed = !selected,
-                        fill = if (selected) colors.shellRaised else colors.shellDeep,
-                    )
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { onSelect(destination) },
-                    ),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                IndicatorLamp(color = colors.lampGreen, lit = selected, size = 5.dp)
-                Spacer(Modifier.height(1.dp))
-                Text(
-                    stringResource(destination.label).uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (selected) colors.readout else colors.muted,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
-    }
+private fun TunnelState.tone() = when (this) {
+    TunnelState.Connected -> StatusTone.Connected
+    TunnelState.Connecting -> StatusTone.Connecting
+    TunnelState.Disconnected, TunnelState.Error -> StatusTone.Unprotected
 }
 
-private val TabHeight = 48.dp
+private fun TunnelState.labelRes() = when (this) {
+    TunnelState.Connected -> Res.string.status_connected
+    TunnelState.Connecting -> Res.string.status_connecting
+    TunnelState.Disconnected, TunnelState.Error -> Res.string.status_unprotected
+}

@@ -1,26 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="chain_app_title">vpn-chain</string>
-    <string name="chain_route_title">route</string>
-    <string name="chain_path_title">signal path</string>
+    <string name="chain_state_connected">Connected</string>
+    <string name="chain_state_connected_rtt">Connected · %1$d ms</string>
+    <string name="chain_state_connecting">Connecting</string>
+    <string name="chain_state_disconnected">Disconnected</string>
+    <string name="chain_state_error">Error</string>
+    <string name="chain_uptime">Up %1$s</string>
     <string name="chain_row_placeholder">—</string>
-    <string name="chain_row_kill_switch">kill switch</string>
-    <string name="chain_row_rtt">path time</string>
-    <string name="chain_row_rtt_value">%1$d ms</string>
-    <string name="chain_row_mode">mode</string>
-    <string name="chain_row_uptime">uptime</string>
-    <string name="chain_row_sent">sent</string>
-    <string name="chain_row_received">received</string>
-    <string name="chain_row_rate">%1$s ↑ %2$s ↓</string>
-    <string name="chain_hop_origin">origin</string>
-    <string name="chain_hop_entry">entry</string>
-    <string name="chain_hop_exit">exit</string>
-    <string name="chain_hop_unresolved">unresolved</string>
+    <string name="chain_row_ip">IP</string>
+    <string name="chain_row_kill_switch">Kill switch</string>
+    <string name="chain_row_rerouted">Rerouted</string>
+    <string name="chain_rerouted_all">All traffic</string>
+    <plurals name="chain_rerouted_sites">
+        <item quantity="one">%1$d site</item>
+        <item quantity="other">%1$d sites</item>
+    </plurals>
+    <string name="chain_hop_origin">You</string>
+    <string name="chain_hop_entry">Entry</string>
+    <string name="chain_hop_exit">Exit</string>
+    <string name="chain_hop_unresolved">Unknown</string>
     <string name="chain_evidence_measured">measured</string>
     <string name="chain_evidence_configured">configured</string>
     <string name="chain_evidence_recalled">last seen</string>
-    <string name="chain_kill_switch_protected">armed</string>
-    <string name="chain_kill_switch_none">open</string>
+    <string name="chain_kill_switch_protected">On</string>
+    <string name="chain_kill_switch_none">Off</string>
     <string name="chain_kill_switch_hint">See Settings to enable one.</string>
     <string name="chain_kill_switch_hint_helper_failed">Helper failed. See Logs.</string>
     <string name="chain_kill_switch_hint_helper_not_found">Helper not installed. Run cli/killswitch/build.sh, then setcap it.</string>
@@ -29,6 +32,9 @@
     <string name="chain_kill_switch_hint_no_exempt">No relay address in the profile.</string>
     <string name="chain_kill_switch_hint_not_engaged">Not armed this session. Reconnect to arm it.</string>
     <string name="chain_kill_switch_hint_external_app">Relay-only mode: your system VPN app provides the kill switch here.</string>
-    <string name="chain_empty_state_title">No chain profile configured yet.</string>
+    <string name="chain_empty_state_title">No profile yet</string>
     <string name="chain_open_settings">Open Settings</string>
+    <string name="chain_change">Change</string>
+    <string name="chain_connect">Connect</string>
+    <string name="chain_disconnect">Disconnect</string>
 </resources>

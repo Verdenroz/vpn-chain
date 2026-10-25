@@ -4,12 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
+import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.ChainRoute
 import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.ObserveChainRouteUseCase
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.SessionStats
+import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -23,6 +25,8 @@ data class ChainUiState(
     val hasProfile: Boolean = false,
     val route: ChainRoute = ChainRoute(),
     val stats: SessionStats = SessionStats(),
+    val warpMode: WarpMode = WarpMode.Off,
+    val warpSiteCount: Int = 0,
 )
 
 class ChainViewModel(
@@ -31,6 +35,7 @@ class ChainViewModel(
     observeChainRoute: ObserveChainRouteUseCase,
     chainRepository: ChainRepository,
     profileRepository: ProfileRepository,
+    settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     val uiState: StateFlow<ChainUiState> =
@@ -41,8 +46,16 @@ class ChainViewModel(
             // probe would show a live tunnel as an unconfigured one.
             observeChainRoute().onStart { emit(ChainRoute()) },
             chainRepository.stats,
-        ) { status, hasProfile, route, stats ->
-            ChainUiState(status = status, hasProfile = hasProfile, route = route, stats = stats)
+            settingsRepository.settings,
+        ) { status, hasProfile, route, stats, settings ->
+            ChainUiState(
+                status = status,
+                hasProfile = hasProfile,
+                route = route,
+                stats = stats,
+                warpMode = settings.warpMode,
+                warpSiteCount = settings.warpDomains.size,
+            )
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),

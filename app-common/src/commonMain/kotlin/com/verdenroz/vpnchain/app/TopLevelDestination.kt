@@ -9,9 +9,9 @@ import com.verdenroz.vpnchain.feature.logs.navigation.LOGS_ROUTE
 import com.verdenroz.vpnchain.feature.settings.navigation.SETTINGS_ROUTE
 import org.jetbrains.compose.resources.StringResource
 
-/** The faceplates this device can show, in order. */
+/** The top-level screens, in tab order. */
 enum class TopLevelDestination(val route: String, val label: StringResource) {
     CHAIN(CHAIN_ROUTE, Res.string.nav_chain),
-    LOGS(LOGS_ROUTE, Res.string.nav_logs),
     SETTINGS(SETTINGS_ROUTE, Res.string.nav_settings),
+    LOGS(LOGS_ROUTE, Res.string.nav_logs),
 }
