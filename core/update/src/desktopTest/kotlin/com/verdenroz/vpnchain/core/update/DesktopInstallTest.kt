@@ -105,6 +105,27 @@ class DesktopInstallTest {
     }
 
     @Test
+    fun `refuses a symlink that only stays inside on paper`() {
+        install.install(tarball("a"), "0.1.7")
+        val outside = Files.createDirectories(temp.resolve("outside")).toRealPath()
+        // From versions/.partial-0.1.8/vpn-chain, as many `..` as it takes to reach `/`.
+        val depth = temp.toRealPath().nameCount + 5
+        val climb = "s/".repeat(depth - 1) + "../".repeat(depth) + outside.toString().removePrefix("/")
+
+        assertFailsWith<IOException> { install.install(tarball("b", links = mapOf("s" to ".", "l" to climb)), "0.1.8") }
+
+        assertEquals("0.1.7", currentVersion())
+        assertFalse(Files.exists(root.resolve("versions/0.1.8")))
+    }
+
+    @Test
+    fun `refuses a dangling symlink`() {
+        assertFailsWith<IOException> { install.install(tarball("a", links = mapOf("bin/gone" to "missing")), "0.1.7") }
+
+        assertFalse(Files.exists(root.resolve("current")))
+    }
+
+    @Test
     fun `refuses entries outside the release`() {
         install.install(tarball("a"), "0.1.7")
         val escapes = listOf("--transform=s,^vpn-chain,../vpn-chain,", "--transform=s,^vpn-chain,$temp/abs/vpn-chain,")

@@ -55,7 +55,7 @@ install_version() {
   local listing top link dir
   top="$(realpath "$partial")"
   while IFS= read -r -d '' link; do
-    case "$(realpath -m "$link" 2>/dev/null)" in
+    case "$(realpath -e "$link" 2>/dev/null)" in
       "$top"/*) ;;
       *) echo "the release links outside its folder: ${link#"$partial"/}" >&2; exit 1 ;;
     esac

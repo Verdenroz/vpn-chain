@@ -50,15 +50,23 @@ class DesktopInstall(private val root: Path) {
         val outside = tar("-tzf", tarball.toString()).lines().firstOrNull { it.isNotEmpty() && escapes(Path.of(it)) }
         if (outside != null) throw IOException("The update has an entry outside its folder: $outside")
         tar("-xzf", tarball.toString(), "-C", into.toString())
-        val top = into.toAbsolutePath().normalize()
+        val top = into.toRealPath()
+        // Resolved, not normalized: `s -> .` then `s/s/../..` stays inside on paper and lands anywhere.
         val stray = Files.walk(top).use { paths ->
-            paths.filter { Files.isSymbolicLink(it) && !it.parent.resolve(Files.readSymbolicLink(it)).normalize().startsWith(top) }
-                .findFirst().orElse(null)
+            paths.filter { Files.isSymbolicLink(it) && !resolvesWithin(it, top) }.findFirst().orElse(null)
         }
         if (stray != null) throw IOException("The update links outside its folder: ${top.relativize(stray)}")
     }
 
     private fun escapes(entry: Path) = entry.isAbsolute || entry.any { it.toString() == ".." }
+
+    /** False for a dangling link too, as `realpath -e` in the install script. */
+    private fun resolvesWithin(link: Path, top: Path): Boolean =
+        try {
+            link.toRealPath().startsWith(top)
+        } catch (e: IOException) {
+            false
+        }
 
     private fun tar(vararg args: String): String {
         val tar = ProcessBuilder("tar", *args).redirectErrorStream(true).start()
