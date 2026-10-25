@@ -121,21 +121,25 @@ class VpnChainService : VpnService(), CommandServerHandler {
     }
 
     /**
-     * `isLockdownEnabled()` (API 29+) reflects the OS setting live, so this is
-     * re-checked on a timer rather than once — the user can flip "Block
-     * connections without VPN" at any point while we're already running, not
-     * just before we start.
+     * `isAlwaysOn()` and `isLockdownEnabled()` (API 29+) reflect the OS settings
+     * live, so this is re-checked on a timer rather than once — the user can flip
+     * "Block connections without VPN" at any point while we're already running,
+     * not just before we start.
      */
     private fun refreshLockdownState() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            TunnelBridge.setAlwaysOnLockdown(isLockdownEnabled())
+            TunnelBridge.setAlwaysOnLockdown(applicationContext, isAlwaysOn && isLockdownEnabled)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Below API 29 there's no isLockdownEnabled() to poll, so this null-intent
+        // Below API 29 there's no isAlwaysOn() to poll, so this null-intent
         // heuristic is the best available signal there (see TunnelBridge).
-        if (intent == null) TunnelBridge.markAlwaysOnDetected(applicationContext)
+        if (intent == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            !TunnelBridge.userStarted(applicationContext)
+        ) {
+            TunnelBridge.markAlwaysOnDetected(applicationContext)
+        }
         when (intent?.action) {
             ACTION_STOP -> {
                 stopTunnel()
@@ -148,7 +152,10 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 stopTunnel()
                 return START_NOT_STICKY
             }
-            else -> startTunnel()
+            else -> {
+                if (intent != null) TunnelBridge.setUserStarted(applicationContext, true)
+                startTunnel()
+            }
         }
         return START_STICKY
     }
@@ -322,6 +329,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
     private fun owns(gen: Int): Boolean = generation.get() == gen
 
     private fun stopTunnel() {
+        TunnelBridge.setUserStarted(applicationContext, false)
         generation.incrementAndGet()
         TunnelBridge.setState(TunnelState.Disconnected)
         cleanup()
