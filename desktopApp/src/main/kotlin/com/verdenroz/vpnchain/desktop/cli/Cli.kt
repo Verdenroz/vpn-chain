@@ -17,12 +17,9 @@ import kotlinx.serialization.SerializationException
 private val appVersion: String get() = System.getProperty("vpnchain.version").orEmpty()
 
 /** Runs one command against the engine. @return the process exit code. */
-internal fun runCli(
-    args: List<String>,
-    out: PrintStream = System.out,
-    err: PrintStream = System.err,
-    connect: () -> EngineClient = { EngineClient.connect(EnginePaths.system().socket, appVersion) },
-): Int {
+internal fun runCli(args: List<String>): Int {
+    val out = System.out
+    val err = System.err
     val invocation = try {
         parse(args)
     } catch (e: UsageException) {
@@ -35,7 +32,9 @@ internal fun runCli(
         return 0
     }
     return try {
-        connect().use { Session(it, invocation.json, out, err).run(invocation.command) }
+        EngineClient.connect(EnginePaths.system().socket, appVersion).use {
+            Session(it, invocation.json, out, err).run(invocation.command)
+        }
     } catch (e: EngineUnavailableException) {
         err.println("vpn-chain: ${e.message}; open vpn-chain-gui to start it")
         1
@@ -57,13 +56,23 @@ private class Session(
 
     fun run(command: Command): Int = when (command) {
         is Command.Up -> expectOk(client.call(Request.Up(command.profile))) {
-            if (command.wait) awaitSettled() else printStatus(currentStatus())
+            if (command.wait) {
+                awaitSettled()
+            } else {
+                printStatus(currentStatus())
+                0
+            }
         }
         Command.Down -> expectOk(client.call(Request.Down)) {
             if (json) printStatus(currentStatus()) else out.println("disconnected")
             0
         }
-        is Command.Status -> if (command.watch) watch() else printStatus(currentStatus())
+        is Command.Status -> if (command.watch) {
+            watch()
+        } else {
+            printStatus(currentStatus())
+            0
+        }
         Command.List -> when (val reply = client.call(Request.Profiles)) {
             is Reply.Profiles -> {
                 out.println(if (json) profilesJson(reply.profiles).toString() else profilesText(reply.profiles))
@@ -120,10 +129,9 @@ private class Session(
         return 1
     }
 
-    private fun printStatus(status: EngineStatus): Int {
-        val detail = runBlocking { status.detail?.resolve() }
+    private fun printStatus(status: EngineStatus) {
+        val detail = status.detail?.let { runBlocking { it.resolve() } }
         out.println(if (json) statusJson(status, detail).toString() else statusText(status, detail))
-        return 0
     }
 
     private inline fun expectOk(reply: Reply, then: () -> Int): Int = if (reply == Reply.Ok) then() else fail(reply)
