@@ -73,7 +73,10 @@ exemptions, and (by default) local networks.
   a strictly fail-closed switch.
 - **Torn down on disconnect, not on crash.** On Disconnect the app tears the
   table down — but *not* on an unexpected crash, since that's exactly when
-  it's supposed to keep blocking traffic.
+  it's supposed to keep blocking traffic. `vpn-chain down` writes
+  `$XDG_RUNTIME_DIR/vpn-chain/down-requested` before stopping the relay; a
+  running GUI treats that as the user disconnecting (intent cleared, no
+  reconnect), and the next `vpn-chain up` or GUI connect clears the marker.
 - **One transaction.** `up` renders the whole ruleset, final `reject`
   included, into a single nft script and loads it with one `nft -f -`. The
   script deletes any existing table and re-creates it in the same commit, so

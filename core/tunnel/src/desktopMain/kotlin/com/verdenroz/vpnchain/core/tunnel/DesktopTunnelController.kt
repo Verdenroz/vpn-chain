@@ -101,12 +101,18 @@ class DesktopTunnelController(
     private val _logs = MutableSharedFlow<String>(replay = 200, extraBufferCapacity = 256)
     override val logs: SharedFlow<String> = _logs.asSharedFlow()
 
+    private val _userStops = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    override val userStops: SharedFlow<Unit> = _userStops.asSharedFlow()
+
     private val runtimeDir = File(System.getenv("XDG_RUNTIME_DIR") ?: "/tmp", "vpn-chain")
     private val pidFile = File(runtimeDir, "relay.pid")
     // Records what the running relay actually is, so a restarted GUI adopting it
     // knows the mode and whether a kill switch is engaged. Absent for CLI-started
     // relays, which are always relay-only with no kill switch.
     private val stateFile = File(runtimeDir, "relay.state")
+    // Written by `vpn-chain down` before it stops the relay, so the stop reads as
+    // the user disconnecting rather than a drop to reconnect from.
+    private val downRequestFile = File(runtimeDir, "down-requested")
     // Shared log sink: the GUI redirects its own relay here, and the CLI's nohup
     // writes here too, so tailing it shows logs whoever started the relay. A relay
     // under systemd runs as another user and writes the unit's log instead, which
@@ -165,6 +171,12 @@ class DesktopTunnelController(
 
     init {
         scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(DOWN_REQUEST_POLL_MS)
+                if (consumeDownRequest(downRequestFile)) _userStops.tryEmit(Unit)
+            }
+        }
+        scope.launch(Dispatchers.IO) {
             // Adopt before the first poll delay: for the seconds this otherwise
             // spends reporting Disconnected while a tunnel is up, anything that
             // probes the network reads the tunnel's answer and believes it came
@@ -180,6 +192,7 @@ class DesktopTunnelController(
         allowLocalNetworks: Boolean,
     ) = withContext(Dispatchers.IO) {
         startStopLock.withLock {
+            downRequestFile.delete()
             val current = _status.value.state
             if (current == TunnelState.Connecting || current == TunnelState.Connected) {
                 emitLog(Res.string.tunnel_log_already_state, current.name.lowercase())
@@ -922,6 +935,7 @@ class DesktopTunnelController(
         const val TUN_ADDRESS = "10.19.19.1"
         const val POLL_INTERVAL_MS = 3_000L
         const val STATS_POLL_MS = 1_000L
+        const val DOWN_REQUEST_POLL_MS = 250L
         const val PROCESS_EXIT_TIMEOUT_S = 5L
         const val PROBE_TIMEOUT_MS = 400
         const val HTTP_TIMEOUT_MS = 10_000

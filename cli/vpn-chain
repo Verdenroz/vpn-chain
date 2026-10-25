@@ -33,6 +33,7 @@ RENDERED="$RUNDIR/sing-box.json"
 PIDFILE="$RUNDIR/relay.pid"
 STATEFILE="$RUNDIR/relay.state"                       # written by the GUI, cleared here
 LOGFILE="$RUNDIR/relay.log"
+DOWNFILE="$RUNDIR/down-requested"                     # tells a running GUI this stop is deliberate
 KILLSWITCH_BIN="${VPN_CHAIN_KILLSWITCH_BIN:-vpn-chain-killswitch}"
 RELAY_UNIT="vpn-chain-relay.service"
 PROXY="127.0.0.1:1080"
@@ -85,6 +86,7 @@ cmd_up() {
   [ -x "$SINGBOX_BIN" ]           || die "sing-box not found at $SINGBOX_BIN"
 
   render                                                   # secrets -> rendered config
+  rm -f "$DOWNFILE"
 
   if entry_app_up; then
     log "Local ProtonVPN already connected (entry hop up)."
@@ -119,10 +121,12 @@ cmd_down() {
     esac
   done
 
+  mkdir -p -m 700 "$RUNDIR"; : > "$DOWNFILE"
+
   local stopped=0
   if managed_relay_up; then
     log "Stopping $RELAY_UNIT..."
-    systemctl stop "$RELAY_UNIT" || die "Could not stop $RELAY_UNIT; nothing changed."
+    systemctl stop "$RELAY_UNIT" || { rm -f "$DOWNFILE"; die "Could not stop $RELAY_UNIT; nothing changed."; }
     stopped=1
   fi
   if relay_up; then
