@@ -41,20 +41,39 @@ object PrivateStorage {
         return dir
     }
 
-    /** Creates [dir] owner-only, or tightens it if present. Creation failures propagate. */
-    fun privateDir(dir: File): File {
+    /** Creates [dir] owner-only, or adopts an existing one. Throws unless the result is our own 0700 directory. */
+    fun privateDir(
+        dir: File,
+        setPerms: (Path, Set<PosixFilePermission>) -> Unit = { path, perms -> Files.setPosixFilePermissions(path, perms) },
+    ): File {
         dir.parentFile?.mkdirs()
         if (!systemPosix) return dir.apply { mkdirs() }
-        createOwnerOnly(dir) { path, perms -> Files.setPosixFilePermissions(path, perms) }
+        val path = dir.toPath()
+        try {
+            Files.createDirectory(path, PosixFilePermissions.asFileAttribute(dirPerms))
+        } catch (_: FileAlreadyExistsException) {
+            if (!isOwnDirectory(path)) throw IOException("$dir is not a directory owned by this user")
+            tighten(path, dirPerms, setPerms)
+        }
+        if (Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS) != dirPerms) {
+            throw IOException("$dir is not owner-only")
+        }
         return dir
     }
 
-    /** Creates [file] owner-only if absent, or tightens it if present. */
+    /** Creates [file] owner-only. Anything already there that is not our own regular file is removed first. */
     fun ensurePrivateFile(file: File) {
+        val path = file.toPath()
         try {
-            Files.createFile(file.toPath(), *fileAttrs)
+            Files.createFile(path, *fileAttrs)
         } catch (_: FileAlreadyExistsException) {
-            if (systemPosix) tighten(file.toPath(), filePerms) { path, perms -> Files.setPosixFilePermissions(path, perms) }
+            if (!systemPosix) return
+            if (isOwnRegularFile(path)) {
+                tighten(path, filePerms) { p, perms -> Files.setPosixFilePermissions(p, perms) }
+            } else {
+                Files.delete(path)
+                Files.createFile(path, *fileAttrs)
+            }
         }
     }
 
@@ -67,6 +86,21 @@ object PrivateStorage {
         }
         return path.toFile()
     }
+
+    private val currentUser by lazy {
+        val probe = Files.createTempFile("vpn-chain-owner", null)
+        try {
+            Files.getOwner(probe)
+        } finally {
+            Files.delete(probe)
+        }
+    }
+
+    private fun isOwnDirectory(path: Path) =
+        Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) && Files.getOwner(path, LinkOption.NOFOLLOW_LINKS) == currentUser
+
+    private fun isOwnRegularFile(path: Path) =
+        Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && Files.getOwner(path, LinkOption.NOFOLLOW_LINKS) == currentUser
 
     private fun createOwnerOnly(dir: File, setPerms: (Path, Set<PosixFilePermission>) -> Unit) {
         try {

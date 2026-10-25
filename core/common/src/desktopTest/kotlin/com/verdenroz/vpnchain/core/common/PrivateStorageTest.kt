@@ -8,6 +8,8 @@ import java.nio.file.attribute.PosixFilePermissions
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Assume.assumeTrue
 
@@ -116,5 +118,40 @@ class PrivateStorageTest {
         assertEquals("rwx------", mode(dir))
         assertEquals("rw-------", mode(log))
         assertEquals("keep", log.readText())
+    }
+
+    @Test
+    fun `a symlinked runtime dir is rejected and its target untouched`() {
+        val home = home()
+        val target = File(home, "attacker").apply { mkdirs() }
+        loosen(target, "rwxrwxrwx")
+        val link = File(home, "run")
+        Files.createSymbolicLink(link.toPath(), target.toPath())
+
+        assertFailsWith<IOException> { PrivateStorage.privateDir(link) }
+
+        assertEquals("rwxrwxrwx", mode(target))
+    }
+
+    @Test
+    fun `a runtime dir that cannot be tightened is rejected`() {
+        val dir = File(home(), "run").apply { mkdirs() }
+        loosen(dir, "rwxrwxrwx")
+
+        assertFailsWith<IOException> { PrivateStorage.privateDir(dir, setPerms = { _, _ -> throw IOException("denied") }) }
+    }
+
+    @Test
+    fun `a symlink at the log path is replaced rather than followed`() {
+        val dir = PrivateStorage.privateDir(File(home(), "run"))
+        val victim = File(home(), "victim.txt").apply { writeText("precious") }
+        val log = File(dir, "relay.log")
+        Files.createSymbolicLink(log.toPath(), victim.toPath())
+
+        PrivateStorage.ensurePrivateFile(log)
+
+        assertFalse(Files.isSymbolicLink(log.toPath()))
+        assertEquals("rw-------", mode(log))
+        assertEquals("precious", victim.readText())
     }
 }
