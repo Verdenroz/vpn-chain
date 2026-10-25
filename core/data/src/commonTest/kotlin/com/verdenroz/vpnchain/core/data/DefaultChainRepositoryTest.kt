@@ -303,6 +303,7 @@ private class StubSettingsRepository(initial: UserSettings) : SettingsRepository
 }
 
 private class StubWarpRepository : WarpRepository {
+    override val registered = MutableStateFlow(true)
     override suspend fun exit() = WarpExit(
         privateKey = "priv",
         addressV4 = "172.16.0.2/32",

@@ -41,6 +41,8 @@ fun ChainRoute(
         onConnect = viewModel::connect,
         onDisconnect = viewModel::disconnect,
         onOpenSettings = onOpenSettings,
+        onSendDirect = viewModel::sendDirect,
+        onUndoDirect = viewModel::undoDirect,
         modifier = modifier,
     )
 }
@@ -51,6 +53,8 @@ fun ChainScreen(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
+    onSendDirect: (String) -> Unit,
+    onUndoDirect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val nodes = remember(uiState.route) { uiState.route.toMapNodes() }
@@ -61,7 +65,7 @@ fun ChainScreen(
             Row(Modifier.fillMaxSize()) {
                 RouteMap(nodes, connected, Modifier.weight(1f).fillMaxHeight())
                 SidePanel {
-                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, fillHeight = true)
+                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, onSendDirect, onUndoDirect, fillHeight = true)
                 }
             }
         } else {
@@ -74,7 +78,7 @@ fun ChainScreen(
                         .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
                         .fillMaxWidth(),
                 ) {
-                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings)
+                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, onSendDirect, onUndoDirect)
                 }
             }
         }

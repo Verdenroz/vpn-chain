@@ -6,6 +6,7 @@ import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
+import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.domain.ChainRoute
 import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
@@ -18,6 +19,7 @@ import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.outsideExit
+import com.verdenroz.vpnchain.core.model.outsideExitFor
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -36,26 +38,38 @@ data class ChainUiState(
 )
 
 /**
- * What the WARP tail and failing open take off the relay's exit. [outsideExit]
- * is how the [outsideCount] sites leave; one topology is dialled at a time, so
- * they all leave the same way.
+ * What the WARP tail and failing open take off the relay's exit. [offered] are
+ * sites the relay and WARP refused that the user may send down the bare link,
+ * and [sentDirect] the ones they did; both exist only where there is no entry hop.
  */
 data class LearnedRouting(
     val warpMode: WarpMode = WarpMode.Off,
     val warpCount: Int = 0,
-    val outsideCount: Int = 0,
-    val outsideExit: OutsideExit? = null,
+    val entryHopCount: Int = 0,
+    val offered: List<String> = emptyList(),
+    val sentDirect: List<String> = emptyList(),
 )
 
-/** A WireGuard-only connection has no tail to reroute through, so it reads as off. */
-internal fun learnedRouting(sites: List<LearnedSite>, settings: UserSettings, profile: SavedProfile?): LearnedRouting {
+/**
+ * A WireGuard-only connection has no tail to reroute through, and without a
+ * registration none is rendered, so both read as off.
+ */
+internal fun learnedRouting(
+    sites: List<LearnedSite>,
+    settings: UserSettings,
+    profile: SavedProfile?,
+    warpRegistered: Boolean,
+): LearnedRouting {
     if (profile?.supportsWarpExit != true) return LearnedRouting()
-    val outside = sites.mapNotNull { it.outsideExit(settings, profile) }
+    val warpMode = if (warpRegistered) settings.warpMode else WarpMode.Off
+    val exit = profile.outsideExitFor(settings)
+    fun domains(route: LearnedRoute) = sites.filter { it.route == route }.map { it.domain }
     return LearnedRouting(
-        warpMode = settings.warpMode,
-        warpCount = if (settings.warpMode == WarpMode.Automatic) sites.count { it.route == LearnedRoute.Warp } else 0,
-        outsideCount = outside.size,
-        outsideExit = outside.firstOrNull(),
+        warpMode = warpMode,
+        warpCount = if (warpMode == WarpMode.Automatic) sites.count { it.route == LearnedRoute.Warp } else 0,
+        entryHopCount = sites.count { it.outsideExit(settings, profile) == OutsideExit.EntryHop },
+        offered = if (exit == OutsideExit.Direct) domains(LearnedRoute.DirectAvailable) else emptyList(),
+        sentDirect = if (exit == OutsideExit.Direct) domains(LearnedRoute.Direct) else emptyList(),
     )
 }
 
@@ -66,7 +80,8 @@ class ChainViewModel(
     chainRepository: ChainRepository,
     profileRepository: ProfileRepository,
     settingsRepository: SettingsRepository,
-    learnedSites: LearnedSitesRepository,
+    private val learnedSites: LearnedSitesRepository,
+    warpRepository: WarpRepository,
 ) : ViewModel() {
 
     val uiState: StateFlow<ChainUiState> =
@@ -77,8 +92,13 @@ class ChainViewModel(
             // probe would show a live tunnel as an unconfigured one.
             observeChainRoute().onStart { emit(ChainRoute()) },
             chainRepository.stats.map { it.connectedSinceMillis }.distinctUntilChanged(),
-            combine(learnedSites.sites, settingsRepository.settings, profileRepository.profile, ::learnedRouting)
-                .distinctUntilChanged(),
+            combine(
+                learnedSites.sites,
+                settingsRepository.settings,
+                profileRepository.profile,
+                warpRepository.registered,
+                ::learnedRouting,
+            ),
         ) { status, hasProfile, route, connectedSince, routing ->
             ChainUiState(
                 status = status,
@@ -96,4 +116,8 @@ class ChainViewModel(
     fun connect() = viewModelScope.launch { connectChain() }
 
     fun disconnect() = viewModelScope.launch { disconnectChain() }
+
+    fun sendDirect(domain: String) = viewModelScope.launch { learnedSites.allowDirect(domain) }
+
+    fun undoDirect(domain: String) = viewModelScope.launch { learnedSites.forget(domain) }
 }

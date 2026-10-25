@@ -33,7 +33,6 @@ import com.verdenroz.vpnchain.core.domain.HopEvidence
 import com.verdenroz.vpnchain.core.domain.HopRole
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.KillSwitchState
-import com.verdenroz.vpnchain.core.model.OutsideExit
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.ui.asString
@@ -62,9 +61,11 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switc
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_open_settings
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_outside_direct
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_outside_entry_hop
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_outside_sites
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_outside_refused
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_send_direct
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_undo_direct
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_rerouted_all
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_rerouted_sites
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_site_count
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_ip
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_kill_switch
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_outside
@@ -88,11 +89,13 @@ internal fun ChainDetails(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
+    onSendDirect: (String) -> Unit,
+    onUndoDirect: (String) -> Unit,
     fillHeight: Boolean = false,
 ) {
     Column(if (fillHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f, fill = fillHeight).verticalScroll(rememberScrollState())) {
-            Readouts(uiState)
+            Readouts(uiState, onSendDirect, onUndoDirect)
         }
         Spacer(Modifier.height(16.dp))
         if (uiState.hasProfile) {
@@ -121,7 +124,7 @@ internal fun ChainDetails(
 }
 
 @Composable
-private fun Readouts(uiState: ChainUiState) {
+private fun Readouts(uiState: ChainUiState, onSendDirect: (String) -> Unit, onUndoDirect: (String) -> Unit) {
     val status = uiState.status
     val connected = status.state == TunnelState.Connected
     val exit = uiState.route.hop(HopRole.Exit)
@@ -141,7 +144,7 @@ private fun Readouts(uiState: ChainUiState) {
     Spacer(Modifier.height(12.dp))
     uiState.route.hops.forEach { hop -> HopInfoRow(hop) }
     RerouteRow(uiState.routing)
-    OutsideChainRow(uiState.routing)
+    OutsideChainRows(uiState.routing, onSendDirect, onUndoDirect)
     InfoRow(
         label = stringResource(Res.string.chain_row_ip),
         value = exit?.ip ?: stringResource(Res.string.chain_row_placeholder),
@@ -216,7 +219,9 @@ private fun RerouteRow(routing: LearnedRouting) {
     val value = when (routing.warpMode) {
         WarpMode.Off -> return
         WarpMode.AllTraffic -> stringResource(Res.string.chain_rerouted_all)
-        WarpMode.Automatic -> pluralStringResource(Res.plurals.chain_rerouted_sites, routing.warpCount, routing.warpCount)
+        WarpMode.Automatic ->
+            if (routing.warpCount == 0) return
+            else pluralStringResource(Res.plurals.chain_site_count, routing.warpCount, routing.warpCount)
     }
     InfoRow(
         label = stringResource(Res.string.chain_row_rerouted),
@@ -225,21 +230,41 @@ private fun RerouteRow(routing: LearnedRouting) {
     )
 }
 
-/** Sites failing open skip the relay, so the row says so and how. */
+/**
+ * Sites that skip the relay, and how. Through the entry hop they are counted;
+ * the bare link is listed per site, since each one is there by the user's choice.
+ */
 @Composable
-private fun OutsideChainRow(routing: LearnedRouting) {
-    val exit = routing.outsideExit ?: return
-    InfoRow(
-        label = stringResource(Res.string.chain_row_outside),
-        value = pluralStringResource(Res.plurals.chain_outside_sites, routing.outsideCount, routing.outsideCount),
-        marker = RowMarker(VpnChainTheme.colors.unprotected, filled = true),
-        note = stringResource(
-            when (exit) {
-                OutsideExit.EntryHop -> Res.string.chain_outside_entry_hop
-                OutsideExit.Direct -> Res.string.chain_outside_direct
+private fun OutsideChainRows(routing: LearnedRouting, onSendDirect: (String) -> Unit, onUndoDirect: (String) -> Unit) {
+    val colors = VpnChainTheme.colors
+    if (routing.entryHopCount > 0) {
+        InfoRow(
+            label = stringResource(Res.string.chain_row_outside),
+            value = pluralStringResource(Res.plurals.chain_site_count, routing.entryHopCount, routing.entryHopCount),
+            marker = RowMarker(colors.unprotected, filled = true),
+            note = stringResource(Res.string.chain_outside_entry_hop),
+        )
+    }
+    routing.sentDirect.forEach { domain ->
+        InfoRow(
+            label = domain,
+            value = stringResource(Res.string.chain_outside_direct),
+            marker = RowMarker(colors.unprotected, filled = true),
+            action = {
+                ActionButton(stringResource(Res.string.chain_undo_direct), onClick = { onUndoDirect(domain) }, compact = true)
             },
-        ),
-    )
+        )
+    }
+    routing.offered.forEach { domain ->
+        InfoRow(
+            label = domain,
+            value = stringResource(Res.string.chain_outside_refused),
+            marker = RowMarker(colors.unprotected, filled = false),
+            action = {
+                ActionButton(stringResource(Res.string.chain_send_direct), onClick = { onSendDirect(domain) }, compact = true)
+            },
+        )
+    }
 }
 
 @Composable

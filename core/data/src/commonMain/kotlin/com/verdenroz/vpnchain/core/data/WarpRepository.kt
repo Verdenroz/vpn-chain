@@ -4,7 +4,9 @@ import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.logging.Logger
 import com.verdenroz.vpnchain.core.model.WarpExit
 import com.verdenroz.vpnchain.core.warp.WarpRegistrar
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 /**
  * Supplies the chain's WARP tail credentials, registering one the first time
@@ -13,6 +15,9 @@ import kotlinx.coroutines.flow.first
 interface WarpRepository {
     /** @return credentials to render, or null when there are none to be had. */
     suspend fun exit(): WarpExit?
+
+    /** Whether a registration is stored, which is what lets a tail be rendered at all. */
+    val registered: Flow<Boolean>
 }
 
 internal class DefaultWarpRepository(
@@ -21,6 +26,8 @@ internal class DefaultWarpRepository(
     private val logger: Logger,
     private val now: () -> Long,
 ) : WarpRepository {
+
+    override val registered: Flow<Boolean> = preferences.warpExit.map { it != null }
 
     override suspend fun exit(): WarpExit? {
         val stored = preferences.warpExit.first()

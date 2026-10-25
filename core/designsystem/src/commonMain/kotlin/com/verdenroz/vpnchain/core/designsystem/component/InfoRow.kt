@@ -27,7 +27,7 @@ data class RowMarker(val color: Color, val filled: Boolean)
 
 /**
  * One labelled line under a hairline. [note] is secondary text after the value,
- * for how the value was learned.
+ * for how the value was learned; [action] sits at the end of the line.
  */
 @Composable
 fun InfoRow(
@@ -36,6 +36,7 @@ fun InfoRow(
     modifier: Modifier = Modifier,
     marker: RowMarker? = null,
     note: String? = null,
+    action: (@Composable () -> Unit)? = null,
 ) {
     val colors = VpnChainTheme.colors
     Row(
@@ -84,6 +85,10 @@ fun InfoRow(
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
+        }
+        if (action != null) {
+            Spacer(Modifier.width(12.dp))
+            action()
         }
     }
 }
