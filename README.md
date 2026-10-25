@@ -4,212 +4,155 @@
 
 <h1 align="center">vpn-chain</h1>
 <p align="center">
-  A layered, censorship-resistant VPN chain, and the tooling around it,
-  built as a Kotlin Multiplatform monorepo.
+  A layered, censorship-resistant VPN chain for Android and Linux desktop.
 </p>
 
 <p align="center">
-  <img src="assets/branding/hops-diagram.svg" width="880" alt="Route: you, through the optional WireGuard entry hop, through the VLESS+REALITY relay VPS, exiting directly to the internet — with a dashed single-hop path from you straight to the relay when the entry hop is off">
+  <img src="assets/branding/hops-diagram.svg" width="880" alt="Route: you, through the optional WireGuard entry hop, through the VLESS+REALITY relay VPS, exiting directly to the internet, with a dashed single-hop path from you straight to the relay when the entry hop is off">
 </p>
 
-With the entry hop on, a passive observer on your network sees a WireGuard
-connection to your entry provider, never a connection to the relay VPS.
-Toggle it off (**Settings → routing**) and the chain dials the relay
-directly — no entry leg to stall, at the cost of the VPS seeing your IP —
-still disguised as HTTPS to your SNI.
+Traffic goes `you → WireGuard entry hop → VLESS+REALITY relay VPS → internet`.
+A network observer sees WireGuard to your entry provider, never a connection to
+your VPS. The entry hop is optional: without it the VPS sees your address, and
+the traffic still looks like HTTPS to your SNI.
 
-**Contents:** [Layout](#layout) · [Secrets](#secrets) · [Toolchain](#toolchain)
-· [Quick start](#quick-start-linux-cli) · [Apps](#apps) · [Releases](#releases)
+## Quick start
 
-## Layout
+You need a relay VPS first: see [Set up a connection](#set-up-a-connection).
 
-Modules follow [Now in Android](https://github.com/android/nowinandroid)'s
-`core` / `feature` / app split, adapted to Kotlin Multiplatform (Koin for DI
-instead of Hilt, so `commonMain` works on both Android and desktop).
-
-| Path | What |
-|------|------|
-| `cli/vpn-chain` | Linux CLI: renders a sing-box config from secrets, drives the entry hop + the relay. |
-| `cli/import-entry-conf.sh` | Imports a WireGuard `.conf` into `secrets.env`, file-to-file (never prints the key). |
-| `cli/install-desktop.sh` | Installs the latest released desktop app (Linux x64) as the self-updating managed copy. |
-| `cli/killswitch/` | nftables kill-switch helper for desktop's WireGuard-entry-hop mode. |
-| `core/model` | KMP data classes: `ChainProfile`, `ChainStatus`, `TunnelState`, `UserSettings`, `LogEntry`. |
-| `core/common` | KMP coroutine scope/dispatcher qualifiers, `currentTimeMillis`. |
-| `core/logging` | KMP `Logger` facade (Logcat / desktop stderr). |
-| `core/config` | KMP `SingBoxConfigFactory` (profile → sing-box JSON) + `SecretsEnvParser`. |
-| `core/datastore` | KMP DataStore-backed profile + settings persistence. |
-| `core/tunnel` | KMP `TunnelController`: Android `VpnChainService` (libbox), desktop sing-box process; live log flow. |
-| `core/warp` | KMP Cloudflare WARP registration for the tail exit (X25519 keygen + the free reg API). |
-| `core/update` | KMP in-app updater: release manifest, verified download, update state, Android/Linux installers. |
-| `core/data` | KMP repositories: `ChainRepository`, `ProfileRepository`, `SettingsRepository`, `LogRepository`, `WarpRepository`. |
-| `core/domain` | KMP use cases (`ConnectChainUseCase`, `ImportProfileUseCase`, …). |
-| `core/designsystem` | KMP `VpnChainTheme`, colors/type, `StatusBar`. |
-| `core/ui` | KMP shared composables (`SectionCard`, theme resolution). |
-| `feature/chain` | Connect/disconnect + status (`ChainViewModel`). |
-| `feature/settings` | Profile form, secrets.env import, theme picker. |
-| `feature/logs` | Live sing-box log viewer. |
-| `app-common` | Themed shell: status bar, bottom tabs or nav rail, `NavHost`, Koin graph aggregation. |
-| `androidApp` | Native Android app (Compose + VpnService). |
-| `desktopApp` | Compose Multiplatform desktop (Windows/macOS/Linux). |
-| `server/` | VPS provisioning, entry key rotation, link generator. |
-| `config-templates/` | sing-box templates + reference configs. |
-| `examples/secrets.env.example` | Template for the runtime secret file. |
-| `docs/` | Architecture, Android setup, desktop TUN/kill-switch internals, key rotation. |
-
-## Secrets
-
-Real credentials never live in the repo. Copy the example to a locked-down
-file **outside** the repo and fill it in:
+### Linux desktop
 
 ```
-mkdir -p ~/.config/vpn-chain
-cp examples/secrets.env.example ~/.config/vpn-chain/secrets.env
-chmod 600 ~/.config/vpn-chain/secrets.env
+git clone https://github.com/Verdenroz/vpn-chain && cd vpn-chain
+cli/install-desktop.sh     # latest release, self-updating, adds a menu entry
+cli/setup-desktop.sh       # one time: TUN capability, kill switch, polkit rules
+vpn-chain-gui
 ```
 
-The CLI renders an ephemeral sing-box config from it at runtime. The GUI apps
-store the profile in DataStore and never write credentials to the repo or the
-logs. Populate it in **Settings**, either by importing `secrets.env` or
-through the manual form (credential fields are masked).
+The desktop app drives the `sing-box` binary, so install `sing-box` first.
+Details: [docs/desktop-tun.md](docs/desktop-tun.md).
 
-## Toolchain
+### Android
 
-Kotlin 2.2.20 · Compose Multiplatform 1.10.0 · AGP 8.13.0 · Gradle 8.13 ·
-Koin 4.2.2 · compileSdk/targetSdk 36 (Android 16) · minSdk 26. Versions live in
-`gradle/libs.versions.toml`; `build-logic/` holds the convention plugins.
+1. Download `vpn-chain-<version>-android-arm64-v8a.apk` from the
+   [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest)
+   (`x86_64` for an emulator).
+2. Allow installs from your browser or file manager, and install it.
+3. Open the app and import a connection, then tap **Connect**.
 
-Modules compile to JDK 17 bytecode, but **Gradle 8.13 must _run_ on JDK 17–21**
-(not 22+). If your default `java` is newer, point the build at a JDK 21:
+Turn on Always-on VPN as the kill switch:
+[docs/android.md](docs/android.md#kill-switch).
 
-```
-# gradle.properties (or ~/.gradle/gradle.properties to keep it machine-local)
-org.gradle.java.home=/usr/lib/jvm/java-21-openjdk
-```
+### Linux CLI
 
-## Quick start (Linux CLI)
-
-```
-cli/vpn-chain install       # symlink into ~/.local/bin so `vpn-chain` works anywhere
-vpn-chain up                # connect the entry hop + start the relay
-vpn-chain status            # entry path + exit IP
-vpn-chain down              # stop the relay (the entry hop stays up)
-```
-
-`install` symlinks the script (override the target dir with
-`VPN_CHAIN_BIN_DIR`); `uninstall` removes it.
-
-## Apps
-
-Gradle sync first (fetches SDK components), then `./gradlew :desktopApp:run`
-or `./gradlew :androidApp:assembleDebug`. For a wofi/rofi launcher entry:
-`./gradlew :desktopApp:installDesktopEntry`.
-
-Both platforms share `app-common` (themed shell, Chain/Logs/Settings bottom
-nav) and Koin for DI. Both tunnels are functional:
-
-- **Desktop** runs the `sing-box` binary against a rendered config and
-  coexists with the CLI via a shared pidfile. Defaults to system-wide TUN
-  routing; see [docs/desktop-tun.md](docs/desktop-tun.md) for setup.
-- **Android** runs sing-box in-process via the prebuilt libbox AAR inside a
-  `VpnService`, performing both hops itself since Android allows only one
-  active VPN. See [docs/android.md](docs/android.md).
-
-**Entry hop:** optional, and any WireGuard peer will do — a commercial
-provider's config or your own box. Fill in the WireGuard fields and the app
-dials the entry hop itself; leave them blank and it runs single-hop
-(you → relay VPS → internet), or leave them blank and run a separate VPN app
-to have that carry the entry hop instead. A configured entry can also be
-switched off without touching the profile (**Settings → routing → wireguard
-entry hop**) — handy when the entry peer is being flaky. Single-hop is
-faster and has nothing to expire, but the VPS then sees your real address
-
-**Kill switch:** a narrow nftables helper for any TUN chain the app dials
-itself, single-hop included; the external app's own when a separate VPN app
-carries the entry hop (desktop detects it by interface name)
-(setup in [docs/kill-switch.md](docs/kill-switch.md)). Android's is the OS's
-own Always-on VPN toggle (details in
-[docs/android.md](docs/android.md#kill-switch)).
-
-**DNS filtering:** on by default, and the reason a single-hop chain doesn't
-lose filtering along with the entry hop — the chain's own resolver refuses
-malware, phishing, ad, and tracker domains from blocklists fetched through
-the tunnel, at two levels (threats only / threats + ads). Scores 99% on
-[d3ward's adblock test](https://d3ward.github.io/toolz/adblock);
-see [docs/dns-filtering.md](docs/dns-filtering.md). **Settings → dns**.
-
-**WARP tail exit:** the relay's datacenter address is refused outright by some
-sites (Reddit and ChatGPT both answer 403 through ours), so the chain can add
-a Cloudflare WARP hop *after* the relay and exit from Cloudflare's address
-instead. Dialled through the chain, never around it — Cloudflare sees the
-relay, never your device. Credentials register themselves; no `wgcf`, nothing
-to paste. Defaults to the blocked sites only — the tail is dialled through
-the relay, so Cloudflare sees the VPS's address against whatever it carries,
-and confining that to the sites that force it keeps your own box as the exit
-for everything else. Widen it to all traffic (it measured no slower) or turn
-it off. GUI only; the CLI still exits from the VPS. See [docs/warp-exit.md](docs/warp-exit.md). **Settings → routing**.
-
-## Releases
-
-Pushing a `v*` tag runs `.github/workflows/release.yml`: Android release
-APKs, a Linux `.deb` + portable `.tar.gz`, a Windows `.msi`, and a macOS
-`.dmg` (unsigned), each built on its own native runner, plus a `manifest.json`
-listing the size and SHA-256 of the APKs and the Linux tarball. The version
-lives in one place, `vpnchain.version` in `gradle.properties`; the Android
-version code is derived from it.
+The CLI exposes a local SOCKS/HTTP proxy at `127.0.0.1:1080`. It needs
+`sing-box`, `envsubst` and the ProtonVPN CLI (it uses ProtonVPN as the entry
+hop).
 
 ```
-# bump vpnchain.version, then:
-git tag v0.1.0 && git push origin v0.1.0
+cli/vpn-chain install    # symlink into ~/.local/bin
+vpn-chain up             # entry hop + relay
+vpn-chain status         # kill switch helper, entry path, exit IP
+vpn-chain down           # stop the relay (add --disconnect-entry to drop the entry app too)
 ```
 
-The manifest is what the apps read to update themselves, so the tag must match
-`vpnchain.version`: the publish step fails when the built APKs carry another
-version or a build is missing.
+## Set up a connection
 
-### Updating
+1. Deploy the relay. On a fresh Debian or Ubuntu VPS, as root, run
+   `server/deploy-server.sh`. It installs Xray with VLESS+REALITY and prints
+   the values you need.
+2. Put them in `secrets.env`, outside the repo:
 
-The Android app and the Linux desktop app check the latest release's
-`manifest.json` at start and every 24 hours, and offer **Update x.y.z** in a
-banner (**Settings → About → Check now** looks again). Requests take whatever
-path the app's traffic normally takes, the tunnel included. Downloads are
-checked against the manifest's size and SHA-256 before anything is installed,
-and the Linux install refuses a tarball with entries or links outside its folder.
+   ```
+   mkdir -p ~/.config/vpn-chain
+   cp examples/secrets.env.example ~/.config/vpn-chain/secrets.env
+   chmod 600 ~/.config/vpn-chain/secrets.env
+   ```
 
-- **Android** installs through the system installer, so the first update asks
-  you to allow installs from the app. Keep the app open until Android shows its
-  install prompt; if you leave first, tap retry when you're back. Releases must
-  be signed with the same key for Android to accept them over each other (see
-  below), so a debug build is never offered updates. If the chain was up, the
-  app brings it back up after the update.
-- **Linux desktop** updates a managed install; a build from source or a `.deb`
-  is never offered updates. Set one up with `cli/install-desktop.sh` (installs
-  under `~/.local/share/vpn-chain`, a launcher `vpn-chain-gui` in
-  `~/.local/bin`, and the menu entry). An update swaps the `current` symlink and
-  relaunches; the relay is a separate process and keeps running. sing-box, the
-  kill-switch helper and the systemd/polkit setup (`cli/setup-desktop.sh`) are
-  outside the managed install and untouched.
+3. Optional entry hop: generate a WireGuard config from your provider, a
+   different one for each device, and import it without printing the key:
+   `cli/import-entry-conf.sh ~/Downloads/entry.conf`.
+4. In the app, open **Settings → Chain identity → Import**. Paste or import
+   `secrets.env`, or paste a WireGuard `.conf`. The app shows a review (the
+   server and entry it would use) before anything is saved. **Use it** switches
+   to the connection; **Save** keeps it for later.
+5. On Android you can scan a QR code from the desktop app instead
+   (**Chain identity → Show QR**).
 
-The release fails without signing secrets, since an APK signed with another
-key cannot update an installed one. Create a keystore once and add repo
-secrets `ANDROID_KEYSTORE_B64` (`base64 -w0 release.jks`),
-`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`:
+A pasted WireGuard `.conf` becomes a WireGuard-only connection: a plain tunnel
+to that peer, with no relay. **Use as entry hop** attaches it to the active
+connection instead.
+
+Real credentials never live in the repo. The CLI renders an ephemeral config
+from `secrets.env` at run time. The apps keep the profile in DataStore and never
+log credentials.
+
+**One identity per device.** The QR code carries this device's own live
+credentials. To give a phone an identity you can revoke without touching the
+others, create it on the server with `server/devices.sh add`. See
+[docs/devices.md](docs/devices.md).
+
+## What it does
+
+| Feature | Where | Doc |
+|---|---|---|
+| Saved connections: relay, WireGuard-only, or both chained | Settings → Profiles | [architecture](docs/architecture.md) |
+| Optional entry hop, switchable off without editing the profile | Settings → Routing | [android](docs/android.md), [desktop-tun](docs/desktop-tun.md) |
+| Cloudflare WARP exit, automatic for sites that refuse the VPS | Settings → Routing | [warp-exit](docs/warp-exit.md) |
+| Send direct: a tap lets a refused site leave on your own address | Chain card, Settings → Routing | [warp-exit](docs/warp-exit.md#failing-open) |
+| DNS filtering (threats, or threats + ads) | Settings → DNS | [dns-filtering](docs/dns-filtering.md) |
+| Kill switch: nftables on desktop, Always-on VPN on Android | Settings → Kill switch | [kill-switch](docs/kill-switch.md) |
+| In-app updates | Update banner, Settings → About | [Updating](#updating) |
+
+## Updating
+
+The Android app and the managed Linux install check the latest release at start
+and every 24 hours. A banner offers **Update x.y.z**; **Settings → About →
+Check now** looks again.
+
+- **Android** installs through the system installer. The first update asks you
+  to allow installs from the app. Keep the app open until the install prompt
+  shows. Debug builds are never offered updates.
+- **Linux desktop** updates the copy `cli/install-desktop.sh` installs under
+  `~/.local/share/vpn-chain`. Builds from source and the `.deb` are never
+  offered updates. The relay keeps running through an update.
+- The CLI and server scripts update with `git pull`.
+
+Release process and signing: [docs/releasing.md](docs/releasing.md).
+
+## Documentation
+
+| Doc | Covers |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Modules, layering, how the two platforms differ |
+| [docs/android.md](docs/android.md) | Android tunnel, kill switch, staying connected |
+| [docs/desktop-tun.md](docs/desktop-tun.md) | Desktop setup: TUN, the relay service, the entry hop |
+| [docs/kill-switch.md](docs/kill-switch.md) | The nftables helper and its design |
+| [docs/dns-filtering.md](docs/dns-filtering.md) | Blocklists and how they are built |
+| [docs/warp-exit.md](docs/warp-exit.md) | WARP tail, automatic detection, failing open |
+| [docs/devices.md](docs/devices.md) | Per-device identities on the relay |
+| [docs/rotate-vless-identity.md](docs/rotate-vless-identity.md) | Rotate the relay credentials |
+| [docs/rotate-exit-key.md](docs/rotate-exit-key.md) | Rotate the server's upstream WireGuard key |
+| [docs/releasing.md](docs/releasing.md) | Tag, sign and publish a release |
+
+## Build from source
+
 ```
-keytool -genkeypair -v -keystore release.jks -alias vpn-chain \
-  -keyalg RSA -keysize 4096 -validity 10000
+./gradlew :desktopApp:run                  # desktop app
+./gradlew :androidApp:assembleDebug        # Android debug APK
+./gradlew :desktopApp:installDesktopEntry  # launcher entry for a source build
 ```
 
-Whoever can push a `v*` tag can ship an update to every installed copy, so
-two repo settings are worth turning on: a tag protection rule (ruleset) for
-`v*`, and a protected `release` environment with a required reviewer that the
-publish job runs in. The workflow itself runs with read-only `contents`
-except in the publish job, keeps no git credentials after checkout, and pins
-every action to a commit.
+Gradle 8.13 must run on JDK 17 to 21. If your default `java` is newer, set
+`org.gradle.java.home=/usr/lib/jvm/java-21-openjdk` in `gradle.properties`, or in
+`~/.gradle/gradle.properties` to keep it machine-local. Versions live in
+`gradle/libs.versions.toml`.
 
 ## Third-party data
 
-- `core/warp/src/jvmShared/resources/vpnchain/public_suffix_list.dat` is the
-  [Public Suffix List](https://publicsuffix.org/), unmodified, under the
-  [Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/) (its notice is
-  at the top of the file). Blocked-site detection reads it to tell a site's
-  registrable domain from a shared host's tenants. To update it, replace the
-  file with a fresh copy from https://publicsuffix.org/list/public_suffix_list.dat.
+`core/warp/src/jvmShared/resources/vpnchain/public_suffix_list.dat` is the
+[Public Suffix List](https://publicsuffix.org/), unmodified, under the
+[Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/). Blocked-site
+detection uses it to tell a site's registrable domain from a shared host's
+tenants. To update it, replace the file with a fresh copy from
+https://publicsuffix.org/list/public_suffix_list.dat.
