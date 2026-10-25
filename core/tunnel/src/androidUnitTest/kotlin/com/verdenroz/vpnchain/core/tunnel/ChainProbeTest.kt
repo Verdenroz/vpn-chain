@@ -4,11 +4,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 
 class ChainProbeTest {
 
@@ -59,6 +61,23 @@ class ChainProbeTest {
         callers.forEach { assertFalse(it.await()) }
 
         assertEquals(targets.size, started)
+    }
+
+    @Test
+    fun `a probe stuck past its bound does not capture the next call`() = runTest {
+        var started = 0
+        val probe = ChainProbe(backgroundScope, targets) { _, _ ->
+            started++
+            withContext(NonCancellable) { delay(60_000) }
+            false
+        }
+
+        assertFalse(probe.carriesTraffic(timeoutMs = 5_000))
+        assertEquals(11_000L, currentTime)
+        assertFalse(probe.carriesTraffic(timeoutMs = 5_000))
+
+        assertEquals(2 * targets.size, started)
+        assertEquals(22_000L, currentTime)
     }
 
     @Test
