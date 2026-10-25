@@ -170,7 +170,7 @@ version or a build is missing.
 
 The Android app and the Linux desktop app check the latest release's
 `manifest.json` at start and every 24 hours, and offer **Update x.y.z** in a
-banner (**Settings → about → check now** looks again). Requests take whatever
+banner (**Settings → About → Check now** looks again). Requests take whatever
 path the app's traffic normally takes, the tunnel included. Downloads are
 checked against the manifest's size and SHA-256 before anything is installed,
 and the Linux install refuses a tarball with entries or links outside its folder.
