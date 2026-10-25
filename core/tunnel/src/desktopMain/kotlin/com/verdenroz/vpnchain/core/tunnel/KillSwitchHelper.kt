@@ -23,7 +23,7 @@ fun processHelperRunner(bin: String, timeoutSeconds: Long = 5): HelperRunner = {
     }.getOrDefault(HelperOutcome.NotFound)
 }
 
-private val DENIED = listOf("Operation not permitted", "Permission denied")
+private val DENIED = listOf("could not acquire CAP_NET_ADMIN", "Operation not permitted", "Permission denied")
 
 /** Null when the table was installed, otherwise why the chain is left unprotected. */
 internal suspend fun engageKillSwitchFault(

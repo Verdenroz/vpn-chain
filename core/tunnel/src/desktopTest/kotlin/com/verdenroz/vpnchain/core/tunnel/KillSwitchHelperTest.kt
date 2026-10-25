@@ -28,7 +28,13 @@ class KillSwitchHelperTest {
     }
 
     @Test
-    fun `non-zero exit is helper unprivileged`() {
+    fun `missing capability is helper unprivileged`() {
+        val output = "could not acquire CAP_NET_ADMIN - run once:\n  sudo setcap cap_net_admin=eip vpn-chain-killswitch\n"
+        assertEquals(KillSwitchState.HelperUnprivileged, fault { HelperOutcome.Exited(1, output) })
+    }
+
+    @Test
+    fun `nft refusal is helper unprivileged`() {
         assertEquals(
             KillSwitchState.HelperUnprivileged,
             fault { HelperOutcome.Exited(1, "Operation not permitted") },

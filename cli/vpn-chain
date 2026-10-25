@@ -148,8 +148,6 @@ cmd_down() {
   log "Chain down."
 }
 
-# The GUI's kill switch fails silently when the helper is unbuilt or missing its
-# capability — both look identical from the app, so report them here.
 killswitch_status() {
   local bin; bin="$(command -v "$KILLSWITCH_BIN" 2>/dev/null || true)"
   if [ -z "$bin" ]; then

@@ -84,8 +84,9 @@ class DesktopTunnelController(
     private val scope: CoroutineScope,
     private val singBoxBin: String = "sing-box",
     private val killSwitchBin: String = "vpn-chain-killswitch",
-    private val helperRunner: HelperRunner = processHelperRunner(killSwitchBin),
 ) : TunnelController {
+
+    private val helperRunner = processHelperRunner(killSwitchBin)
 
     private val _stats = MutableStateFlow(SessionStats())
     override val stats: StateFlow<SessionStats> = _stats.asStateFlow()
@@ -191,6 +192,7 @@ class DesktopTunnelController(
             proxyPort = RelayConfig.proxyPort(configJson, DEFAULT_PROXY_PORT)
             this@DesktopTunnelController.killSwitchEnabled = killSwitchEnabled
             this@DesktopTunnelController.allowLocalNetworks = allowLocalNetworks
+            killSwitchFault = null
             // A relay left running by the CLI or a previous GUI run is invisible to
             // a fresh process. Launching a second sing-box over the same TUN makes
             // it tear down the live instance's routing on exit, which strands the
@@ -278,6 +280,7 @@ class DesktopTunnelController(
         tunMode = session.tun
         tunHasEntry = session.entry
         killSwitchEngaged = session.killSwitch
+        killSwitchFault = null
         killSwitchEnabled = session.killSwitchEnabled
         if (shouldRestoreKillSwitch(managed, recorded)) {
             adoptedManagedConfig()?.let {

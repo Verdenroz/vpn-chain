@@ -51,10 +51,10 @@ has cleared it. The app detects the missing capability before connecting and
 shows the command as the error. That check is skipped when the unit is installed,
 where the binary having no capability is the expected state.
 
-With the service in play, Disconnect has to come from the app or from
-`systemctl stop vpn-chain-relay` — `cli/vpn-chain down` signals a pid it does not
-own, so it cannot stop a relay running under the unit (it still tears down the
-kill switch).
+With the service in play, `cli/vpn-chain down` stops the unit too. If
+`systemctl stop` is refused (say, over SSH, where the polkit rule doesn't apply),
+it exits without touching anything else, so the relay keeps running with its kill
+switch in place.
 
 TUN mode also asks `systemd-resolved` to set/revert DNS on the tunnel interface
 on every connect and disconnect, which by default means a polkit password prompt
