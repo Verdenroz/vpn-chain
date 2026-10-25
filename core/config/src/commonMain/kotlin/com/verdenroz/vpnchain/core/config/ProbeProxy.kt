@@ -48,5 +48,9 @@ data class ProbeProxy(
     }
 }
 
-/** Fresh ports and credentials for one rendered config. */
+/**
+ * Fresh ports and credentials for one rendered config. A port is free when
+ * picked, not when sing-box binds it, and sing-box fails its whole start when
+ * any inbound cannot bind, so a start that loses that race renders again.
+ */
 expect fun newProbeProxy(): ProbeProxy

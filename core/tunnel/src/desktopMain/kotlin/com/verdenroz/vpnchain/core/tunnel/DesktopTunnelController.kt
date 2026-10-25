@@ -4,6 +4,7 @@ import com.verdenroz.vpnchain.core.common.PrivateStorage
 import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.config.ClashApi
 import com.verdenroz.vpnchain.core.config.SystemdRelay
+import com.verdenroz.vpnchain.core.config.isLostPortRace
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.KillSwitchState
@@ -25,6 +26,7 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_tun_p
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted_relay_port
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted_system_wide
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_no_mark
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_port_race_retry
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_already_state
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_awaiting_traffic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_chain_stalled
@@ -63,6 +65,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 
@@ -132,6 +135,7 @@ class DesktopTunnelController(
     @Volatile
     private var process: RelayProcess? = null
     private var readerJob: Job? = null
+    private var configProvider: (suspend () -> String?)? = null
     private var logTailJob: Job? = null
     private var healthJob: Job? = null
 
@@ -219,6 +223,12 @@ class DesktopTunnelController(
             if (adoptRunningSession()) return@withLock
             _status.value = ChainStatus(state = TunnelState.Connecting)
             if (tunMode) startTun(configJson) else startProxy(configJson)
+            if (!lostPortRace()) return@withLock
+            val fresh = configProvider?.invoke() ?: return@withLock
+            emitLog(Res.string.tunnel_log_port_race_retry)
+            applyConfig(fresh)
+            _status.value = ChainStatus(state = TunnelState.Connecting)
+            if (tunMode) startTun(fresh) else startProxy(fresh)
         }
     }
 
@@ -251,11 +261,27 @@ class DesktopTunnelController(
         }
     }
 
+    override fun installConfigProvider(provider: suspend () -> String?) {
+        configProvider = provider
+    }
+
     private fun applyConfig(configJson: String) {
         clashApi = ClashApi.fromConfig(configJson)
         tunMode = RelayConfig.isTun(configJson)
         tunHasEntry = tunMode && RelayConfig.hasWireGuardEntry(configJson)
         proxyPort = RelayConfig.proxyPort(configJson, DEFAULT_PROXY_PORT)
+    }
+
+    /**
+     * sing-box fails its whole start when a loopback port this app picked was
+     * taken before it bound, so that one failure is worth one fresh render.
+     */
+    private suspend fun lostPortRace(): Boolean {
+        if (process?.isAlive == true) return false
+        withTimeoutOrNull(EXIT_SETTLE_MS) { readerJob?.join() }
+        if (_status.value.state != TunnelState.Error) return false
+        val tail = runCatching { relayLog.readLines().takeLast(LOG_TAIL_LINES) }.getOrDefault(emptyList())
+        return isLostPortRace(tail.joinToString("\n"), fixedPort = proxyPort.takeUnless { tunMode })
     }
 
     private suspend fun startProxy(configJson: String) {
@@ -984,6 +1010,7 @@ class DesktopTunnelController(
 
     private companion object {
         const val DEFAULT_PROXY_PORT = 1080
+        const val EXIT_SETTLE_MS = 2_000L
 
         // The literal interface the ProtonVPN desktop app creates — the only
         // external VPN client detected, because it has a fixed name.

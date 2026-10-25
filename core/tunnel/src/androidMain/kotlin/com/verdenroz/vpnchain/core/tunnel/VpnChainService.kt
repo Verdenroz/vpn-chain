@@ -17,6 +17,7 @@ import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import com.verdenroz.vpnchain.core.config.ProbeProxy
+import com.verdenroz.vpnchain.core.config.isLostPortRace
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.Res
@@ -256,16 +257,17 @@ class VpnChainService : VpnService(), CommandServerHandler {
             return false
         }
         return runCatching {
-            withContext(Dispatchers.IO) {
-                ensureSetup()
-                val server = CommandServer(this@VpnChainService, platformInterface)
-                server.start()
-                commandServer = server
-                server.startOrReloadService(config, OverrideOptions())
-                TunnelBridge.runningConfig.value = config
-                startLogClient()
-                startStatusClient()
-                startConnectionsClient(config)
+            // sing-box fails its whole start when a port this app picked was taken first.
+            val started = runCatching { startEngine(config) }
+            val lost = started.exceptionOrNull()?.message?.let(::isLostPortRace) == true
+            val fresh = if (lost) TunnelBridge.renderConfig() else null
+            if (fresh != null) {
+                TunnelBridge.log("a local port was taken before sing-box could bind it, starting again with new ports")
+                cleanup()
+                tearingDown = false
+                startEngine(fresh)
+            } else {
+                started.getOrThrow()
             }
             // A stop that landed while the engine was booting cannot reach in and
             // close a server that did not exist yet, so the boot has to check.
@@ -283,6 +285,18 @@ class VpnChainService : VpnService(), CommandServerHandler {
             )
             false
         }
+    }
+
+    private suspend fun startEngine(config: String) = withContext(Dispatchers.IO) {
+        ensureSetup()
+        val server = CommandServer(this@VpnChainService, platformInterface)
+        server.start()
+        commandServer = server
+        server.startOrReloadService(config, OverrideOptions())
+        TunnelBridge.runningConfig.value = config
+        startLogClient()
+        startStatusClient()
+        startConnectionsClient(config)
     }
 
     /**
