@@ -49,6 +49,26 @@ class SwitchProfileUseCaseTest {
     }
 
     @Test
+    fun `a connect in flight is restarted onto the new profile`() = runTest {
+        val log = mutableListOf<String>()
+        val world = SwitchWorld(TunnelState.Connecting, log)
+
+        world.switchProfile("b")
+
+        assertEquals(listOf("setActive:b", "disconnect", "connect"), log)
+    }
+
+    @Test
+    fun `a dropped tunnel the user still wants is restarted onto the new profile`() = runTest {
+        val log = mutableListOf<String>()
+        val world = SwitchWorld(TunnelState.Error, log, wanted = true)
+
+        world.switchProfile("b")
+
+        assertEquals(listOf("setActive:b", "disconnect", "connect"), log)
+    }
+
+    @Test
     fun `a failed reconnect is reported`() = runTest {
         val log = mutableListOf<String>()
         val world = SwitchWorld(TunnelState.Connected, log, connectResult = Result.failure(IllegalStateException("no")))
@@ -61,8 +81,10 @@ private class SwitchWorld(
     state: TunnelState,
     log: MutableList<String>,
     connectResult: Result<Unit> = Result.success(Unit),
+    wanted: Boolean = false,
 ) {
-    val switchProfile = SwitchProfileUseCase(RecordingProfiles(log), RecordingChain(state, log, connectResult))
+    val switchProfile =
+        SwitchProfileUseCase(RecordingProfiles(log), RecordingChain(state, log, connectResult, wanted))
 }
 
 private class RecordingProfiles(private val log: MutableList<String>) : ProfileRepository {
@@ -84,9 +106,10 @@ private class RecordingChain(
     state: TunnelState,
     private val log: MutableList<String>,
     private val connectResult: Result<Unit>,
+    wanted: Boolean,
 ) : ChainRepository {
     override val status: Flow<ChainStatus> = MutableStateFlow(ChainStatus(state = state))
-    override val connectionIntent = MutableStateFlow(false)
+    override val connectionIntent = MutableStateFlow(wanted)
     override val stats = MutableStateFlow(SessionStats())
     override val killSwitchGuidanceSupported = false
     override val alwaysOnDetected = MutableStateFlow(false)

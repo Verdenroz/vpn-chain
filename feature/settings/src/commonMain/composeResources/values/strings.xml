@@ -89,5 +89,6 @@
     <string name="settings_profile_cleared">Profile cleared</string>
     <string name="settings_imported_profile">Imported profile for %1$s</string>
     <string name="settings_import_failed">Import failed</string>
+    <string name="settings_switch_failed">Could not connect.</string>
     <string name="settings_no_secrets_env_found">No ~/.config/vpn-chain/secrets.env found</string>
 </resources>

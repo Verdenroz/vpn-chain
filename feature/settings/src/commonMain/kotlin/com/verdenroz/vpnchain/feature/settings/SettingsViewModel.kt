@@ -23,6 +23,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_s
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_cleared
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_saved
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_switched
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_switch_failed
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -141,12 +142,20 @@ class SettingsViewModel(
     }
 
     fun selectProfile(id: String) = viewModelScope.launch {
-        switchProfile(id)
-        profileRepository.profiles.first().firstOrNull { it.id == id }?.let { switched ->
-            _message.value = SettingsMessage.Info(
-                UiText.Resource(Res.string.settings_profile_switched, listOf(switched.name)),
-            )
-        }
+        switchProfile(id).fold(
+            onSuccess = {
+                profileRepository.profiles.first().firstOrNull { it.id == id }?.let { switched ->
+                    _message.value = SettingsMessage.Info(
+                        UiText.Resource(Res.string.settings_profile_switched, listOf(switched.name)),
+                    )
+                }
+            },
+            onFailure = {
+                _message.value = SettingsMessage.Error(
+                    it.message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.settings_switch_failed),
+                )
+            },
+        )
     }
 
     fun deleteProfile(id: String) = viewModelScope.launch {

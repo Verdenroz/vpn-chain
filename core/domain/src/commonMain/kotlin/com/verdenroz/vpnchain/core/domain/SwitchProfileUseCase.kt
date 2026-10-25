@@ -17,9 +17,13 @@ class SwitchProfileUseCase(
     /** @return the reconnect result, or success when there was no tunnel to move. */
     suspend operator fun invoke(id: String): Result<Unit> {
         if (id == profileRepository.activeProfileId.first()) return Result.success(Unit)
-        val wasConnected = chainRepository.status.first().state == TunnelState.Connected
+        val state = chainRepository.status.first().state
+        // An attempt in flight, or one the supervisor is about to retry, dials
+        // the old config, so anything the user wants up is restarted.
+        val wantedUp = state == TunnelState.Connected || state == TunnelState.Connecting ||
+            chainRepository.connectionIntent.first()
         profileRepository.setActive(id)
-        if (!wasConnected) return Result.success(Unit)
+        if (!wantedUp) return Result.success(Unit)
         chainRepository.disconnect()
         return chainRepository.connect()
     }
