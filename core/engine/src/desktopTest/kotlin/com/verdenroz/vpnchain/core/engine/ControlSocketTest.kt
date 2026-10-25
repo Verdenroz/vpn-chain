@@ -1,0 +1,188 @@
+package com.verdenroz.vpnchain.core.engine
+
+import com.verdenroz.vpnchain.core.model.TunnelState
+import java.net.StandardProtocolFamily
+import java.net.UnixDomainSocketAddress
+import java.nio.channels.ServerSocketChannel
+import java.nio.channels.SocketChannel
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermissions
+import kotlin.concurrent.thread
+import kotlin.io.path.deleteRecursively
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+
+class ControlSocketTest {
+    private val root: Path = Files.createTempDirectory("engine")
+    private val paths = EnginePaths(runtimeDir = root.resolve("run/vpn-chain"), configDir = root.resolve("config"))
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val chain = FakeChainRepository()
+    private val profiles = FakeProfileRepository(listOf(relayProfile("home", "Home"), relayProfile("work", "Work")))
+    private val logs = FakeLogRepository()
+
+    @AfterTest
+    fun tearDown() {
+        scope.cancel()
+        @OptIn(kotlin.io.path.ExperimentalPathApi::class)
+        root.deleteRecursively()
+    }
+
+    private fun serve() {
+        val server = ControlServer(handlerOver(chain, profiles, logs), paths, "1.2.3", scope, SilentLogger)
+        server.start(EngineLock.tryAcquire(paths.lock)!!)
+    }
+
+    private fun client() = EngineClient.connect(paths.socket, "1.2.3")
+
+    @Test
+    fun `the handshake reports the engine's version`() {
+        serve()
+        client().use { assertEquals("1.2.3", it.engineVersion) }
+    }
+
+    @Test
+    fun `status names the active profile without its keys`() {
+        serve()
+        val reply = client().use { it.call(Request.Status) }
+
+        val status = assertIs<Reply.Status>(reply).status
+        assertEquals(TunnelState.Disconnected, status.state)
+        assertEquals("Home", status.profile?.name)
+        val wire = engineJson.encodeToString<Reply>(reply)
+        assertTrue("203.0.113.10" !in wire && "test-reality-key" !in wire, wire)
+    }
+
+    @Test
+    fun `up with a name switches to that profile and connects`() {
+        serve()
+        val reply = client().use { it.call(Request.Up("work")) }
+
+        assertEquals(Reply.Ok, reply)
+        assertEquals("work", profiles.activeProfileId.value)
+        assertEquals(TunnelState.Connected, chain.status.value.state)
+    }
+
+    @Test
+    fun `up while connected does not dial again`() {
+        serve()
+        client().use {
+            it.call(Request.Up())
+            it.call(Request.Up())
+        }
+        assertEquals(1, chain.connects)
+    }
+
+    @Test
+    fun `an unknown profile is refused`() {
+        serve()
+        val reply = client().use { it.call(Request.Use("nowhere")) }
+        assertEquals(FailureCode.NotFound, assertIs<Reply.Failure>(reply).code)
+    }
+
+    @Test
+    fun `down disconnects`() {
+        serve()
+        client().use {
+            it.call(Request.Up())
+            assertEquals(Reply.Ok, it.call(Request.Down))
+        }
+        assertEquals(TunnelState.Disconnected, chain.status.value.state)
+    }
+
+    @Test
+    fun `logs returns the newest lines up to the limit`() {
+        logs.append("one")
+        logs.append("two")
+        logs.append("three")
+        serve()
+        val reply = client().use { it.call(Request.Logs(limit = 2)) }
+        assertEquals(listOf("two", "three"), assertIs<Reply.Logs>(reply).lines.map(LogLine::message))
+    }
+
+    @Test
+    fun `a status subscription follows the chain`() {
+        serve()
+        val seen = mutableListOf<TunnelState>()
+        client().use { client ->
+            client.subscribe(Topic.Status) { reply ->
+                val state = assertIs<Reply.Status>(reply).status.state
+                seen += state
+                if (state == TunnelState.Disconnected) chain.status.value = chain.status.value.copy(state = TunnelState.Connected)
+                state != TunnelState.Connected
+            }
+        }
+        assertEquals(listOf(TunnelState.Disconnected, TunnelState.Connected), seen)
+    }
+
+    @Test
+    fun `a log subscription sends the buffer, then only new lines`() {
+        logs.append("old")
+        serve()
+        val batches = mutableListOf<List<String>>()
+        client().use { client ->
+            client.subscribe(Topic.Logs) { reply ->
+                batches += assertIs<Reply.Logs>(reply).lines.map(LogLine::message)
+                if (batches.size == 1) logs.append("new")
+                batches.size < 2
+            }
+        }
+        assertEquals(listOf(listOf("old"), listOf("new")), batches)
+    }
+
+    @Test
+    fun `the engine refuses a client speaking another protocol`() {
+        serve()
+        val reply = SocketChannel.open(UnixDomainSocketAddress.of(paths.socket)).use { channel ->
+            val lines = LineChannel(channel)
+            lines.writeLine(engineJson.encodeToString(ClientMessage(1, Request.Hello(PROTOCOL_VERSION + 1))))
+            engineJson.decodeFromString<ServerMessage>(lines.readLine()!!).reply
+        }
+        assertEquals(FailureCode.Version, assertIs<Reply.Failure>(reply).code)
+    }
+
+    @Test
+    fun `a client refuses an engine speaking another protocol`() {
+        Files.createDirectories(paths.runtimeDir)
+        val server = ServerSocketChannel.open(StandardProtocolFamily.UNIX).bind(UnixDomainSocketAddress.of(paths.socket))
+        val fake = thread {
+            server.accept().use { channel ->
+                val lines = LineChannel(channel)
+                val hello = engineJson.decodeFromString<ClientMessage>(lines.readLine()!!)
+                lines.writeLine(engineJson.encodeToString(ServerMessage(hello.id, Reply.Hello(PROTOCOL_VERSION + 1, "9.9.9"))))
+            }
+        }
+        val error = assertFailsWith<EngineVersionException> { client() }
+        assertTrue("9.9.9" in error.message.orEmpty(), error.message)
+        fake.join()
+        server.close()
+    }
+
+    @Test
+    fun `no engine reads as unavailable`() {
+        assertFailsWith<EngineUnavailableException> { client() }
+    }
+
+    @Test
+    fun `the socket and its directory are owner-only`() {
+        serve()
+        assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(paths.runtimeDir)))
+        assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(paths.socket)))
+    }
+
+    @Test
+    fun `a stale socket file is replaced`() {
+        Files.createDirectories(paths.runtimeDir)
+        Files.createFile(paths.socket)
+        serve()
+        client().use { assertEquals("1.2.3", it.engineVersion) }
+    }
+}
