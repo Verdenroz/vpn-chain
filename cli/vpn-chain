@@ -34,6 +34,7 @@ PIDFILE="$RUNDIR/relay.pid"
 STATEFILE="$RUNDIR/relay.state"                       # written by the GUI, cleared here
 LOGFILE="$RUNDIR/relay.log"
 KILLSWITCH_BIN="${VPN_CHAIN_KILLSWITCH_BIN:-vpn-chain-killswitch}"
+RELAY_UNIT="vpn-chain-relay"
 PROXY="127.0.0.1:1080"
 ENTRY_IF="proton0"                                   # interface the entry VPN app creates
 
@@ -60,6 +61,7 @@ render() {
 
 entry_app_up() { protonvpn status 2>/dev/null | grep -q '^Status: Connected'; }
 relay_up()  { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
+managed_relay_up() { command -v systemctl >/dev/null && systemctl is-active --quiet "$RELAY_UNIT"; }
 
 # The point of the entry hop: sing-box's connection to the VPS must leave via
 # the entry app's interface (src 10.2.0.x), never the real LAN interface.
@@ -117,14 +119,19 @@ cmd_down() {
     esac
   done
 
+  local stopped=0
+  if managed_relay_up; then
+    log "Stopping $RELAY_UNIT..."
+    systemctl stop "$RELAY_UNIT" || die "could not stop $RELAY_UNIT; relay and kill switch left as they were"
+    stopped=1
+  fi
   if relay_up; then
     log "Stopping relay..."
     kill "$(cat "$PIDFILE")" 2>/dev/null || true
-    rm -f "$PIDFILE"
-  else
-    log "Relay not running."
-    rm -f "$PIDFILE"
+    stopped=1
   fi
+  [ "$stopped" -eq 1 ] || log "Relay not running."
+  rm -f "$PIDFILE"
   rm -f "$RENDERED" "$STATEFILE"                     # drop the rendered secrets file
   # The GUI may have installed the nftables kill switch, and a machine left
   # fail-closed has no internet until it goes away. Idempotent, so always run it.
