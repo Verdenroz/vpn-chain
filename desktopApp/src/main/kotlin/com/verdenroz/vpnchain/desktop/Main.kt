@@ -16,7 +16,8 @@ import com.verdenroz.vpnchain.app.di.uiModules
 import com.verdenroz.vpnchain.core.common.systemTrayAvailable
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
-import com.verdenroz.vpnchain.core.domain.di.startEngine
+import com.verdenroz.vpnchain.core.engine.di.controlServerModule
+import com.verdenroz.vpnchain.core.engine.di.startHostedEngine
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
@@ -39,8 +40,8 @@ import org.koin.core.context.startKoin
 fun main() {
     // Resolved from the Koin instance directly rather than through Compose
     // locals: this runs outside any KoinApplication composition.
-    val koin = startKoin { modules(engineModules + uiModules) }.koin
-    startEngine(koin)
+    val koin = startKoin { modules(engineModules + controlServerModule + uiModules) }.koin
+    startHostedEngine(koin)
     application {
         val chain = remember { koin.get<ChainRepository>() }
         val settingsRepository = remember { koin.get<SettingsRepository>() }
