@@ -4,14 +4,17 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChainProbeTest {
 
     private val targets = listOf("a", "b")
@@ -61,6 +64,40 @@ class ChainProbeTest {
         callers.forEach { assertFalse(it.await()) }
 
         assertEquals(targets.size, started)
+    }
+
+    @Test
+    fun `a caller on another budget does not join the flight`() = runTest {
+        var started = 0
+        val probe = ChainProbe(backgroundScope, targets) { _, _ ->
+            started++
+            awaitCancellation()
+        }
+
+        val health = async { probe.carriesTraffic(timeoutMs = 5_000) }
+        val readiness = async { probe.carriesTraffic(timeoutMs = 3_000) }
+
+        assertFalse(readiness.await())
+        assertEquals(7_000L, currentTime)
+        assertFalse(health.await())
+        assertEquals(2 * targets.size, started)
+    }
+
+    @Test
+    fun `the bound cancels the probes it abandons`() = runTest {
+        var cancelled = 0
+        val probe = ChainProbe(backgroundScope, targets) { _, _ ->
+            try {
+                awaitCancellation()
+            } finally {
+                cancelled++
+            }
+        }
+
+        assertFalse(probe.carriesTraffic(timeoutMs = 5_000))
+        runCurrent()
+
+        assertEquals(targets.size, cancelled)
     }
 
     @Test

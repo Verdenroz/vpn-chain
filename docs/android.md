@@ -125,8 +125,9 @@ Mirrors what `DesktopTunnelController` already did.
 **3. Handovers are a first-class signal.** `NetworkMonitor.linkChanges` reports
 the *identity* of the non-VPN default link changing. A boolean `online` cannot:
 across a Wi-Fi → cellular handover both links are usable, so it never leaves
-`true` while every socket bound to the old one black-holes. It drives both the
-watchdog and the end of a reconnect backoff.
+`true` while every socket bound to the old one black-holes. A link coming back
+after an outage counts too, and the watchdog waits for `online` before probing
+it. It drives both the watchdog and the end of a reconnect backoff.
 
 **4. Doze does not get to suspend an attempt.** `AndroidWakeGuard` holds a
 partial wake lock across the dial and across a health probe — Doze otherwise

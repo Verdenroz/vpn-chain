@@ -1,6 +1,8 @@
 package com.verdenroz.vpnchain.core.tunnel
 
 import android.content.Context
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.KillSwitchState
@@ -38,7 +40,7 @@ internal object TunnelBridge {
     /**
      * Whether Always-on VPN lockdown is currently protecting this app. Live and
      * bidirectional on API 29+, where [VpnChainService] polls the real, queryable
-     * `VpnService.isAlwaysOn()` and `isLockdownEnabled()` — the setting can be
+     * `VpnService.isAlwaysOn()` and `isLockdownEnabled()`. The setting can be
      * flipped at any time while the service is already running, so a one-shot
      * detection can't be trusted. Below API 29, those queries don't exist, so
      * this falls back to the "launched with a null intent" heuristic via
@@ -48,11 +50,8 @@ internal object TunnelBridge {
     val alwaysOnDetected = MutableStateFlow(false)
 
     /** API 29+: pushes the real, current lockdown state — can go either direction. */
-    fun setAlwaysOnLockdown(context: Context, enabled: Boolean) {
-        if (alwaysOnDetected.value != enabled) {
-            alwaysOnDetected.value = enabled
-            prefs(context).edit().putBoolean(KEY_ALWAYS_ON_DETECTED, enabled).apply()
-        }
+    fun setAlwaysOnLockdown(enabled: Boolean) {
+        alwaysOnDetected.value = enabled
         status.update { it.copy(killSwitch = if (enabled) KillSwitchState.Active else KillSwitchState.Disabled) }
     }
 
@@ -112,9 +111,13 @@ internal object TunnelBridge {
         logs.tryEmit(line)
     }
 
-    /** Called once per process from wherever a Context is first available. */
+    /**
+     * Called once per process from wherever a Context is first available. Below
+     * API 29 only: above it the service's poll is the truth, and a stored value
+     * would show a setting that may have changed while nothing was running.
+     */
     fun loadAlwaysOnDetected(context: Context) {
-        if (alwaysOnDetected.value) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q || alwaysOnDetected.value) return
         val stored = prefs(context).getBoolean(KEY_ALWAYS_ON_DETECTED, false)
         if (stored) {
             alwaysOnDetected.value = true
@@ -133,19 +136,25 @@ internal object TunnelBridge {
     /**
      * Whether the user asked for the running session. Persisted because a sticky
      * restart after process death delivers a null intent, just as an Always-on
-     * start does, and this is all that tells them apart below API 29. A marker
-     * left over from before a reboot makes an Always-on start read as not detected.
+     * start does, and this is all that tells them apart below API 29. Scoped to
+     * the boot it was set in, since no session survives a reboot.
      */
     fun setUserStarted(context: Context, started: Boolean) {
-        prefs(context).edit().putBoolean(KEY_USER_STARTED, started).apply()
+        prefs(context).edit().run {
+            if (started) putInt(KEY_USER_STARTED_BOOT, bootCount(context)) else remove(KEY_USER_STARTED_BOOT)
+        }.apply()
     }
 
-    fun userStarted(context: Context): Boolean = prefs(context).getBoolean(KEY_USER_STARTED, false)
+    fun userStarted(context: Context): Boolean =
+        prefs(context).getInt(KEY_USER_STARTED_BOOT, -1) == bootCount(context)
+
+    private fun bootCount(context: Context): Int =
+        Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, 0)
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private const val TAG = "TunnelBridge"
     private const val PREFS_NAME = "vpn_chain_tunnel_bridge"
     private const val KEY_ALWAYS_ON_DETECTED = "always_on_detected"
-    private const val KEY_USER_STARTED = "user_started"
+    private const val KEY_USER_STARTED_BOOT = "user_started_boot"
 }

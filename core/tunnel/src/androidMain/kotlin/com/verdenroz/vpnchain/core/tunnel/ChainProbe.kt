@@ -6,9 +6,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 
 /**
@@ -35,48 +34,44 @@ internal class ChainProbe(
     private val targets: List<String>,
     private val reaches: suspend (url: String, timeoutMs: Int) -> Boolean,
 ) {
+    private class Flight(val timeoutMs: Int, val result: CompletableDeferred<Boolean>)
+
     private val lock = Any()
-    private var flight: CompletableDeferred<Boolean>? = null
+    private var flight: Flight? = null
 
     /**
      * The bound matters because this runs under a wake lock. Timing out is a
      * "no" — a chain that cannot answer in this long is not carrying traffic.
-     * Callers arriving while a probe is undecided share it and its budget, so
-     * abandoned lookups never stack up.
+     * Callers arriving while a probe on the same budget is undecided share it,
+     * so triggers that overlap start one set of lookups rather than one each.
      */
     suspend fun carriesTraffic(timeoutMs: Int = TIMEOUT_MS): Boolean {
         val shared = synchronized(lock) {
-            flight?.takeIf { !it.isCompleted } ?: launchFlight(timeoutMs).also { flight = it }
+            flight?.takeIf { it.timeoutMs == timeoutMs && !it.result.isCompleted }
+                ?: Flight(timeoutMs, launchFlight(timeoutMs)).also { flight = it }
         }
-        return shared.await()
+        return shared.result.await()
     }
 
     private fun launchFlight(timeoutMs: Int): CompletableDeferred<Boolean> {
         val result = CompletableDeferred<Boolean>()
-        // The flight decides at the bound itself: a lookup stuck in name
-        // resolution cannot be cancelled, so waiting on the probes would never end.
+        // Concurrent, and the first success wins: awaiting them in order would
+        // let one hung target spend the whole budget the other could answer in.
+        val probes = scope.launch {
+            targets.map { target ->
+                launch { if (reaches(target, timeoutMs)) result.complete(true) }
+            }.joinAll()
+            result.complete(false)
+        }
         // The connect and read budgets apply in sequence, so one target spends up
         // to twice timeoutMs before the bound has any business firing.
         val deadline = scope.launch {
             delay(2 * timeoutMs.toLong() + GRACE_MS)
             result.complete(false)
         }
-        result.invokeOnCompletion { deadline.cancel() }
-        // Concurrent, and the first success wins: awaiting them in order would
-        // let one hung target spend the whole budget the other could answer in.
-        scope.launch {
-            coroutineScope {
-                val probes = this
-                targets.forEach { target ->
-                    launch {
-                        if (reaches(target, timeoutMs)) {
-                            result.complete(true)
-                            probes.cancel()
-                        }
-                    }
-                }
-            }
-            result.complete(false)
+        result.invokeOnCompletion {
+            deadline.cancel()
+            probes.cancel()
         }
         return result
     }

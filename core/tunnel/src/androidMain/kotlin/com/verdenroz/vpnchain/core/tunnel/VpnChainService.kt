@@ -122,13 +122,13 @@ class VpnChainService : VpnService(), CommandServerHandler {
 
     /**
      * `isAlwaysOn()` and `isLockdownEnabled()` (API 29+) reflect the OS settings
-     * live, so this is re-checked on a timer rather than once — the user can flip
+     * live, so this is re-checked on a timer rather than once: the user can flip
      * "Block connections without VPN" at any point while we're already running,
      * not just before we start.
      */
     private fun refreshLockdownState() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            TunnelBridge.setAlwaysOnLockdown(applicationContext, isAlwaysOn && isLockdownEnabled)
+            TunnelBridge.setAlwaysOnLockdown(isAlwaysOn && isLockdownEnabled)
         }
     }
 
@@ -140,6 +140,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         ) {
             TunnelBridge.markAlwaysOnDetected(applicationContext)
         }
+        if (intent?.action == ACTION_START) TunnelBridge.setUserStarted(applicationContext, true)
         when (intent?.action) {
             ACTION_STOP -> {
                 stopTunnel()
@@ -152,10 +153,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 stopTunnel()
                 return START_NOT_STICKY
             }
-            else -> {
-                if (intent != null) TunnelBridge.setUserStarted(applicationContext, true)
-                startTunnel()
-            }
+            else -> startTunnel()
         }
         return START_STICKY
     }
@@ -262,7 +260,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         healthJob = serviceScope.launch {
             launch {
                 networkMonitor.linkChanges.collectLatest {
-                    // The callback can beat validation, which is what flips online.
+                    // A link returning from an outage is announced before it validates.
                     online.first { it }
                     verifyCarrying(gen)
                 }
@@ -537,7 +535,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
             while (messageList.hasNext()) {
                 val entry = messageList.next()
                 // The stream carries every level whatever the config says; there is
-                // no server-side switch, so cut here before a String is built.
+                // no server-side switch, so drop them here before a String is built.
                 if (entry.level <= LOG_LEVEL_INFO) TunnelBridge.logRelay(entry.message)
             }
         }
