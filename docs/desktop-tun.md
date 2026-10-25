@@ -12,6 +12,12 @@ platform; desktop's TUN chain mirrors the CLI's
 `you → entry hop → VPS → internet` chain, so the GUI and CLI are functionally
 equivalent.
 
+## Local proxy
+
+SOCKS-proxy mode listens on loopback only and has no login, so on a shared
+machine any local user can send traffic through the chain. Use TUN mode on
+multi-user machines.
+
 ## One-time privileged setup
 
 TUN needs `CAP_NET_ADMIN`. Run `cli/setup-desktop.sh` for this, the kill-switch

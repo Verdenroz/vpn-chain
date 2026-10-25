@@ -4,7 +4,10 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
 
-/** Owner-only storage for state that holds keys, applied at creation so no file is ever briefly readable. */
+/**
+ * Owner-only storage for state that holds keys. The 0700 directory is the boundary: DataStore
+ * re-creates its file by rename under the umask, and the startup repair tightens it again.
+ */
 object PrivateStorage {
     private val dirPerms = PosixFilePermissions.fromString("rwx------")
     private val filePerms = PosixFilePermissions.fromString("rw-------")
