@@ -59,10 +59,14 @@ sealed interface PendingImport {
     val text: String
 
     /** A WireGuard `.conf`, as a connection of its own or as the active one's entry hop. */
-    data class Conf(override val text: String, val entry: WireGuardEntry, val intoActive: Boolean) : PendingImport
+    data class Conf(override val text: String, val entry: WireGuardEntry, val intoActive: Boolean) : PendingImport {
+        override fun toString() = "PendingImport.Conf(entry=$entry, intoActive=$intoActive)"
+    }
 
     /** A CLI `secrets.env`: a relay, and its entry hop when the file has one. */
-    data class SecretsEnv(override val text: String, val relay: ChainProfile, val entryHop: WireGuardEntry?) : PendingImport
+    data class SecretsEnv(override val text: String, val relay: ChainProfile, val entryHop: WireGuardEntry?) : PendingImport {
+        override fun toString() = "PendingImport.SecretsEnv(relay=$relay, entryHop=$entryHop)"
+    }
 }
 
 /** One-shot user feedback (import result), consumed by the UI. */

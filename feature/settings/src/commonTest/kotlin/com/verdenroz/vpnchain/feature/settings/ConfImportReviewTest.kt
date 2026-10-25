@@ -13,6 +13,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -141,6 +142,15 @@ class ConfImportReviewTest {
 
         assertNull(viewModel.pendingImport.value)
         assertEquals(emptyList(), log)
+    }
+
+    @Test
+    fun `a pending import keeps the pasted keys out of its string`() {
+        val viewModel = viewModel(TunnelState.Disconnected)
+
+        viewModel.importSecretsEnv(CONF)
+
+        assertFalse("PRIVATEKEYPLACEHOLDER" in viewModel.pendingImport.value.toString())
     }
 
     private fun viewModel(state: TunnelState): SettingsViewModel {

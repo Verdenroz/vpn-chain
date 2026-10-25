@@ -13,4 +13,6 @@ data class ClashApi(
     val secret: String,
 ) {
     val externalController: String get() = "127.0.0.1:$port"
+
+    override fun toString() = "ClashApi(port=$port)"
 }
