@@ -9,6 +9,7 @@ sealed class WireGuardConfError(message: String) : IllegalArgumentException(mess
     class PeerCount(val count: Int) : WireGuardConfError(
         if (count == 0) "Config has no peer." else "Config has $count peers. Use one.",
     )
+    class HostnameEndpoint : WireGuardConfError("Use an IP endpoint.")
     class SplitTunnel : WireGuardConfError("Only full-tunnel configs work. Set AllowedIPs to 0.0.0.0/0.")
 }
 
@@ -110,9 +111,12 @@ object WireGuardConfParser {
         }
         val port = rawPort.toIntOrNull()?.takeIf { it in 1..MAX_PORT }
         if (host.isEmpty() || port == null) throw WireGuardConfError.Invalid("Endpoint")
+        // The kill switch can only exempt an address, so a name would leave the tunnel unprotected.
+        if (!IP_LITERAL.matches(host)) throw WireGuardConfError.HostnameEndpoint()
         return host to port
     }
 
+    private val IP_LITERAL = Regex("""(\d{1,3}\.){3}\d{1,3}|[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*""")
     private val KEY_PATTERN = Regex("[A-Za-z0-9+/]{43}=")
     private const val MAX_PORT = 65535
 }

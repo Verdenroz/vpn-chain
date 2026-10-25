@@ -72,13 +72,11 @@ class WireGuardConfParserTest {
     }
 
     @Test
-    fun `reads a hostname endpoint`() {
-        val entry = WireGuardConfParser.parse(
-            PROTON.replace("203.0.113.9:51820", "vpn.example.com:443"),
-        ).getOrThrow()
+    fun `refuses a hostname endpoint`() {
+        val error = failure(PROTON.replace("203.0.113.9:51820", "node-is-01.protonvpn.net:51820"))
 
-        assertEquals("vpn.example.com", entry.endpointHost)
-        assertEquals(443, entry.endpointPort)
+        assertIs<WireGuardConfError.HostnameEndpoint>(error)
+        assertEquals("Use an IP endpoint.", error.message)
     }
 
     @Test
