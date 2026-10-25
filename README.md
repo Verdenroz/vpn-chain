@@ -20,7 +20,7 @@ the traffic still looks like HTTPS to your SNI.
 
 You need a relay VPS first: see [Set up a connection](#set-up-a-connection).
 
-### Linux desktop
+### Linux desktop (x64)
 
 ```
 git clone https://github.com/Verdenroz/vpn-chain && cd vpn-chain
