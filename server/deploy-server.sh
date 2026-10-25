@@ -3,6 +3,9 @@
 # optionally chaining outbound through ProtonVPN (as a native Xray WireGuard
 # outbound, so system routing / SSH are never touched).
 #
+# It also switches the kernel to BBR + fq: the default cubic backs off hard on
+# every loss, which cripples throughput over a lossy long-RTT path.
+#
 # Run as root ON THE VPS:  bash deploy-server.sh
 # Re-runnable (idempotent-ish): regenerates config from your answers.
 
@@ -35,6 +38,19 @@ log "Installing prerequisites..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq curl openssl ufw jq >/dev/null
+
+if modprobe tcp_bbr 2>/dev/null; then
+  log "Enabling BBR + fq..."
+  cat > /etc/sysctl.d/99-vpn-chain-bbr.conf <<EOF
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+net.core.wmem_max=33554432
+net.ipv4.tcp_wmem=4096 65536 33554432
+EOF
+  sysctl --system >/dev/null
+else
+  log "WARNING: tcp_bbr module unavailable; leaving congestion control unchanged."
+fi
 
 log "Installing Xray-core (official installer)..."
 bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install >/dev/null
