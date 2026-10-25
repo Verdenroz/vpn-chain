@@ -5,6 +5,8 @@ plugins {
     id("vpnchain.compose.multiplatform")
 }
 
+val appVersion = providers.gradleProperty("vpnchain.version").getOrElse("0.1.0")
+
 dependencies {
     implementation(projects.appCommon)
     implementation(projects.core.common)
@@ -70,6 +72,7 @@ tasks.register("installDesktopEntry") {
 compose.desktop {
     application {
         mainClass = "com.verdenroz.vpnchain.desktop.MainKt"
+        jvmArgs("-Dvpnchain.version=$appVersion")
         // Release distributables would run ProGuard by default; koin + kotlinx
         // reflection make that a minefield, so ship unminified for now.
         buildTypes.release.proguard { isEnabled.set(false) }
@@ -77,7 +80,7 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             modules("jdk.unsupported")
             packageName = "vpn-chain"
-            packageVersion = providers.gradleProperty("vpnchain.version").getOrElse("0.1.0")
+            packageVersion = appVersion
             linux { iconFile.set(project.file("icons/vpn-chain.png")) }
             windows { iconFile.set(project.file("icons/vpn-chain.ico")) }
             macOS {
