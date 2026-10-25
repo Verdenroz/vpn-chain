@@ -102,7 +102,7 @@ class WarpSettingsTest {
         val source = VpnChainPreferencesDataSource(newStore())
         source.putLearnedSite(LearnedSite("example.com", BlockReason.Forbidden, 5L, LearnedRoute.Warp))
 
-        source.removeLearnedSite("example.com", suppressUntilMillis = 99L)
+        source.removeLearnedSite("example.com", nowMillis = 10L, suppressUntilMillis = 99L)
 
         assertTrue(source.learnedSites.first().isEmpty())
         assertEquals(mapOf("example.com" to 99L), source.learnedSuppressions.first())

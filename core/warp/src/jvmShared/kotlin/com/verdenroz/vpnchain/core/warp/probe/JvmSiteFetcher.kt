@@ -10,6 +10,8 @@ import javax.net.ssl.SSLSocketFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+actual fun createSiteFetcher(): SiteFetcher = JvmSiteFetcher()
+
 /**
  * CONNECT and TLS by hand: HttpURLConnection authenticates proxies through a
  * JVM-wide Authenticator and won't send credentials on a tunnel by default.

@@ -22,9 +22,13 @@ data class ProbeProxy(
     val password: String,
 ) {
     companion object {
-        const val RELAY_TAG = "probe-relay"
-        const val WARP_TAG = "probe-warp"
-        const val FALLBACK_TAG = "probe-fallback"
+        private const val TAG_PREFIX = "probe-"
+        const val RELAY_TAG = "${TAG_PREFIX}relay"
+        const val WARP_TAG = "${TAG_PREFIX}warp"
+        const val FALLBACK_TAG = "${TAG_PREFIX}fallback"
+
+        /** The app's own probe traffic, which detection must not feed back to itself. */
+        fun isProbeInbound(tag: String): Boolean = tag.startsWith(TAG_PREFIX)
 
         /** Recovers the probes from a rendered config; null when it has none. */
         fun fromConfig(configJson: String): ProbeProxy? = runCatching {

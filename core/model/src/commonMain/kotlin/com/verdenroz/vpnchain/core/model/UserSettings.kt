@@ -56,8 +56,8 @@ data class UserSettings(
      */
     val warpMode: WarpMode = WarpMode.Automatic,
     /**
-     * Probe new destinations through the relay, and through the tail when the
-     * relay is refused, and route the sites only the tail can reach down it.
+     * Probe new destinations through the relay, then through the tail when the
+     * relay refuses one, and route the sites only the tail reaches down it.
      */
     val learnBlockedSites: Boolean = true,
     /**
@@ -90,6 +90,9 @@ data class UserSettings(
 ) {
     /** Detection only has anything to route in automatic mode. */
     val learningActive: Boolean get() = learnBlockedSites && warpMode == WarpMode.Automatic
+
+    /** Failing open only routes sites automatic mode learned. */
+    val failOpenActive: Boolean get() = failOpen && warpMode == WarpMode.Automatic
 }
 
 /**

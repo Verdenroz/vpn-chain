@@ -22,7 +22,7 @@ data class ClashApi(
     override fun toString() = "ClashApi(port=$port)"
 
     companion object {
-        /** Recovers the API from a rendered config; null when it has none. */
+        /** Recovers the API from a config; null when it has none, as a relay adopted from the CLI. */
         fun fromConfig(configJson: String): ClashApi? = runCatching {
             val api = Json.parseToJsonElement(configJson).jsonObject
                 .getValue("experimental").jsonObject.getValue("clash_api").jsonObject

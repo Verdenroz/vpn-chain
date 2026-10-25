@@ -44,6 +44,8 @@ object SingBoxConfigFactory {
         return render {
             putInfoLog()
             putExperimental(clashApi, cacheFile = false, cachePath = null)
+            // The relay resolves its own names; WARP and direct would otherwise ask the local resolver.
+            if (tail != null || failOpen) putJsonObject("dns") { putDnsServers(entry = null, remoteDetour = "proxy") }
             putJsonArray("inbounds") {
                 addJsonObject {
                     put("type", "mixed")
@@ -93,7 +95,7 @@ object SingBoxConfigFactory {
         learnedWarpPath: String? = null,
         learnedOpenPath: String? = null,
         failOpen: Boolean = false,
-        directMark: Int? = null,
+        markDirect: Boolean = false,
     ): String {
         val filtering = dnsFilter != DnsFilter.Off
         // No credentials means no tail, whatever the mode says: registration
@@ -104,6 +106,9 @@ object SingBoxConfigFactory {
         val openPath = learnedOpenPath.takeIf { failOpen && warpMode == WarpMode.Automatic }
         // Past the relay, not through it: the entry hop alone, or the bare link without one.
         val openTag = if (entry != null) ENTRY_HOP_TAG else DIRECT_TAG
+        val directMark = FAIL_OPEN_MARK.takeIf {
+            markDirect && openTag == DIRECT_TAG && (openPath != null || (probe != null && failOpen))
+        }
         return render {
             putInfoLog(logPath)
             // The rule-set is remote, so it needs somewhere to persist between
@@ -474,28 +479,18 @@ object SingBoxConfigFactory {
 
     /** Ahead of the domain rules, so a probe exits where it asked to whatever the list says. */
     private fun JsonArrayBuilder.addProbeRules(withWarp: Boolean, relayTag: String, fallbackTag: String?) {
-        addJsonObject {
-            put("inbound", ProbeProxy.RELAY_TAG)
-            put("action", "route")
-            put("outbound", relayTag)
-        }
-        if (withWarp) {
-            addJsonObject {
-                put("inbound", ProbeProxy.WARP_TAG)
-                put("action", "route")
-                put("outbound", WARP_TAG)
-            }
-        }
-        if (fallbackTag != null) {
-            addJsonObject {
-                put("inbound", ProbeProxy.FALLBACK_TAG)
-                put("action", "route")
-                put("outbound", fallbackTag)
-            }
-        }
+        addInboundRoute(ProbeProxy.RELAY_TAG, relayTag)
+        if (withWarp) addInboundRoute(ProbeProxy.WARP_TAG, WARP_TAG)
+        fallbackTag?.let { addInboundRoute(ProbeProxy.FALLBACK_TAG, it) }
     }
 
-        private fun JsonArrayBuilder.addLearnedRule(ruleSet: String, outbound: String) = addJsonObject {
+    private fun JsonArrayBuilder.addInboundRoute(inbound: String, outbound: String) = addJsonObject {
+        put("inbound", inbound)
+        put("action", "route")
+        put("outbound", outbound)
+    }
+
+    private fun JsonArrayBuilder.addLearnedRule(ruleSet: String, outbound: String) = addJsonObject {
         putJsonArray("rule_set") { add(ruleSet) }
         put("action", "route")
         put("outbound", outbound)
@@ -509,7 +504,7 @@ object SingBoxConfigFactory {
     private const val WARP_TAG = "warp-exit"
     private const val LEARNED_WARP_TAG = "learned-warp"
     private const val LEARNED_OPEN_TAG = "learned-open"
-    private const val DIRECT_TAG = "direct"
+    const val DIRECT_TAG = "direct"
 
     /**
      * The packet mark on the `direct` outbound that the desktop kill switch

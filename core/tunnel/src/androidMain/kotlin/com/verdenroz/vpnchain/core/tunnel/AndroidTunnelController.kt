@@ -31,6 +31,7 @@ class AndroidTunnelController(
     override val status: StateFlow<ChainStatus> = TunnelBridge.status.asStateFlow()
     override val logs: SharedFlow<String> = TunnelBridge.logs
     override val stats: StateFlow<SessionStats> = TunnelBridge.stats.asStateFlow()
+    override val runningConfig: StateFlow<String?> = TunnelBridge.runningConfig.asStateFlow()
     override val userStops: SharedFlow<Unit> = TunnelBridge.userStops.asSharedFlow()
 
     override val killSwitchGuidanceSupported: Boolean = true

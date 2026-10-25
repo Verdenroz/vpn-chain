@@ -16,7 +16,10 @@ internal data class TrafficTotals(val uplinkBytes: Long, val downlinkBytes: Long
  */
 internal object ClashStatsClient {
 
-    fun fetchTotals(api: ClashApi): TrafficTotals? = runCatching {
+    fun fetchTotals(api: ClashApi): TrafficTotals? = fetchConnections(api)?.let(::parseTotals)
+
+    /** The raw `/connections` body; null on any failure or a non-200 answer. */
+    fun fetchConnections(api: ClashApi): String? = runCatching {
         val connection = URI("http://${api.externalController}/connections").toURL()
             .openConnection() as HttpURLConnection
         connection.apply {
@@ -27,7 +30,7 @@ internal object ClashStatsClient {
         }
         try {
             if (connection.responseCode != HttpURLConnection.HTTP_OK) return null
-            parseTotals(connection.inputStream.bufferedReader().readText())
+            connection.inputStream.bufferedReader().readText()
         } finally {
             connection.disconnect()
         }

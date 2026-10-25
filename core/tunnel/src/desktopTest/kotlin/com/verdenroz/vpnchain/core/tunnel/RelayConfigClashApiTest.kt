@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.tunnel
 
+import com.verdenroz.vpnchain.core.config.ClashApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -14,7 +15,7 @@ class RelayConfigClashApiTest {
             {"experimental":{"clash_api":{"external_controller":"127.0.0.1:41739","secret":"a1b2c3"}}}
         """.trimIndent()
 
-        val api = RelayConfig.clashApi(config)
+        val api = ClashApi.fromConfig(config)
 
         assertNotNull(api)
         assertEquals(41739, api.port)
@@ -24,7 +25,7 @@ class RelayConfigClashApiTest {
     /** A relay adopted from the CLI renders no clash API; that is not an error. */
     @Test
     fun `returns null when the config exposes no clash api`() {
-        assertNull(RelayConfig.clashApi("""{"log":{"level":"info"}}"""))
+        assertNull(ClashApi.fromConfig("""{"log":{"level":"info"}}"""))
     }
 
     /**

@@ -24,6 +24,7 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_stopp
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_tun_privilege_hint
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted_relay_port
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted_system_wide
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_no_mark
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_already_state
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_awaiting_traffic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_chain_stalled
@@ -96,6 +97,9 @@ class DesktopTunnelController(
 
     private val _status = MutableStateFlow(ChainStatus())
     override val status: StateFlow<ChainStatus> = _status.asStateFlow()
+
+    private val _runningConfig = MutableStateFlow<String?>(null)
+    override val runningConfig: StateFlow<String?> = _runningConfig.asStateFlow()
 
     // replay so a collector that subscribes after connect still gets recent history.
     private val _logs = MutableSharedFlow<String>(replay = 200, extraBufferCapacity = 256)
@@ -248,7 +252,7 @@ class DesktopTunnelController(
     }
 
     private fun applyConfig(configJson: String) {
-        clashApi = RelayConfig.clashApi(configJson)
+        clashApi = ClashApi.fromConfig(configJson)
         tunMode = RelayConfig.isTun(configJson)
         tunHasEntry = tunMode && RelayConfig.hasWireGuardEntry(configJson)
         proxyPort = RelayConfig.proxyPort(configJson, DEFAULT_PROXY_PORT)
@@ -328,6 +332,7 @@ class DesktopTunnelController(
         val managed = ManagedRelay.available && ManagedRelay.isActive()
         val recorded = readSessionState() != null
         relayLog = if (managed) SystemdRelay.logFile else File(runtimeDir, "relay.log")
+        _runningConfig.value = if (managed) adoptedManagedConfig() else null
         tunMode = session.tun
         tunHasEntry = session.entry
         killSwitchEngaged = session.killSwitch
@@ -387,7 +392,12 @@ class DesktopTunnelController(
      */
     private suspend fun engageKillSwitch(configJson: String) {
         val exemptIps = RelayConfig.exemptIps(configJson)
-        val (fault, engaged) = engageKillSwitch(exemptIps, allowLocalNetworks, ::runKillSwitchHelper, RelayConfig.markArgs(configJson))
+        val (fault, engaged) = engageKillSwitch(
+            exemptIps,
+            allowLocalNetworks,
+            ::runKillSwitchHelper,
+            markArgs = RelayConfig.markArgs(configJson),
+        ) { emitLog(Res.string.tunnel_log_kill_switch_no_mark) }
         killSwitchFault = fault
         killSwitchEngaged = engaged
         when (fault) {
@@ -463,7 +473,9 @@ class DesktopTunnelController(
         if (SystemdRelay.unitInstalled && !ManagedRelay.available) {
             emitLog(Res.string.tunnel_log_managed_unusable)
         }
-        return if (ManagedRelay.available) startManagedRelay(configJson) else startOwnedRelay(configJson)
+        val relay = if (ManagedRelay.available) startManagedRelay(configJson) else startOwnedRelay(configJson)
+        if (relay != null) _runningConfig.value = configJson
+        return relay
     }
 
     private suspend fun startOwnedRelay(configJson: String): RelayProcess? {

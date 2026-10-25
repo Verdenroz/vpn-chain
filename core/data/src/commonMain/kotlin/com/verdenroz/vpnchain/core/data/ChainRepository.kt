@@ -1,8 +1,6 @@
 package com.verdenroz.vpnchain.core.data
 
-import com.verdenroz.vpnchain.core.config.ClashApi
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
-import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.config.renderPlatformTunnelConfig
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.logging.Logger
@@ -82,7 +80,6 @@ internal class DefaultChainRepository(
     private val warpRepository: WarpRepository,
     private val learnedSites: LearnedSitesRepository,
     private val learnedStore: LearnedRuleSetStore,
-    private val sessions: LearningSessionStore,
     private val preferences: VpnChainPreferencesDataSource,
     private val logger: Logger,
     scope: CoroutineScope,
@@ -150,11 +147,7 @@ internal class DefaultChainRepository(
         return runCatching { renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp, learned) }
             .onFailure { logger.e(TAG, "config render failed", it) }
             .getOrNull()
-            .also { config -> sessions.current.value = config?.let(::learningSessionOf) }
     }
-
-    private fun learningSessionOf(config: String): LearningSession? =
-        ProbeProxy.fromConfig(config)?.let { LearningSession(it, ClashApi.fromConfig(config)) }
 
     override suspend fun disconnect() {
         preferences.setConnectionIntent(false)

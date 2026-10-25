@@ -70,6 +70,12 @@ interface TunnelController {
      */
     val stats: StateFlow<SessionStats> get() = MutableStateFlow(SessionStats()).asStateFlow()
 
+    /**
+     * The config the running engine loaded, which a start that adopted a running
+     * relay did not render. Null while nothing runs or the config is unknown.
+     */
+    val runningConfig: StateFlow<String?> get() = MutableStateFlow<String?>(null).asStateFlow()
+
     /** True once we've observed the OS itself launch us as an always-on VPN. */
     val alwaysOnDetected: StateFlow<Boolean> get() = MutableStateFlow(false).asStateFlow()
 

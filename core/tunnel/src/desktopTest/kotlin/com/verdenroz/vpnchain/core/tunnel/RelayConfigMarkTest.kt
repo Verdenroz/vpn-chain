@@ -2,6 +2,7 @@ package com.verdenroz.vpnchain.core.tunnel
 
 import com.verdenroz.vpnchain.core.config.SingBoxConfigFactory
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -17,7 +18,13 @@ class RelayConfigMarkTest {
 
     @Test
     fun `a marked direct outbound becomes the helper's mark argument`() {
-        val config = SingBoxConfigFactory.androidChainConfig(PROFILE, directMark = SingBoxConfigFactory.FAIL_OPEN_MARK)
+        val config = SingBoxConfigFactory.androidChainConfig(
+            PROFILE,
+            warpMode = WarpMode.Automatic,
+            learnedOpenPath = "/run/learned-open.json",
+            failOpen = true,
+            markDirect = true,
+        )
 
         assertEquals(listOf("--allow-mark", "0x760000"), RelayConfig.markArgs(config))
     }

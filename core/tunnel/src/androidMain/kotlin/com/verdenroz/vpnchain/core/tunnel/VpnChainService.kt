@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.Res
@@ -261,9 +262,10 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 server.start()
                 commandServer = server
                 server.startOrReloadService(config, OverrideOptions())
+                TunnelBridge.runningConfig.value = config
                 startLogClient()
                 startStatusClient()
-                startConnectionsClient()
+                startConnectionsClient(config)
             }
             // A stop that landed while the engine was booting cannot reach in and
             // close a server that did not exist yet, so the boot has to check.
@@ -411,6 +413,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
 
     private fun cleanup() {
         tearingDown = true
+        TunnelBridge.runningConfig.value = null
         healthJob?.cancel()
         healthJob = null
         lockdownPoller.removeCallbacks(lockdownCheck)
@@ -442,36 +445,32 @@ class VpnChainService : VpnService(), CommandServerHandler {
     }
 
     private fun startLogClient() {
-        val client = CommandClient(
-            LogHandler(),
-            CommandClientOptions().apply { addCommand(Libbox.CommandLog) },
-        )
-        runCatching { client.connect() }
-            .onSuccess { logClient = client }
-            .onFailure { TunnelBridge.logFailure("log stream unavailable", it.message) }
+        logClient = connectClient("log", LogHandler()) { addCommand(Libbox.CommandLog) }
     }
 
     private fun startStatusClient() {
-        val client = CommandClient(
-            StatusHandler(),
-            CommandClientOptions().apply {
-                addCommand(Libbox.CommandStatus)
-                statusInterval = STATUS_INTERVAL_NS
-            },
-        )
-        runCatching { client.connect() }
-            .onSuccess { statusClient = client }
-            .onFailure { TunnelBridge.logFailure("status stream unavailable", it.message) }
+        statusClient = connectClient("status", StatusHandler()) {
+            addCommand(Libbox.CommandStatus)
+            statusInterval = STATUS_INTERVAL_NS
+        }
     }
 
-    private fun startConnectionsClient() {
-        val client = CommandClient(
-            ConnectionsHandler(),
-            CommandClientOptions().apply { addCommand(Libbox.CommandConnections) },
-        )
-        runCatching { client.connect() }
-            .onSuccess { connectionsClient = client }
-            .onFailure { TunnelBridge.log("connection stream unavailable: ${it.message}") }
+    /** Only a config with probe inbounds has detection listening for destinations. */
+    private fun startConnectionsClient(config: String) {
+        if (ProbeProxy.fromConfig(config) == null) return
+        connectionsClient = connectClient("connection", ConnectionsHandler()) { addCommand(Libbox.CommandConnections) }
+    }
+
+    private fun connectClient(
+        label: String,
+        handler: CommandClientHandler,
+        options: CommandClientOptions.() -> Unit,
+    ): CommandClient? {
+        val client = CommandClient(handler, CommandClientOptions().apply(options))
+        return runCatching { client.connect() }
+            .onFailure { TunnelBridge.logFailure("$label stream unavailable", it.message) }
+            .map { client }
+            .getOrNull()
     }
 
     override fun onDestroy() {
@@ -581,7 +580,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
     }
 
     /** Forwards the engine's periodic traffic counters onto the shared bridge. */
-    private inner class StatusHandler : CommandClientHandler {
+    private inner class StatusHandler : NoOpClientHandler() {
         override fun writeStatus(message: StatusMessage) {
             if (message.trafficAvailable) {
                 TunnelBridge.updateTraffic(
@@ -592,7 +591,6 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 )
             }
         }
-        override fun connected() = Unit
 
         /**
          * The engine going away underneath us. Nothing else on Android notices
@@ -606,17 +604,10 @@ class VpnChainService : VpnService(), CommandServerHandler {
             // and cleanup() disconnects the very client calling us.
             lockdownPoller.post { onEngineDied() }
         }
-        override fun writeLogs(messageList: LogIterator) = Unit
-        override fun clearLogs() = Unit
-        override fun setDefaultLogLevel(level: Int) = Unit
-        override fun initializeClashMode(modeList: StringIterator, currentMode: String) = Unit
-        override fun updateClashMode(newMode: String) = Unit
-        override fun writeConnectionEvents(message: ConnectionEvents) = Unit
-        override fun writeGroups(message: OutboundGroupIterator) = Unit
     }
 
     /** Forwards engine log lines onto the shared bridge for the Logs screen. */
-    private inner class LogHandler : CommandClientHandler {
+    private inner class LogHandler : NoOpClientHandler() {
         override fun writeLogs(messageList: LogIterator) {
             while (messageList.hasNext()) {
                 val entry = messageList.next()
@@ -625,29 +616,24 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 if (entry.level <= LOG_LEVEL_INFO) TunnelBridge.logRelay(entry.message)
             }
         }
-        override fun connected() = Unit
-        override fun disconnected(message: String?) = Unit
-        override fun clearLogs() = Unit
-        override fun setDefaultLogLevel(level: Int) = Unit
-        override fun initializeClashMode(modeList: StringIterator, currentMode: String) = Unit
-        override fun updateClashMode(newMode: String) = Unit
-        override fun writeConnectionEvents(message: ConnectionEvents) = Unit
-        override fun writeGroups(message: OutboundGroupIterator) = Unit
-        override fun writeStatus(message: StatusMessage) = Unit
     }
 
     /** Hands the names of newly dialled destinations to site detection. */
-    private inner class ConnectionsHandler : CommandClientHandler {
+    private inner class ConnectionsHandler : NoOpClientHandler() {
         override fun writeConnectionEvents(message: ConnectionEvents) {
             val events = message.iterator()
             while (events.hasNext()) {
                 val event = events.next()
                 if (event.type != Libbox.ConnectionEventNew.toInt()) continue
                 val connection = event.connection
-                if (connection.inbound.startsWith("probe-")) continue
+                if (ProbeProxy.isProbeInbound(connection.inbound)) continue
                 TunnelBridge.destinations.tryEmit(connection.domain)
             }
         }
+    }
+
+    /** libbox calls every method on a handler; each subclass overrides the one it reads. */
+    private abstract class NoOpClientHandler : CommandClientHandler {
         override fun connected() = Unit
         override fun disconnected(message: String?) = Unit
         override fun writeLogs(messageList: LogIterator) = Unit
@@ -655,6 +641,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         override fun setDefaultLogLevel(level: Int) = Unit
         override fun initializeClashMode(modeList: StringIterator, currentMode: String) = Unit
         override fun updateClashMode(newMode: String) = Unit
+        override fun writeConnectionEvents(message: ConnectionEvents) = Unit
         override fun writeGroups(message: OutboundGroupIterator) = Unit
         override fun writeStatus(message: StatusMessage) = Unit
     }

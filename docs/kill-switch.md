@@ -68,8 +68,9 @@ exemptions, and (by default) local networks.
   that outbound alone carries `routing_mark` `0x760000`, and the helper takes
   `up [--allow-local] [--allow-mark <hex>] <exempt_ip>...`, adding one rule,
   `meta mark <hex> accept`, ahead of the final reject. It is rendered only
-  when failing open is on and the profile has no entry hop; with an entry hop
-  the fallback goes through the entry peer, which is already exempt.
+  on desktop, in `automatic` mode with failing open on and no entry hop; with
+  an entry hop the fallback goes through the entry peer, which is already
+  exempt. Android never renders it.
 
   The mark was chosen to stay clear of sing-box's auto_redirect marks (0x2023
   to 0x2025), WireGuard quick (51820), Kubernetes (0x4000, 0x8000) and
@@ -77,16 +78,17 @@ exemptions, and (by default) local networks.
   `0x`-prefixed value of up to eight hex digits that is not zero, and passes it
   to `nft` in a fixed argv, as with the addresses.
 
-  Risks. Only a live sing-box stamps the mark, so the hole closes when sing-box
-  dies, unlike an address exemption. But any process holding `CAP_NET_ADMIN`
-  can set the same mark and so leak past the table; ordinary apps cannot. The
+  Risks. sing-box stamps the mark, so the hole closes when sing-box dies,
+  unlike an address exemption. Any other process holding `CAP_NET_ADMIN` can
+  set the same mark and leak past the table; ordinary apps cannot. The
   rule exempts everything on the `direct` outbound, which is safe only while
   failing open is the sole use of it. It does not change what the site sees:
   the real network address, with no kill switch behind those flows. And it
   needs the helper rebuilt (`cli/killswitch/build.sh`) and `setcap` run on it
-  once more; until then an older helper rejects `--allow-mark`, the app logs
-  that the kill switch is unavailable, and the connect proceeds unprotected as
-  it does whenever the helper is missing.
+  once more. Until then an older helper rejects `--allow-mark` with exit 2,
+  and the app installs the table again without the mark and logs that sites
+  that fail open stay blocked. The kill switch stays up; only failing open to
+  the bare link is lost.
 - **Local networks are exempt by default.** RFC1918 and link-local
   destinations are accepted, so Docker bridges, LAN hosts and printers stay
   reachable while the chain is up. Without it the `reject` RSTs

@@ -56,7 +56,7 @@ see the trade below.
   returns a proof-of-work interstitial, and the JSON endpoints and a real
   browser get its "blocked by network security" page. Routing alone does not
   fix it, which is what [failing open](#failing-open) is for.
-- **The tail is declared whenever detection is on.** The WireGuard peer keeps a
+- **The tail is declared in `automatic` mode before any site uses it.** The WireGuard peer keeps a
   handshake alive through the relay, so Cloudflare sees the relay's address
   connecting even while no site uses the tail. It learns nothing about
   destinations from that.
@@ -73,7 +73,10 @@ libbox's connection events (`CommandConnections`). Only sniffed names count;
 bare addresses, local names and the app's own probe connections are ignored.
 Names are reduced to a registrable domain with a short list of country
 second levels (`example.co.uk`), not the public suffix list, so a rule may
-come out broader or narrower than ideal.
+come out broader or narrower than ideal. Under a shared-hosting suffix
+(`cloudfront.net`, `github.io` and similar) the whole host is kept, so one
+tenant's refusal does not move every site on that platform. Names that are
+not plain host names are never probed.
 
 **How a site is probed.** Each new domain is fetched once, `GET /` with a
 browser User-Agent, through loopback-only `mixed` inbounds that sing-box renders with a random
@@ -116,8 +119,8 @@ connect target (it sees the destination anyway), reaches WARP only after the
 relay refused it, and reaches the fail-open path only after both did and only
 while failing open is on. Probe traffic goes nowhere else.
 
-**The cache.** A reachable verdict is kept for 12 hours and persisted (the
-most recent 2,000 domains), so a restart or Android killing the process does
+**The cache.** A reachable verdict is kept for 12 hours and saved every five
+minutes and when detection stops (the most recent 2,000 domains), so a restart or Android killing the process does
 not re-probe everything. An inconclusive probe (a timeout, a server error) is
 retried after 5 minutes. A learned site stays until the user removes it;
 removing one stops it being learned again for seven days.
@@ -137,24 +140,33 @@ failed write costs the learned sites, never the connect.
 
 ## Failing open
 
-Some sites refuse the relay and WARP both. **Fail open when both are
-refused** (on by default) lets the chain send such a site past the relay, to
+Some sites refuse the relay and WARP both. **Bypass the relay when WARP is
+also refused** (on by default) lets the chain send such a site past the relay, to
 the **entry hop alone**, or to the **bare link** (`direct`) when the profile
 has no entry hop. The site then sees the entry provider's address, or this
 network's own address, instead of the relay's. That is a deliberate step out
-of the chain, so the app says so per site: the learned-sites list and the
-chain state (`OutsideChainSite`) carry which way each site leaves.
+of the chain, so the learned-sites list in settings shows which way each such
+site leaves.
 
 Before a site moves, the same probe is run down that path, and the site fails
 open when that path answers or merely challenges it, since a real browser
 passes a challenge from an ordinary address. A site the path blocks outright (a
-`403`, `451` or a block page) is recorded as refused on every path and stays on
+`403`, `429`, `451` or a block page) is recorded as refused on every path and stays on
 the relay. That check is what keeps a site refusing every non-browser client,
 whatever its source address, from being moved for nothing. The fail-open probe
 inbound only exists while the setting is on.
 
 The relay still sees the DNS lookup for a site that fails open; only the
-connection leaves past it.
+connection leaves past it. In proxy mode that holds because the config carries
+its own DNS block over the relay whenever WARP or failing open can carry
+traffic; without it, WARP and `direct` connections would ask the local
+resolver.
+
+**Which session is watched.** Detection reads the probe ports and credentials
+from the config the engine actually runs (`TunnelController.runningConfig`),
+not from the last config rendered. A relay adopted under systemd is read from
+its unit's config file; a relay adopted from the CLI has no probe inbounds, so
+nothing is probed for it.
 
 **Kill switch.** The entry peer is already exempt from the nftables table, so
 failing open to it adds no exemption. The bare link is not an address: on a

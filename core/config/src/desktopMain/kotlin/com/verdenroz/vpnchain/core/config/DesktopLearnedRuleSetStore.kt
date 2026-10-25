@@ -16,7 +16,7 @@ class DesktopLearnedRuleSetStore : LearnedRuleSetStore {
         get() = if (SystemdRelay.available) {
             SystemdRelay.runDir
         } else {
-            File(System.getProperty("user.home"), ".config/vpn-chain").apply { mkdirs() }
+            userConfigDir()
         }
 
     override fun path(kind: RuleSetKind): String =

@@ -62,6 +62,9 @@ internal object TunnelBridge {
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
+    /** The config the engine loaded; null while it is down. */
+    val runningConfig = MutableStateFlow<String?>(null)
+
     /** Session traffic/uptime, reset on every connect (see [SessionStats]). */
     val stats = MutableStateFlow(SessionStats())
 

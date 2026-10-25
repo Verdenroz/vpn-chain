@@ -42,13 +42,13 @@
     <string name="settings_warp_automatic">automatic</string>
     <string name="settings_warp_all">everything</string>
     <string name="settings_learn_title">Learn blocked sites</string>
-    <string name="settings_fail_open_title">Fail open when both are refused</string>
+    <string name="settings_fail_open_title">Bypass the relay when WARP is also refused</string>
     <string name="settings_learned_title">learned</string>
     <string name="settings_learned_remove">remove</string>
     <string name="settings_learned_warp">%1$s · via WARP · %2$s</string>
     <string name="settings_learned_both">%1$s · relay and WARP refused · %2$s</string>
     <string name="settings_learned_entry">%1$s · relay and WARP refused · via entry hop · %2$s</string>
-    <string name="settings_learned_direct">%1$s · relay and WARP refused · direct, your own address · %2$s</string>
+    <string name="settings_learned_direct">%1$s · relay and WARP refused · direct, shows your address · %2$s</string>
     <string name="settings_learned_everywhere">%1$s · every path refused · %2$s</string>
     <string name="settings_learned_age_now">now</string>
     <string name="settings_learned_age_minutes">%1$dm ago</string>

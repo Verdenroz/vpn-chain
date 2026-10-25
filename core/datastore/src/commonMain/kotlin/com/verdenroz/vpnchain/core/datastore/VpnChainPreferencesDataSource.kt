@@ -13,6 +13,7 @@ import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpExit
 import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -199,46 +200,45 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { it[FAIL_OPEN_KEY] = enabled }
     }
 
-    val learnedSites: Flow<List<LearnedSite>> = dataStore.data.map(::readLearned)
+    val learnedSites: Flow<List<LearnedSite>> = decoded(LEARNED_SITES_KEY, emptyList())
 
     /** Domains whose learning is paused, with the time it resumes. */
-    val learnedSuppressions: Flow<Map<String, Long>> = dataStore.data.map(::readSuppressed)
+    val learnedSuppressions: Flow<Map<String, Long>> = decoded(LEARNED_SUPPRESSED_KEY, emptyMap())
+
+    /** Domains found reachable on the relay, with the time that verdict lapses. */
+    val reachableDomains: Flow<Map<String, Long>> = decoded(REACHABLE_DOMAINS_KEY, emptyMap())
 
     /** Replaces any earlier entry for the same domain. */
     suspend fun putLearnedSite(site: LearnedSite) {
         dataStore.edit { prefs ->
-            val kept = readLearned(prefs).filterNot { it.domain == site.domain }
+            val kept = prefs.decode<List<LearnedSite>>(LEARNED_SITES_KEY).orEmpty().filterNot { it.domain == site.domain }
             prefs[LEARNED_SITES_KEY] = json.encodeToString(kept + site)
         }
     }
 
-    /** Drops the entry and stops it being learned again until [suppressUntilMillis]. */
-    suspend fun removeLearnedSite(domain: String, suppressUntilMillis: Long) {
+    /** Drops the entry and stops it being learned again until [suppressUntilMillis]; lapsed pauses are pruned. */
+    suspend fun removeLearnedSite(domain: String, nowMillis: Long, suppressUntilMillis: Long) {
         dataStore.edit { prefs ->
-            prefs[LEARNED_SITES_KEY] = json.encodeToString(readLearned(prefs).filterNot { it.domain == domain })
-            prefs[LEARNED_SUPPRESSED_KEY] =
-                json.encodeToString(readSuppressed(prefs) + (domain to suppressUntilMillis))
+            val kept = prefs.decode<List<LearnedSite>>(LEARNED_SITES_KEY).orEmpty().filterNot { it.domain == domain }
+            val paused = prefs.decode<Map<String, Long>>(LEARNED_SUPPRESSED_KEY).orEmpty().filterValues { it > nowMillis }
+            prefs[LEARNED_SITES_KEY] = json.encodeToString(kept)
+            prefs[LEARNED_SUPPRESSED_KEY] = json.encodeToString(paused + (domain to suppressUntilMillis))
         }
-    }
-
-    private fun readLearned(prefs: Preferences): List<LearnedSite> = prefs[LEARNED_SITES_KEY]
-        ?.let { raw -> runCatching { json.decodeFromString<List<LearnedSite>>(raw) }.getOrNull() }
-        .orEmpty()
-
-    /** Domains found reachable on the relay, with the time that verdict lapses. */
-    val reachableDomains: Flow<Map<String, Long>> = dataStore.data.map { prefs ->
-        prefs[REACHABLE_DOMAINS_KEY]
-            ?.let { raw -> runCatching { json.decodeFromString<Map<String, Long>>(raw) }.getOrNull() }
-            .orEmpty()
     }
 
     suspend fun setReachableDomains(domains: Map<String, Long>) {
         dataStore.edit { it[REACHABLE_DOMAINS_KEY] = json.encodeToString(domains) }
     }
 
-    private fun readSuppressed(prefs: Preferences): Map<String, Long> = prefs[LEARNED_SUPPRESSED_KEY]
-        ?.let { raw -> runCatching { json.decodeFromString<Map<String, Long>>(raw) }.getOrNull() }
-        .orEmpty()
+    /** Decoded only when its own stored string changes, not on every write to the file. */
+    private inline fun <reified T> decoded(key: Preferences.Key<String>, empty: T): Flow<T> =
+        dataStore.data.map { it[key] }.distinctUntilChanged().map { raw -> raw?.let { decodeOrNull<T>(it) } ?: empty }
+
+    private inline fun <reified T> Preferences.decode(key: Preferences.Key<String>): T? =
+        this[key]?.let { decodeOrNull<T>(it) }
+
+    private inline fun <reified T> decodeOrNull(raw: String): T? =
+        runCatching { json.decodeFromString<T>(raw) }.getOrNull()
 
     /**
      * The registered WARP tail, or null before one exists. A private key like

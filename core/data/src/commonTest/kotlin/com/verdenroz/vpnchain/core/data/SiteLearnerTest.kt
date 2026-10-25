@@ -73,7 +73,7 @@ private class LearnerWorld(
     val gate = MutableStateFlow(true)
     val status = MutableStateFlow(ChainStatus(state = TunnelState.Connected))
     val settings = MutableStateFlow(UserSettings(warpMode = WarpMode.Automatic))
-    val sessions = LearningSessionStore().apply { current.value = LearningSession(PROBE, clashApi = null) }
+    val sessions = MutableStateFlow<LearningSession?>(LearningSession(PROBE, clashApi = null))
     val learned = DefaultLearnedSitesRepository(preferences, NoopStore(), now = { 1L })
 
     init {
@@ -119,9 +119,9 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `a double refusal recorded before failing open was on is probed again`() = runTest {
+    fun `a double refusal is probed again once the session can fail open`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
-        world.settings.value = world.settings.value.copy(failOpen = false)
+        world.sessions.value = LearningSession(PROBE.copy(fallbackPort = 0), clashApi = null)
         world.learned.learn("example.com", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
         runCurrent()
 
@@ -129,7 +129,7 @@ class SiteLearnerTest {
         runCurrent()
         assertTrue(world.fetcher.calls.isEmpty())
 
-        world.settings.value = world.settings.value.copy(failOpen = true)
+        world.sessions.value = LearningSession(PROBE, clashApi = null)
         runCurrent()
         world.feed.hosts.emit("example.com")
         runCurrent()
@@ -233,7 +233,7 @@ class SiteLearnerTest {
         runCurrent()
         first.feed.hosts.emit("example.com")
         runCurrent()
-        advanceTimeBy(31_000)
+        advanceTimeBy(5 * 60_000 + 1_000)
         runCurrent()
 
         val second = LearnerWorld(backgroundScope, preferences) { _, _ -> OPEN }
@@ -252,5 +252,19 @@ class SiteLearnerTest {
         assertEquals("example.de", registrableDomain("www.example.de"))
         assertNull(registrableDomain("example"))
         assertNull(registrableDomain("192.168.1.1"))
+    }
+
+    @Test
+    fun `a tenant of a shared host is learned alone`() {
+        assertEquals("d1234.cloudfront.net", registrableDomain("d1234.cloudfront.net"))
+        assertEquals("user.github.io", registrableDomain("User.github.io."))
+    }
+
+    @Test
+    fun `a name that is not a plain host name is never probed`() {
+        assertNull(registrableDomain("evil.com\r\nX-Injected: 1"))
+        assertNull(registrableDomain("evil.com:443"))
+        assertNull(registrableDomain("ex ample.com"))
+        assertNull(registrableDomain("[2001:db8::1]"))
     }
 }

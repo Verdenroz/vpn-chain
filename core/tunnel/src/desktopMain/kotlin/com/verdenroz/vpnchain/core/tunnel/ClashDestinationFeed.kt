@@ -1,8 +1,7 @@
 package com.verdenroz.vpnchain.core.tunnel
 
 import com.verdenroz.vpnchain.core.config.ClashApi
-import java.net.HttpURLConnection
-import java.net.URI
+import com.verdenroz.vpnchain.core.config.ProbeProxy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -18,44 +17,35 @@ import kotlinx.serialization.json.jsonPrimitive
 /**
  * Polls `/connections`, which lists only live connections, so a connection
  * shorter than [POLL_MS] can be missed. Detection only needs a site to show up
- * once, and pages keep connections open longer than that.
+ * once, and pages keep connections open longer than that. A host is emitted
+ * when it appears, not again on every poll while it stays connected.
  */
 internal class ClashDestinationFeed : DestinationFeed {
 
     override fun hosts(clashApi: ClashApi?): Flow<String> {
         if (clashApi == null) return emptyFlow()
         return flow {
+            var previous = emptySet<String>()
             while (true) {
-                fetchHosts(clashApi).forEach { emit(it) }
+                val current = fetchHosts(clashApi)
+                (current - previous).forEach { emit(it) }
+                previous = current
                 delay(POLL_MS)
             }
         }.flowOn(Dispatchers.IO)
     }
 
-    private fun fetchHosts(api: ClashApi): Set<String> = runCatching {
-        val connection = URI("http://${api.externalController}/connections").toURL()
-            .openConnection() as HttpURLConnection
-        connection.apply {
-            setRequestProperty("Authorization", "Bearer ${api.secret}")
-            connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
-        }
-        try {
-            parseHosts(connection.inputStream.bufferedReader().readText())
-        } finally {
-            connection.disconnect()
-        }
-    }.getOrDefault(emptySet())
+    private fun fetchHosts(api: ClashApi): Set<String> =
+        ClashStatsClient.fetchConnections(api)?.let { runCatching { parseHosts(it) }.getOrNull() }.orEmpty()
 
     companion object {
         private const val POLL_MS = 2_000L
-        private const val TIMEOUT_MS = 2_000
 
-        /** Probe inbounds are tagged `probe-*`; their connections are ours, not the user's. */
+        /** Clash reports the inbound as `type/tag`; probe connections are ours, not the user's. */
         fun parseHosts(body: String): Set<String> =
             Json.parseToJsonElement(body).jsonObject.getValue("connections").jsonArray
                 .map { it.jsonObject.getValue("metadata").jsonObject }
-                .filterNot { it["type"]?.jsonPrimitive?.contentOrNull.orEmpty().contains("probe-") }
+                .filterNot { ProbeProxy.isProbeInbound(it["type"]?.jsonPrimitive?.contentOrNull.orEmpty().substringAfter('/')) }
                 .mapNotNull { it["host"]?.jsonPrimitive?.contentOrNull?.takeIf(String::isNotEmpty) }
                 .toSet()
     }

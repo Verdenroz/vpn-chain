@@ -469,6 +469,16 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
+    fun `the proxy config resolves names through the relay when traffic can leave elsewhere`() {
+        val config = parse(
+            SingBoxConfigFactory.mixedProxyConfig(profile(), warp = warp(), warpMode = WarpMode.Automatic, failOpen = true),
+        )
+
+        val server = config.getValue("dns").jsonObject.array("servers").single().jsonObject
+        assertEquals("proxy", server.getValue("detour").jsonPrimitive.content)
+    }
+
+    @Test
     fun `reality credentials are carried on the vless outbound`() {
         val config = parse(SingBoxConfigFactory.androidChainConfig(profile()))
 
@@ -762,13 +772,21 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `the direct outbound carries the kill switch mark only when one is given`() {
-        val marked = parse(SingBoxConfigFactory.androidChainConfig(profile(), directMark = SingBoxConfigFactory.FAIL_OPEN_MARK))
-        val plain = parse(SingBoxConfigFactory.androidChainConfig(profile()))
+    fun `the direct outbound is marked only when a chain without an entry hop fails open`() {
+        fun mark(profile: ChainProfile, failOpen: Boolean = true, markDirect: Boolean = true) = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile,
+                warpMode = WarpMode.Automatic,
+                learnedOpenPath = "/run/learned-open.json",
+                failOpen = failOpen,
+                markDirect = markDirect,
+            ),
+        ).array("outbounds").taggedWith("direct")?.get("routing_mark")?.jsonPrimitive?.int
 
-        assertEquals(0x760000, marked.array("outbounds").taggedWith("direct")?.getValue("routing_mark")?.jsonPrimitive?.int)
-        assertEquals(null, plain.array("outbounds").taggedWith("direct")?.get("routing_mark"))
-        assertEquals(null, marked.array("outbounds").taggedWith("vless-proxy")?.get("routing_mark"))
+        assertEquals(0x760000, mark(profile()))
+        assertEquals(null, mark(profile(entry())))
+        assertEquals(null, mark(profile(), failOpen = false))
+        assertEquals(null, mark(profile(), markDirect = false))
     }
 }
 

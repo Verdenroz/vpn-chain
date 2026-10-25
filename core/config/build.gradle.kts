@@ -14,5 +14,8 @@ kotlin {
         desktopMain.dependencies {
             implementation(projects.core.common)
         }
+        // Both targets are JVM, so code that needs only java.* is compiled into each.
+        androidMain { kotlin.srcDir("src/jvmShared/kotlin") }
+        desktopMain { kotlin.srcDir("src/jvmShared/kotlin") }
     }
 }

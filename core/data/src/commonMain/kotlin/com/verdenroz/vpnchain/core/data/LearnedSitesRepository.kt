@@ -42,12 +42,14 @@ internal class DefaultLearnedSitesRepository(
 
     override suspend fun learn(domain: String, route: LearnedRoute, reason: BlockReason) {
         if (isSuppressed(domain)) return
+        val before = preferences.learnedSites.first().find { it.domain == domain }?.route
         preferences.putLearnedSite(LearnedSite(domain, reason, now(), route))
-        syncRuleSets()
+        // Each write reloads the rule-set in sing-box; a refusal routes nothing.
+        if (before in ROUTED || route in ROUTED) syncRuleSets()
     }
 
     override suspend fun remove(domain: String) {
-        preferences.removeLearnedSite(domain, suppressUntilMillis = now() + SUPPRESS_MILLIS)
+        preferences.removeLearnedSite(domain, nowMillis = now(), suppressUntilMillis = now() + SUPPRESS_MILLIS)
         syncRuleSets()
     }
 
@@ -64,5 +66,6 @@ internal class DefaultLearnedSitesRepository(
 
     private companion object {
         const val SUPPRESS_MILLIS = 7L * 24 * 60 * 60 * 1000
+        val ROUTED = setOf(LearnedRoute.Warp, LearnedRoute.FailOpen)
     }
 }

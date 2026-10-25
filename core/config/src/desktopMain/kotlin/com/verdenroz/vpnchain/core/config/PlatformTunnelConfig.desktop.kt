@@ -5,8 +5,6 @@ import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpExit
 import java.io.File
-import java.net.ServerSocket
-import java.security.SecureRandom
 
 /**
  * Desktop renders a clash API into every config so the controller has a way to
@@ -52,7 +50,7 @@ actual fun renderPlatformTunnelConfig(
             learnedWarpPath = learned?.path(RuleSetKind.Warp),
             learnedOpenPath = learned?.path(RuleSetKind.Open),
             failOpen = settings.failOpen,
-            directMark = SingBoxConfigFactory.FAIL_OPEN_MARK.takeIf { settings.failOpen && profile.entryHop == null },
+            markDirect = true,
         )
     } else {
         SingBoxConfigFactory.mixedProxyConfig(
@@ -74,16 +72,9 @@ actual fun renderPlatformTunnelConfig(
  */
 private fun cacheFilePath(): String = File(PrivateStorage.configDir, "singbox-cache.db").absolutePath
 
-/**
- * A fresh port and secret per rendered config. There is a window between
- * releasing the probe socket and sing-box binding it, but losing that race
- * costs stats, not the tunnel — the relay itself does not depend on the API.
- */
-private fun newClashApi(): ClashApi = ClashApi(
-    port = ServerSocket(0).use { it.localPort },
-    secret = ByteArray(SECRET_BYTES)
-        .also(SecureRandom()::nextBytes)
-        .joinToString("") { byte -> ((byte.toInt() and 0xFF) + 0x100).toString(16).substring(1) },
-)
+internal fun userConfigDir(): File = PrivateStorage.configDir
+
+/** A fresh port and secret per rendered config; the relay itself does not depend on the API. */
+private fun newClashApi(): ClashApi = ClashApi(port = freeLoopbackPort(), secret = randomHexToken(SECRET_BYTES))
 
 private const val SECRET_BYTES = 24
