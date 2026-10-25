@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,8 +15,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.verdenroz.vpnchain.core.common.currentTimeMillis
-import com.verdenroz.vpnchain.core.designsystem.component.PanelButton
-import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
+import com.verdenroz.vpnchain.core.designsystem.component.ActionButton
+import com.verdenroz.vpnchain.core.designsystem.component.Edge
+import com.verdenroz.vpnchain.core.designsystem.component.StatusDot
+import com.verdenroz.vpnchain.core.designsystem.component.hairline
+import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainColors
+import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
@@ -49,38 +54,50 @@ internal fun LearnedSites(
     modifier: Modifier = Modifier,
 ) {
     if (sites.isEmpty()) return
-    val colors = PanelTheme.colors
+    val colors = VpnChainTheme.colors
     Column(modifier.fillMaxWidth()) {
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(16.dp))
         Text(
             stringResource(Res.string.settings_learned_title),
             style = MaterialTheme.typography.bodyLarge,
-            color = colors.readout,
+            color = colors.ink,
         )
+        Spacer(Modifier.height(6.dp))
         sites.forEach { site ->
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().hairline(Edge.Top, colors.line).padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StatusDot(site.markerColor(colors, exits[site.domain]))
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(
                         site.domain,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = colors.readout,
+                        color = colors.ink,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         learnedDetail(site, exits[site.domain]),
                         style = MaterialTheme.typography.bodySmall,
-                        color = colors.muted,
+                        color = colors.inkMuted,
                     )
                 }
-                PanelButton(
+                ActionButton(
                     text = stringResource(Res.string.settings_learned_remove),
                     onClick = { onRemove(site.domain) },
+                    compact = true,
                 )
             }
         }
     }
+}
+
+private fun LearnedSite.markerColor(colors: VpnChainColors, exit: OutsideExit?) = when {
+    route == LearnedRoute.Warp -> colors.rerouted
+    exit != null -> colors.unprotected
+    else -> colors.line
 }
 
 @Composable
