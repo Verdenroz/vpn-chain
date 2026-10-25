@@ -22,8 +22,12 @@
  * Docker bridges and LAN hosts stay reachable while the chain is up.
  *
  * All exempt IPs are validated as strict IPv4 dotted-quads before touching
- * anything - nothing is passed through a shell (every `nft` invocation uses
- * execv with a fixed argv array), and malformed input is rejected outright.
+ * anything, and malformed input is rejected outright. `up` renders the whole
+ * ruleset into one fixed nft script and loads it with a single `nft -f -`
+ * transaction, so a re-arm replaces the old table with no unprotected window
+ * and a failure leaves either the old table or the new one, never a partial.
+ * Nothing is passed through a shell: nft is execve'd by absolute path with a
+ * fixed argv and a fixed minimal environment.
  *
  * This binary should be the ONLY thing carrying CAP_NET_ADMIN via setcap: it
  * raises the capability into its own ambient set and execs the ordinary,
@@ -36,6 +40,8 @@
  */
 
 #include <ctype.h>
+#include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/capability.h>
@@ -45,13 +51,22 @@
 
 #define MAX_EXEMPT 8
 #define TABLE_NAME "vpn_chain_killswitch"
+#define SCRIPT_CAP 2048
 
 static const char *NFT_PATHS[] = {"/usr/sbin/nft", "/sbin/nft", "/usr/bin/nft", NULL};
+
+static char *const NFT_ENV[] = {(char *)"PATH=/usr/sbin:/usr/bin:/sbin:/bin", (char *)"LC_ALL=C", NULL};
 
 /* Docker bridges, LAN, link-local. Without them the reject RSTs host-to-container
  * and host-to-LAN traffic the tunnel was never meant to carry. */
 static const char *LOCAL_RANGES[] = {
     "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", NULL,
+};
+
+struct options {
+    int allow_local;
+    char **exempt_ips;
+    int exempt_count;
 };
 
 static const char *find_nft(void) {
@@ -77,48 +92,144 @@ static int add_net_admin_to_inheritable(void) {
     return ok ? 0 : -1;
 }
 
-/* Strict IPv4 dotted-quad check - rejects anything that could be mistaken
- * for an `nft` token or smuggle unexpected content. */
+/* Strict IPv4 dotted-quad: four decimal octets 0-255, no leading zeros, no
+ * trailing garbage. Rejects anything that could be mistaken for an `nft`
+ * token or smuggle unexpected content into the script. */
 static int is_valid_ipv4(const char *s) {
-    int dots = 0, digits = 0;
-    if (!*s) return 0;
-    for (const char *p = s; *p; p++) {
-        if (*p == '.') {
-            if (digits == 0) return 0;
-            dots++;
-            digits = 0;
-            if (dots > 3) return 0;
-        } else if (isdigit((unsigned char)*p)) {
-            digits++;
-            if (digits > 3) return 0;
-        } else {
-            return 0;
+    const char *p = s;
+    for (int octet = 0; octet < 4; octet++) {
+        if (octet > 0) {
+            if (*p++ != '.') return 0;
         }
+        if (!isdigit((unsigned char)*p)) return 0;
+        const char *start = p;
+        int value = 0;
+        while (isdigit((unsigned char)*p)) {
+            value = value * 10 + (*p++ - '0');
+            if (p - start > 3) return 0;
+        }
+        if (value > 255 || (p - start > 1 && *start == '0')) return 0;
     }
-    return dots == 3 && digits > 0;
+    return *p == '\0';
 }
 
-static int run_nft(const char *nft_bin, char *const argv[]) {
+static int emit(char *buf, size_t *len, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf + *len, SCRIPT_CAP - *len, fmt, ap);
+    va_end(ap);
+    if (n < 0 || (size_t)n >= SCRIPT_CAP - *len) return -1;
+    *len += n;
+    return 0;
+}
+
+/*
+ * The whole ruleset as one nft transaction. The leading add makes the delete
+ * succeed whether or not a table is left over, and the delete and re-create
+ * land in the same commit as the final reject.
+ *
+ * tun0 traffic is already captured by sing-box for relay through the tunnel,
+ * so it's not a leak. If sing-box dies, tun0 disappears with it, so that rule
+ * stops matching and the exempt-IPs/reject rules take over.
+ *
+ * Bare `reject` (no address family) catches IPv4 and IPv6 alike, since our
+ * exemptions are IPv4-only. `reject`, not `drop`, so blocked connections fail
+ * fast instead of hanging other apps until their own timeout.
+ */
+static int build_script(char *buf, const struct options *opts) {
+    size_t len = 0;
+    int bad = emit(buf, &len,
+        "add table inet " TABLE_NAME "\n"
+        "delete table inet " TABLE_NAME "\n"
+        "table inet " TABLE_NAME " {\n"
+        "\tchain output {\n"
+        "\t\ttype filter hook output priority 0; policy accept;\n"
+        "\t\toif lo accept\n"
+        "\t\toifname \"tun0\" accept\n");
+    for (int i = 0; i < opts->exempt_count; i++) {
+        bad |= emit(buf, &len, "\t\tip daddr %s accept\n", opts->exempt_ips[i]);
+    }
+    for (int i = 0; opts->allow_local && LOCAL_RANGES[i] != NULL; i++) {
+        bad |= emit(buf, &len, "\t\tip daddr %s accept\n", LOCAL_RANGES[i]);
+    }
+    bad |= emit(buf, &len, "\t\treject\n\t}\n}\n");
+    return bad ? -1 : (int)len;
+}
+
+/* Runs nft with a fixed environment, feeding `input` on stdin when given. */
+static int run_nft(const char *nft_bin, char *const argv[], const char *input, size_t input_len) {
+    int fds[2];
+    if (input && pipe(fds) < 0) {
+        perror("pipe");
+        return -1;
+    }
     pid_t pid = fork();
     if (pid < 0) {
         perror("fork");
         return -1;
     }
     if (pid == 0) {
-        execv(nft_bin, argv);
-        perror("execv");
+        if (input) {
+            close(fds[1]);
+            if (dup2(fds[0], STDIN_FILENO) < 0) _exit(127);
+            close(fds[0]);
+        }
+        execve(nft_bin, argv, NFT_ENV);
+        perror("execve");
         _exit(127);
+    }
+    int write_failed = 0;
+    if (input) {
+        close(fds[0]);
+        for (size_t off = 0; off < input_len;) {
+            ssize_t n = write(fds[1], input + off, input_len - off);
+            if (n < 0) {
+                write_failed = 1;
+                break;
+            }
+            off += n;
+        }
+        close(fds[1]);
     }
     int status;
     if (waitpid(pid, &status, 0) < 0) return -1;
+    if (write_failed) return -1;
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
 
-/* Best-effort: tears down any existing table so `up` is idempotent even if a
- * prior session left one behind. Failure (e.g. it doesn't exist) is fine. */
+/* Best-effort: failure (e.g. no table to delete) is fine. */
 static void delete_table(const char *nft_bin) {
     char *argv[] = {(char *)"nft", (char *)"delete", (char *)"table", (char *)"inet", (char *)TABLE_NAME, NULL};
-    run_nft(nft_bin, argv);
+    run_nft(nft_bin, argv, NULL, 0);
+}
+
+static int parse_up_args(int argc, char *argv[], struct options *opts) {
+    int i = 2;
+    for (; i < argc && strncmp(argv[i], "--", 2) == 0; i++) {
+        if (strcmp(argv[i], "--allow-local") == 0) {
+            opts->allow_local = 1;
+        } else {
+            fprintf(stderr, "unknown option: %s\n", argv[i]);
+            return -1;
+        }
+    }
+    opts->exempt_ips = &argv[i];
+    opts->exempt_count = argc - i;
+    if (opts->exempt_count < 1) {
+        fprintf(stderr, "up needs at least one exempt_ip\n");
+        return -1;
+    }
+    if (opts->exempt_count > MAX_EXEMPT) {
+        fprintf(stderr, "too many exempt IPs (max %d)\n", MAX_EXEMPT);
+        return -1;
+    }
+    for (int j = 0; j < opts->exempt_count; j++) {
+        if (!is_valid_ipv4(opts->exempt_ips[j])) {
+            fprintf(stderr, "invalid exempt_ip: %s\n", opts->exempt_ips[j]);
+            return -1;
+        }
+    }
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -135,25 +246,21 @@ int main(int argc, char *argv[]) {
     }
 
     int up = strcmp(argv[1], "up") == 0;
-    int allow_local = up && argc > 2 && strcmp(argv[2], "--allow-local") == 0;
-    char **exempt_ips = &argv[2 + allow_local];
-    int exempt_count = argc - 2 - allow_local;
+    struct options opts = {0};
+    char script[SCRIPT_CAP];
+    int script_len = 0;
 
     if (up) {
-        if (exempt_count < 1) {
-            fprintf(stderr, "up needs at least one exempt_ip\n");
-            return 2;
+        if (parse_up_args(argc, argv, &opts) != 0) return 2;
+        script_len = build_script(script, &opts);
+        if (script_len < 0) {
+            fprintf(stderr, "ruleset too large\n");
+            return 1;
         }
-        if (exempt_count > MAX_EXEMPT) {
-            fprintf(stderr, "too many exempt IPs (max %d)\n", MAX_EXEMPT);
-            return 2;
-        }
-        for (int i = 0; i < exempt_count; i++) {
-            if (!is_valid_ipv4(exempt_ips[i])) {
-                fprintf(stderr, "invalid exempt_ip: %s\n", exempt_ips[i]);
-                return 2;
-            }
-        }
+#ifdef KS_PRINT_SCRIPT
+        fwrite(script, 1, script_len, stdout);
+        return 0;
+#endif
     }
 
     if (add_net_admin_to_inheritable() != 0 ||
@@ -174,65 +281,11 @@ int main(int argc, char *argv[]) {
     }
 
     if (!up) {
-        delete_table(nft_bin); /* best-effort */
+        delete_table(nft_bin);
         return 0;
     }
 
-    int rc = 0;
-    delete_table(nft_bin); /* idempotent: clear any stale table first */
-
-    char *table_argv[] = {(char *)"nft", (char *)"add", (char *)"table", (char *)"inet", (char *)TABLE_NAME, NULL};
-    if (run_nft(nft_bin, table_argv) != 0) rc = 1;
-
-    char *chain_argv[] = {
-        (char *)"nft", (char *)"add", (char *)"chain", (char *)"inet", (char *)TABLE_NAME, (char *)"output",
-        (char *)"{", (char *)"type", (char *)"filter", (char *)"hook", (char *)"output",
-        (char *)"priority", (char *)"0", (char *)";", (char *)"policy", (char *)"accept", (char *)";", (char *)"}",
-        NULL,
-    };
-    if (run_nft(nft_bin, chain_argv) != 0) rc = 1;
-
-    char *lo_argv[] = {
-        (char *)"nft", (char *)"add", (char *)"rule", (char *)"inet", (char *)TABLE_NAME, (char *)"output",
-        (char *)"oif", (char *)"lo", (char *)"accept", NULL,
-    };
-    if (run_nft(nft_bin, lo_argv) != 0) rc = 1;
-
-    /* tun0 traffic is already captured by sing-box for relay through the
-     * tunnel, so it's not a leak. If sing-box dies, tun0 disappears with it,
-     * so this rule stops matching and the exempt-IPs/reject rules take over. */
-    char *tun_argv[] = {
-        (char *)"nft", (char *)"add", (char *)"rule", (char *)"inet", (char *)TABLE_NAME, (char *)"output",
-        (char *)"oifname", (char *)"tun0", (char *)"accept", NULL,
-    };
-    if (run_nft(nft_bin, tun_argv) != 0) rc = 1;
-
-    for (int i = 0; i < exempt_count; i++) {
-        char *ip_argv[] = {
-            (char *)"nft", (char *)"add", (char *)"rule", (char *)"inet", (char *)TABLE_NAME, (char *)"output",
-            (char *)"ip", (char *)"daddr", exempt_ips[i], (char *)"accept", NULL,
-        };
-        if (run_nft(nft_bin, ip_argv) != 0) rc = 1;
-    }
-
-    if (allow_local) {
-        for (int i = 0; LOCAL_RANGES[i] != NULL; i++) {
-            char *local_argv[] = {
-                (char *)"nft", (char *)"add", (char *)"rule", (char *)"inet", (char *)TABLE_NAME, (char *)"output",
-                (char *)"ip", (char *)"daddr", (char *)LOCAL_RANGES[i], (char *)"accept", NULL,
-            };
-            if (run_nft(nft_bin, local_argv) != 0) rc = 1;
-        }
-    }
-
-    /* Bare `reject` (no address family) catches IPv4 and IPv6 alike, since our
-     * exemptions are IPv4-only. `reject`, not `drop`, so blocked connections
-     * fail fast instead of hanging other apps until their own timeout. */
-    char *reject_argv[] = {
-        (char *)"nft", (char *)"add", (char *)"rule", (char *)"inet", (char *)TABLE_NAME, (char *)"output",
-        (char *)"reject", NULL,
-    };
-    if (run_nft(nft_bin, reject_argv) != 0) rc = 1;
-
-    return rc;
+    signal(SIGPIPE, SIG_IGN);
+    char *load_argv[] = {(char *)"nft", (char *)"-f", (char *)"-", NULL};
+    return run_nft(nft_bin, load_argv, script, script_len) == 0 ? 0 : 1;
 }

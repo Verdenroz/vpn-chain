@@ -74,10 +74,19 @@ exemptions, and (by default) local networks.
 - **Torn down on disconnect, not on crash.** On Disconnect the app tears the
   table down — but *not* on an unexpected crash, since that's exactly when
   it's supposed to keep blocking traffic.
-- **No shell.** Every `nft` invocation uses a fixed argv array (no shell, no
-  injection surface) with strictly validated IPv4 arguments; the helper
-  raises `CAP_NET_ADMIN` into its own ambient set and execs the ordinary
-  `nft` binary, so `nft` itself never needs any capability grant.
+- **One transaction.** `up` renders the whole ruleset, final `reject`
+  included, into a single nft script and loads it with one `nft -f -`. The
+  script deletes any existing table and re-creates it in the same commit, so
+  re-arming never opens a window where the old table is gone and the new one
+  has no `reject` yet, and a failed load leaves the previous table in place
+  rather than a half-built one.
+- **No shell.** `nft` is `execve`d by absolute path with a fixed argv, the
+  script on a pipe, and a fixed minimal environment (`PATH`, `LC_ALL=C`), so
+  nothing the caller exported reaches a process running with
+  `CAP_NET_ADMIN`. Exempt IPs are strict dotted quads (octets 0-255, no
+  leading zeros) and are written into the script only after validation. The
+  helper raises `CAP_NET_ADMIN` into its own ambient set, so `nft` itself
+  never needs any capability grant.
 
 If the helper isn't built/setcapped yet, the app warns and connects anyway
 without the safety net.
