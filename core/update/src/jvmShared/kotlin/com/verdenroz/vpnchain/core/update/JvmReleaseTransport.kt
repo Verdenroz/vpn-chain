@@ -9,8 +9,10 @@ import okio.IOException
 
 internal class JvmReleaseTransport : ReleaseTransport {
 
-    override suspend fun fetchText(url: String): String = withContext(Dispatchers.IO) {
-        open(url).inputStream.bufferedReader().use { it.readText() }
+    override suspend fun fetchText(url: String, maxBytes: Int): String = withContext(Dispatchers.IO) {
+        val body = open(url).inputStream.use { it.readNBytes(maxBytes + 1) }
+        if (body.size > maxBytes) throw IOException("The response is larger than $maxBytes bytes")
+        body.decodeToString()
     }
 
     override suspend fun download(url: String, sink: BufferedSink, onProgress: (Long) -> Unit) {

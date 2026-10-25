@@ -73,6 +73,28 @@ class ReleaseRepositoryTest {
     }
 
     @Test
+    fun `stops a download that outgrows the manifest's size`() = runTest {
+        val progress = mutableListOf<Long>()
+
+        val oversized = BODY.repeat(10_000)
+
+        val result = repository(FakeTransport(mapOf(apkUrl to oversized), chunk = 1024))
+            .download(release(), "android-arm64-v8a", DEST) { progress += it }
+
+        assertEquals(DownloadResult.Failed(DownloadFailure.WrongSize), result)
+        assertTrue(progress.last() < oversized.length)
+        assertFalse(fileSystem.exists(DEST))
+        assertTrue(fileSystem.list(DEST.parent!!).isEmpty())
+    }
+
+    @Test
+    fun `a manifest past 64 KiB is a failure`() = runTest {
+        val padded = """{"version":1,"versionName":"0.1.7","versionCode":107,"artifacts":{},"x":"${"a".repeat(64 * 1024)}"}"""
+
+        assertTrue(repository(FakeTransport(mapOf(manifestUrl to padded))).latest().isFailure)
+    }
+
+    @Test
     fun `refuses a download with the wrong digest and leaves nothing behind`() = runTest {
         val result = repository(FakeTransport(mapOf(apkUrl to BODY)))
             .download(release(sha256 = "0".repeat(64)), "android-arm64-v8a", DEST)

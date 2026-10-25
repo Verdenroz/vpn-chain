@@ -3,7 +3,10 @@ package com.verdenroz.vpnchain.core.update
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
+import okio.Buffer
 import okio.BufferedSink
+import okio.ForwardingSink
+import okio.Sink
 import okio.FileSystem
 import okio.HashingSink
 import okio.IOException
@@ -12,11 +15,12 @@ import okio.blackholeSink
 import okio.buffer
 
 private const val RELEASES_URL = "https://github.com/Verdenroz/vpn-chain/releases"
+private const val MANIFEST_MAX_BYTES = 64 * 1024
 
 /** The two requests the updater makes; platforms implement them over their own HTTP stack. */
 interface ReleaseTransport {
-    /** @throws IOException on a transport failure or a non-2xx answer. */
-    suspend fun fetchText(url: String): String
+    /** @throws IOException on a transport failure, a non-2xx answer, or a body longer than [maxBytes]. */
+    suspend fun fetchText(url: String, maxBytes: Int): String
 
     /** Streams the body to [sink], reporting the bytes received so far. @throws IOException as [fetchText] does. */
     suspend fun download(
@@ -43,7 +47,7 @@ class ReleaseRepository(
 ) {
     suspend fun latest(): Result<AppRelease> =
         try {
-            Result.success(parseManifest(transport.fetchText("$RELEASES_URL/latest/download/manifest.json")))
+            Result.success(parseManifest(transport.fetchText("$RELEASES_URL/latest/download/manifest.json", MANIFEST_MAX_BYTES)))
         } catch (e: IOException) {
             Result.failure(e)
         } catch (e: SerializationException) {
@@ -75,7 +79,13 @@ class ReleaseRepository(
             if (fileSystem.exists(dest) && failureOf(dest, artifact) { digestOf(dest) } == null) return DownloadResult.Verified(dest)
             fileSystem.createDirectories(partial.parent!!)
             val hashing = HashingSink.sha256(fileSystem.sink(partial))
-            hashing.buffer().use { transport.download("$RELEASES_URL/download/v${release.versionName}/${artifact.path}", it, onProgress) }
+            val capped = CappedSink(hashing, artifact.size)
+            try {
+                capped.buffer().use { transport.download("$RELEASES_URL/download/v${release.versionName}/${artifact.path}", it, onProgress) }
+            } catch (e: IOException) {
+                if (capped.overrun) return DownloadResult.Failed(DownloadFailure.WrongSize)
+                throw e
+            }
             failureOf(partial, artifact) { hashing.hash.hex() }?.let { return DownloadResult.Failed(it) }
             fileSystem.atomicMove(partial, dest)
             return DownloadResult.Verified(dest)
@@ -105,6 +115,22 @@ class ReleaseRepository(
             sha256() != artifact.sha256.lowercase() -> DownloadFailure.WrongDigest
             else -> null
         }
+
+    /** Stops a download once it outgrows the manifest's size, rather than filling the disk first. */
+    private class CappedSink(delegate: Sink, private val limit: Long) : ForwardingSink(delegate) {
+        private var written = 0L
+        var overrun = false
+            private set
+
+        override fun write(source: Buffer, byteCount: Long) {
+            written += byteCount
+            if (written > limit) {
+                overrun = true
+                throw IOException("The download is larger than the release says")
+            }
+            super.write(source, byteCount)
+        }
+    }
 
     private fun digestOf(file: Path): String {
         val hashing = HashingSink.sha256(blackholeSink())

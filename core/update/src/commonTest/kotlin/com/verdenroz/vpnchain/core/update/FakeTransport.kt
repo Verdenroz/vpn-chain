@@ -11,9 +11,11 @@ internal class FakeTransport(
 ) : ReleaseTransport {
     val requested = mutableListOf<String>()
 
-    override suspend fun fetchText(url: String): String {
+    override suspend fun fetchText(url: String, maxBytes: Int): String {
         requested += url
-        return pages[url] ?: throw IOException("HTTP 404")
+        val page = pages[url] ?: throw IOException("HTTP 404")
+        if (page.encodeUtf8().size > maxBytes) throw IOException("too large")
+        return page
     }
 
     override suspend fun download(url: String, sink: BufferedSink, onProgress: (Long) -> Unit) {
