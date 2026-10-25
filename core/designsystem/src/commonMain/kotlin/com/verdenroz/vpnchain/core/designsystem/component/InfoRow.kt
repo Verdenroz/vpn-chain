@@ -85,7 +85,7 @@ fun InfoRow(
                 Text(
                     note,
                     style = MaterialTheme.typography.labelSmall,
-                    color = colors.inkMuted.copy(alpha = 0.8f),
+                    color = colors.inkMuted,
                     maxLines = 1,
                     modifier = Modifier.padding(start = 8.dp),
                 )
