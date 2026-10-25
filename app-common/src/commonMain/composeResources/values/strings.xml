@@ -7,4 +7,17 @@
     <string name="status_connected">Connected</string>
     <string name="status_connecting">Connecting</string>
     <string name="status_unprotected">Not protected</string>
+    <string name="update_available">Update %1$s</string>
+    <string name="update_downloading">Downloading %1$d%%</string>
+    <string name="update_installing">Installing</string>
+    <string name="update_allow_installs">Allow installs to update</string>
+    <string name="update_restart">Restart to finish</string>
+    <string name="update_failed_network">Download failed</string>
+    <string name="update_corrupt">Download did not verify</string>
+    <string name="update_no_build">No build for this device</string>
+    <string name="update_failed_install">Install failed</string>
+    <string name="update_install">Install</string>
+    <string name="update_open_settings">Settings</string>
+    <string name="update_retry">Retry</string>
+    <string name="update_dismiss">Later</string>
 </resources>

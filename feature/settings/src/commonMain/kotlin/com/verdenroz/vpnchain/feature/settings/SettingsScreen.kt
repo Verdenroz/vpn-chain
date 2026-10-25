@@ -56,6 +56,7 @@ import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.ui.ScreenTitle
 import com.verdenroz.vpnchain.core.ui.SectionCard
 import com.verdenroz.vpnchain.core.ui.asString
+import com.verdenroz.vpnchain.feature.settings.component.AboutSection
 import com.verdenroz.vpnchain.feature.settings.component.DnsFilterPicker
 import com.verdenroz.vpnchain.feature.settings.component.LearnedSites
 import com.verdenroz.vpnchain.feature.settings.component.ProfileForm
@@ -531,6 +532,8 @@ fun SettingsScreen(
             SectionCard(title = stringResource(Res.string.settings_appearance_title)) {
                 ThemePicker(selected = uiState.settings.themeConfig, onSelect = onSelectTheme)
             }
+
+            AboutSection()
         }
         SnackbarHost(snackbarHostState)
     }

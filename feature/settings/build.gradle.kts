@@ -14,6 +14,7 @@ kotlin {
             implementation(libs.compose.components.resources)
             implementation(projects.core.common)
             implementation(projects.core.config)
+            implementation(projects.core.update)
         }
         desktopMain.dependencies {
             // QR generation for pairing with the Android app — pure-Java, no AWT/Android deps.
