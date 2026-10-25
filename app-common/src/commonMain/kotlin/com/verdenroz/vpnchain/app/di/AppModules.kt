@@ -20,7 +20,7 @@ private val appModule = module {
  */
 val engineModules: List<Module> = listOf(domainModule)
 
-/** Screens, ViewModels and the updater; only loaded where there is a window. */
+/** Screens, ViewModels and the updater, which a headless engine process leaves out. */
 val uiModules: List<Module> = listOf(
     updateModule,
     chainFeatureModule,
