@@ -19,6 +19,7 @@ CONF="${1:-}"
 # Default SSH target derives from the runtime secrets (VPS_IP), so no infra
 # details are baked into the repo. Override by passing user@host as $2.
 SECRETS_FILE="${VPN_CHAIN_SECRETS:-$HOME/.config/vpn-chain/secrets.env}"
+# shellcheck source=/dev/null
 [ -f "$SECRETS_FILE" ] && . "$SECRETS_FILE"
 SSH_TARGET="${2:-root@${VPS_IP:-}}"
 SSH_KEY="${VPN_CHAIN_SSH_KEY:-$HOME/.ssh/id_1984_relay}"
@@ -40,15 +41,16 @@ ENDPOINT="$(ini_get Endpoint)"
 EP_HOST="${ENDPOINT%%:*}"; EP_PORT="${ENDPOINT##*:}"
 log "Parsed new Proton config (endpoint $EP_HOST:$EP_PORT, address $ADDR). Key stays hidden."
 
-SSH=(ssh -i "$SSH_KEY" -o ConnectTimeout=12 "$SSH_TARGET")
+if [ -n "${VPN_CHAIN_REMOTE:-}" ]; then read -ra SSH <<<"$VPN_CHAIN_REMOTE"; else SSH=(ssh -i "$SSH_KEY" -o ConnectTimeout=12 "$SSH_TARGET"); fi
 
-# Patch the proton outbound on the server. Values arrive via stdin env, not argv,
-# so the private key never appears in the remote process list.
+# Patch the proton outbound on the server. The values are streamed ahead of the
+# script on stdin, so the private key never appears in any argv, local or remote.
 log "Updating $XRAY_CONFIG on $SSH_TARGET and restarting xray..."
-PRIV="$PRIV" ADDR="$ADDR" PEER_PUB="$PEER_PUB" EP_HOST="$EP_HOST" EP_PORT="$EP_PORT" \
-"${SSH[@]}" "PRIV='$PRIV' ADDR='$ADDR' PEER_PUB='$PEER_PUB' EP_HOST='$EP_HOST' EP_PORT='$EP_PORT' bash -s" <<'REMOTE'
+{
+    printf 'PRIV=%q ADDR=%q PEER_PUB=%q EP_HOST=%q EP_PORT=%q\n' "$PRIV" "$ADDR" "$PEER_PUB" "$EP_HOST" "$EP_PORT"
+    cat <<'REMOTE'
 set -euo pipefail
-CFG=/usr/local/etc/xray/config.json
+CFG="${CFG:-/usr/local/etc/xray/config.json}"
 cp "$CFG" "${CFG}.bak.$(date +%s 2>/dev/null || echo rotate)"
 # xray detects config format from the file extension, so the temp file must end in .json.
 tmp="$(mktemp --suffix=.json)"
@@ -59,17 +61,18 @@ jq --arg sk "$PRIV" --arg addr "$ADDR" --arg pk "$PEER_PUB" --arg ep "${EP_HOST}
      | .peers[0].publicKey = $pk
      | .peers[0].endpoint = $ep)
 ' "$CFG" > "$tmp"
-if ! err="$(xray -test -config "$tmp" 2>&1)"; then
+if ! err="$("${XRAY:-xray}" -test -config "$tmp" 2>&1)"; then
     echo "new config failed validation; not applying:"; echo "$err" | tail -5
     rm -f "$tmp"; exit 1
 fi
 mv "$tmp" "$CFG"
 chmod 644 "$CFG"   # mktemp makes 600; xray's non-root service user must be able to read it
-systemctl restart xray
-sleep 2
-systemctl is-active --quiet xray || { echo "xray failed to start"; exit 1; }
+bash -c "${RELOAD_CMD:-systemctl restart xray}"
+sleep "${SETTLE:-2}"
+bash -c "${ACTIVE_CMD:-systemctl is-active --quiet xray}" || { echo "xray failed to start"; exit 1; }
 echo "xray restarted with rotated Proton key."
 REMOTE
+} | "${SSH[@]}" bash -s
 
 log "Done. Verify the exit IP changed:"
 log "  curl --socks5-hostname 127.0.0.1:1080 https://api.ipify.org   (with the relay up)"
