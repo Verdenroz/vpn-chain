@@ -29,6 +29,7 @@ import com.verdenroz.vpnchain.core.tunnel.di.tunnelModule
 import com.verdenroz.vpnchain.core.warp.di.warpModule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.map
+import org.koin.core.Koin
 import org.koin.dsl.module
 
 val dataModule = module {
@@ -54,9 +55,7 @@ val dataModule = module {
             logger = get(),
         )
     }
-    // Eager, like the repositories it watches: detection has to be listening
-    // before the first connection, not from first UI resolution.
-    single(createdAtStart = true) {
+    single {
         SiteLearner(
             feed = get(),
             prober = get(),
@@ -72,9 +71,7 @@ val dataModule = module {
     }
     // Named rather than positional: every collaborator here is resolved by a
     // bare get(), so a reordered parameter would bind silently and wrongly.
-    // Eager: it has to be watching for out-of-app stops (Android's notification
-    // key, an OS revoke) before one happens, not from first UI resolution.
-    single<ChainRepository>(createdAtStart = true) {
+    single<ChainRepository> {
         DefaultChainRepository(
             controller = get(),
             profileRepository = get(),
@@ -87,11 +84,26 @@ val dataModule = module {
             scope = get<CoroutineScope>(applicationScopeQualifier),
         )
     }
-    single<LogRepository>(createdAtStart = true) {
+    single<LogRepository> {
         DefaultLogRepository(
             controller = get(),
             scope = get<CoroutineScope>(applicationScopeQualifier),
             now = ::currentTimeMillis,
         )
     }
+}
+
+/**
+ * Resolves the data layer's watchers, which act without a screen open. Called
+ * by the engine's start, not on its own.
+ *
+ * - [SiteLearner] has to be listening before the first connection.
+ * - [ChainRepository] has to be watching for out-of-app stops (Android's
+ *   notification key, an OS revoke) before one happens.
+ * - [LogRepository] buffers tunnel output from the first line.
+ */
+fun startDataWatchers(koin: Koin) {
+    koin.get<SiteLearner>()
+    koin.get<ChainRepository>()
+    koin.get<LogRepository>()
 }

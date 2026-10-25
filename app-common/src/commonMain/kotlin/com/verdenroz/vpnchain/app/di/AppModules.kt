@@ -15,12 +15,13 @@ private val appModule = module {
 }
 
 /**
- * The full Koin graph, minus the platform DataStore binding which each app
- * supplies (Android needs `androidContext`). Pass alongside platform modules to
- * `startKoin`.
+ * The headless half of the graph: profiles, settings, the tunnel and the use
+ * cases over them. Start it with `startEngine` once Koin is up.
  */
-val appModules: List<Module> = listOf(
-    domainModule,
+val engineModules: List<Module> = listOf(domainModule)
+
+/** Screens, ViewModels and the updater; only loaded where there is a window. */
+val uiModules: List<Module> = listOf(
     updateModule,
     chainFeatureModule,
     settingsFeatureModule,

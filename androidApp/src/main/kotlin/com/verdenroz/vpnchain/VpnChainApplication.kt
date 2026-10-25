@@ -2,9 +2,11 @@ package com.verdenroz.vpnchain
 
 import android.app.Application
 import androidx.glance.appwidget.updateAll
-import com.verdenroz.vpnchain.app.di.appModules
+import com.verdenroz.vpnchain.app.di.engineModules
+import com.verdenroz.vpnchain.app.di.uiModules
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
+import com.verdenroz.vpnchain.core.domain.di.startEngine
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.notification.ChainNotificationUpdater
 import com.verdenroz.vpnchain.widget.ChainControlsWidget
@@ -32,11 +34,12 @@ class VpnChainApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        startKoin {
+        val koin = startKoin {
             androidLogger()
             androidContext(this@VpnChainApplication)
-            modules(appModules)
-        }
+            modules(engineModules + uiModules)
+        }.koin
+        startEngine(koin)
         pushChainStateToWidgets()
         ChainNotificationUpdater(this, get(), get()).start(appScope)
     }
