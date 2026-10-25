@@ -3,9 +3,11 @@ package com.verdenroz.vpnchain.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.verdenroz.vpnchain.core.data.ChainRepository
+import com.verdenroz.vpnchain.core.config.WireGuardConfParser
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
+import com.verdenroz.vpnchain.core.domain.ImportWireGuardConfUseCase
 import com.verdenroz.vpnchain.core.domain.SwitchProfileUseCase
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
@@ -53,6 +55,7 @@ class SettingsViewModel(
     private val profileRepository: ProfileRepository,
     private val settingsRepository: SettingsRepository,
     private val importProfile: ImportProfileUseCase,
+    private val importWireGuardConf: ImportWireGuardConfUseCase,
     private val switchProfile: SwitchProfileUseCase,
     private val chainRepository: ChainRepository,
 ) : ViewModel() {
@@ -173,10 +176,31 @@ class SettingsViewModel(
     }
 
     fun importSecretsEnv(text: String) = viewModelScope.launch {
+        if (WireGuardConfParser.looksLikeConf(text)) {
+            importConf(text, intoActive = false)
+            return@launch
+        }
         importProfile(text).fold(
             onSuccess = {
                 _message.value = SettingsMessage.Info(
                     UiText.Resource(Res.string.settings_imported_profile, listOf(it.vpsIp)),
+                )
+            },
+            onFailure = {
+                _message.value = SettingsMessage.Error(
+                    it.message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.settings_import_failed),
+                )
+            },
+        )
+    }
+
+    fun importAsEntryHop(text: String) = viewModelScope.launch { importConf(text, intoActive = true) }
+
+    private suspend fun importConf(text: String, intoActive: Boolean) {
+        importWireGuardConf(text, intoActive).fold(
+            onSuccess = {
+                _message.value = SettingsMessage.Info(
+                    UiText.Resource(Res.string.settings_imported_profile, listOf(it.endpointHost)),
                 )
             },
             onFailure = {

@@ -39,6 +39,7 @@ import com.verdenroz.vpnchain.core.common.Platform
 import com.verdenroz.vpnchain.core.common.currentPlatform
 import com.verdenroz.vpnchain.core.common.systemTrayAvailable
 import com.verdenroz.vpnchain.core.config.SecretsEnvParser
+import com.verdenroz.vpnchain.core.config.WireGuardConfParser
 import com.verdenroz.vpnchain.core.designsystem.component.IndicatorLamp
 import com.verdenroz.vpnchain.core.designsystem.component.PanelButton
 import com.verdenroz.vpnchain.core.designsystem.component.PanelField
@@ -87,6 +88,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_from_disk
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_hint_android
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_hint_desktop
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_as_entry_hop
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_pasted
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_title
@@ -158,6 +160,7 @@ fun SettingsRoute(
         onSaveProfile = viewModel::saveProfile,
         onClearProfile = viewModel::clearProfile,
         onImportText = viewModel::importSecretsEnv,
+        onImportAsEntryHop = viewModel::importAsEntryHop,
         onImportDefault = viewModel::importDefaultSecretsEnv,
         onScanQr = scanQr,
         onToggleSystemWide = viewModel::setSystemWideTun,
@@ -186,6 +189,7 @@ fun SettingsScreen(
     onSaveProfile: (ChainProfile, WireGuardEntry?) -> Unit,
     onClearProfile: () -> Unit,
     onImportText: (String) -> Unit,
+    onImportAsEntryHop: (String) -> Unit,
     onImportDefault: () -> Unit,
     onScanQr: () -> Unit,
     onToggleSystemWide: (Boolean) -> Unit,
@@ -290,6 +294,7 @@ fun SettingsScreen(
                     Spacer(Modifier.height(16.dp))
                     ImportSection(
                         onImportText = onImportText,
+                        onImportAsEntryHop = onImportAsEntryHop.takeIf { uiState.profile?.relay != null },
                         onImportDefault = onImportDefault,
                         onScanQr = onScanQr,
                     )
@@ -569,6 +574,7 @@ private fun AlwaysOnGuidance(detected: Boolean, onOpenSystemVpnSettings: () -> U
 @Composable
 private fun ImportSection(
     onImportText: (String) -> Unit,
+    onImportAsEntryHop: ((String) -> Unit)?,
     onImportDefault: () -> Unit,
     onScanQr: () -> Unit,
 ) {
@@ -610,6 +616,12 @@ private fun ImportSection(
                 enabled = pasted.isNotBlank(),
                 prominent = currentPlatform == Platform.Desktop,
             )
+            if (onImportAsEntryHop != null && WireGuardConfParser.looksLikeConf(pasted)) {
+                PanelButton(
+                    text = stringResource(Res.string.settings_import_as_entry_hop),
+                    onClick = { onImportAsEntryHop(pasted) },
+                )
+            }
             if (currentPlatform == Platform.Desktop) {
                 PanelButton(text = stringResource(Res.string.settings_import_from_disk), onClick = onImportDefault)
             }

@@ -51,10 +51,11 @@
     <string name="settings_appearance_title">appearance</string>
     <string name="settings_always_on_active">Always-on VPN is active. The network is blocked if the tunnel drops.</string>
     <string name="settings_always_on_not_armed">Not armed yet. Turn on Always-on VPN for this app, plus &quot;Block connections without VPN&quot;.</string>
-    <string name="settings_import_hint_desktop">Paste the CLI's secrets.env below.</string>
-    <string name="settings_import_hint_android">Scan a QR code from the desktop app, or paste secrets.env text below.</string>
+    <string name="settings_import_hint_desktop">Paste the CLI's secrets.env or a WireGuard .conf below.</string>
+    <string name="settings_import_hint_android">Scan a QR code from the desktop app, or paste secrets.env or WireGuard .conf text below.</string>
     <string name="settings_secrets_env_label">secrets.env</string>
     <string name="settings_import_pasted">import pasted</string>
+    <string name="settings_import_as_entry_hop">use as entry hop</string>
     <string name="settings_import_from_disk">import from disk</string>
     <string name="settings_scan_qr">scan qr</string>
     <string name="settings_show_qr">show qr</string>

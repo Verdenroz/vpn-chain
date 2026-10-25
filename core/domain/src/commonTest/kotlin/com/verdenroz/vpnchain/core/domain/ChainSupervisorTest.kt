@@ -411,6 +411,8 @@ private class FakeProfileRepository : ProfileRepository {
     override suspend fun setActive(id: String) = Unit
     override suspend fun clear() = Unit
     override suspend fun importFromSecretsEnv(text: String) = Result.success(SUPERVISED_RELAY)
+    override suspend fun importWireGuardConf(text: String, intoActive: Boolean) =
+        Result.failure<WireGuardEntry>(IllegalStateException("not used"))
 }
 
 private class FakeSettingsRepository(value: UserSettings) : SettingsRepository {

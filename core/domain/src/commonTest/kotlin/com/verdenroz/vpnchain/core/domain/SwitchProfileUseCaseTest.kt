@@ -100,6 +100,8 @@ private class RecordingProfiles(private val log: MutableList<String>) : ProfileR
     }
     override suspend fun clear() = Unit
     override suspend fun importFromSecretsEnv(text: String) = Result.failure<ChainProfile>(IllegalStateException())
+    override suspend fun importWireGuardConf(text: String, intoActive: Boolean) =
+        Result.failure<WireGuardEntry>(IllegalStateException("not used"))
 }
 
 private class RecordingChain(

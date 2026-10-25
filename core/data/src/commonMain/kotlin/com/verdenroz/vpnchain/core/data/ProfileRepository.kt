@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.data
 
 import com.verdenroz.vpnchain.core.config.SecretsEnvParser
+import com.verdenroz.vpnchain.core.config.WireGuardConfParser
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.SavedProfile
@@ -34,6 +35,13 @@ interface ProfileRepository {
     suspend fun clear()
 
     suspend fun importFromSecretsEnv(text: String): Result<ChainProfile>
+
+    /**
+     * Imports a WireGuard `.conf`. With [intoActive] it becomes the entry hop of
+     * the active connection when that has a relay; otherwise it is added as a
+     * connection of its own, and becomes active.
+     */
+    suspend fun importWireGuardConf(text: String, intoActive: Boolean): Result<WireGuardEntry>
 }
 
 internal class DefaultProfileRepository(
@@ -90,6 +98,16 @@ internal class DefaultProfileRepository(
         SecretsEnvParser.parse(text)
             .onSuccess { add(name = it.relay.vpsIp, relay = it.relay, wireGuard = it.entryHop) }
             .map { it.relay }
+
+    override suspend fun importWireGuardConf(text: String, intoActive: Boolean): Result<WireGuardEntry> =
+        WireGuardConfParser.parse(text).onSuccess { entry ->
+            val relay = preferences.profile.first()?.relay
+            if (intoActive && relay != null) {
+                save(relay, entry)
+            } else {
+                add(name = entry.endpointHost, relay = null, wireGuard = entry)
+            }
+        }
 }
 
 /**
