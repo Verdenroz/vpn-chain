@@ -14,6 +14,9 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.core)
         }
+        // Both targets are JVM, so code that needs only java.* is compiled into each.
+        androidMain { kotlin.srcDir("src/jvmShared/kotlin") }
+        desktopMain { kotlin.srcDir("src/jvmShared/kotlin") }
         // Tink supplies X25519 on both targets: the JDK's own XDH provider only
         // exists on Android 13+, and this app supports 8.0 upward.
         androidMain.dependencies {
