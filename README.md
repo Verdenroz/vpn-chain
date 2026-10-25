@@ -166,3 +166,12 @@ and `ANDROID_KEY_PASSWORD`:
 keytool -genkeypair -v -keystore release.jks -alias vpn-chain \
   -keyalg RSA -keysize 4096 -validity 10000
 ```
+
+## Third-party data
+
+- `core/warp/src/jvmShared/resources/vpnchain/public_suffix_list.dat` is the
+  [Public Suffix List](https://publicsuffix.org/), unmodified, under the
+  [Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/) (its notice is
+  at the top of the file). Blocked-site detection reads it to tell a site's
+  registrable domain from a shared host's tenants. To update it, replace the
+  file with a fresh copy from https://publicsuffix.org/list/public_suffix_list.dat.

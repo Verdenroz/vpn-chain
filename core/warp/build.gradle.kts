@@ -3,7 +3,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-android { namespace = "com.verdenroz.vpnchain.core.warp" }
+android {
+    namespace = "com.verdenroz.vpnchain.core.warp"
+    // The Public Suffix List, read as a Java resource on both JVM targets.
+    sourceSets["main"].resources.srcDir("src/jvmShared/resources")
+}
 
 kotlin {
     sourceSets {
@@ -16,7 +20,10 @@ kotlin {
         }
         // Both targets are JVM, so code that needs only java.* is compiled into each.
         androidMain { kotlin.srcDir("src/jvmShared/kotlin") }
-        desktopMain { kotlin.srcDir("src/jvmShared/kotlin") }
+        desktopMain {
+            kotlin.srcDir("src/jvmShared/kotlin")
+            resources.srcDir("src/jvmShared/resources")
+        }
         // Tink supplies X25519 on both targets: the JDK's own XDH provider only
         // exists on Android 13+, and this app supports 8.0 upward.
         androidMain.dependencies {
