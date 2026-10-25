@@ -46,6 +46,7 @@ import com.verdenroz.vpnchain.core.designsystem.component.PanelField
 import com.verdenroz.vpnchain.core.designsystem.component.PanelToggle
 import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.ConnectionKind
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.WarpMode
@@ -89,6 +90,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_hint_android
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_hint_desktop
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_as_entry_hop
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_delete
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_wireguard_summary
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_pasted
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_title
@@ -210,6 +213,8 @@ fun SettingsScreen(
 ) {
     val colors = PanelTheme.colors
     val hasProfile = uiState.profile != null
+    // The relay form would attach a relay to it, which only a relay import may do.
+    val wireGuardOnly = uiState.profile?.kind == ConnectionKind.WireGuard
     // Import is the primary path for a fresh install; once a profile exists it
     // collapses back to a summary so re-importing is a deliberate action.
     var importExpanded by remember(hasProfile) { mutableStateOf(!hasProfile) }
@@ -249,7 +254,14 @@ fun SettingsScreen(
 
             SectionCard(title = stringResource(Res.string.settings_chain_identity_title)) {
                 Text(
-                    if (hasProfile) {
+                    if (wireGuardOnly) {
+                        val profile = uiState.profile
+                        stringResource(
+                            Res.string.settings_wireguard_summary,
+                            profile?.name.orEmpty(),
+                            "${profile?.host}:${profile?.wireGuard?.endpointPort}",
+                        )
+                    } else if (hasProfile) {
                         stringResource(Res.string.settings_configured_for, uiState.profile?.host.orEmpty())
                     } else {
                         stringResource(Res.string.settings_no_profile_yet)
@@ -268,17 +280,24 @@ fun SettingsScreen(
                         onClick = { importExpanded = !importExpanded },
                         prominent = !hasProfile,
                     )
-                    PanelButton(
-                        text = when {
-                            formExpanded -> stringResource(Res.string.settings_hide_fields)
-                            hasProfile -> stringResource(Res.string.settings_edit_fields)
-                            else -> stringResource(Res.string.settings_enter_manually)
-                        },
-                        onClick = { formExpanded = !formExpanded },
-                    )
+                    if (wireGuardOnly) {
+                        PanelButton(
+                            text = stringResource(Res.string.settings_profile_delete),
+                            onClick = { uiState.activeProfileId?.let(onDeleteProfile) },
+                        )
+                    } else {
+                        PanelButton(
+                            text = when {
+                                formExpanded -> stringResource(Res.string.settings_hide_fields)
+                                hasProfile -> stringResource(Res.string.settings_edit_fields)
+                                else -> stringResource(Res.string.settings_enter_manually)
+                            },
+                            onClick = { formExpanded = !formExpanded },
+                        )
+                    }
                     // Pairing source, not a sink — only worth offering once there's a
                     // profile to show, and only desktop can render one.
-                    if (hasProfile && currentPlatform == Platform.Desktop) {
+                    if (hasProfile && !wireGuardOnly && currentPlatform == Platform.Desktop) {
                         PanelButton(
                             text = if (qrExpanded) {
                                 stringResource(Res.string.settings_hide_qr)
@@ -299,7 +318,7 @@ fun SettingsScreen(
                         onScanQr = onScanQr,
                     )
                 }
-                Reveal(visible = formExpanded) {
+                Reveal(visible = formExpanded && !wireGuardOnly) {
                     Spacer(Modifier.height(16.dp))
                     ProfileForm(
                         initial = uiState.profile,

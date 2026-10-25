@@ -4,6 +4,7 @@ import com.verdenroz.vpnchain.core.config.SecretsEnvParser
 import com.verdenroz.vpnchain.core.config.WireGuardConfParser
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.ConnectionKind
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +23,11 @@ interface ProfileRepository {
     val profile: Flow<SavedProfile?>
     val activeProfileId: Flow<String?>
 
-    /** Replaces the active profile's relay and entry hop in place, keeping its id and name. */
+    /**
+     * Replaces the active profile's relay and entry hop in place, keeping its id
+     * and name. A WireGuard-only profile is never given a relay this way: the
+     * relay is added as a connection of its own.
+     */
     suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?)
 
     /** @return the id of the newly added profile, which becomes active. */
@@ -56,7 +61,8 @@ internal class DefaultProfileRepository(
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) {
         val saved = preferences.profiles.first()
         val activeId = preferences.activeProfileId.first()
-        if (saved.isEmpty() || activeId == null) {
+        val active = saved.firstOrNull { it.id == activeId }
+        if (active == null || active.kind == ConnectionKind.WireGuard) {
             add(name = relay.vpsIp, relay = relay, wireGuard = entryHop)
             return
         }

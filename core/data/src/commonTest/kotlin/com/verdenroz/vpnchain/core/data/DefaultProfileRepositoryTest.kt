@@ -55,6 +55,31 @@ class DefaultProfileRepositoryTest {
     }
 
     @Test
+    fun `saving a relay cannot attach it to a wireguard only profile`() = runTest {
+        val repository = repository()
+        repository.importWireGuardConf(CONF, intoActive = false)
+        val wireGuardId = repository.activeProfileId.first()
+
+        repository.save(RELAY, null)
+
+        val profiles = repository.profiles.first()
+        val original = profiles.single { it.id == wireGuardId }
+        assertEquals(ConnectionKind.WireGuard, original.kind)
+        assertNull(original.relay)
+        assertEquals(listOf(ConnectionKind.WireGuard, ConnectionKind.Relay), profiles.map { it.kind })
+    }
+
+    @Test
+    fun `importing a relay leaves a wireguard only profile intact`() = runTest {
+        val repository = repository()
+        repository.importWireGuardConf(CONF, intoActive = false)
+
+        repository.importFromSecretsEnv("VPS_IP=198.51.100.1\nVLESS_UUID=u\nREALITY_PUBKEY=k\nSHORT_ID=ab")
+
+        assertEquals(listOf(ConnectionKind.WireGuard, ConnectionKind.Relay), repository.profiles.first().map { it.kind })
+    }
+
+    @Test
     fun `a bad conf changes nothing`() = runTest {
         val repository = repository()
 
