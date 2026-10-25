@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.engine
 
+import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.model.TunnelState
 import java.net.StandardProtocolFamily
 import java.net.UnixDomainSocketAddress
@@ -16,6 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -141,13 +143,45 @@ class ControlSocketTest {
     @Test
     fun `the engine refuses a client speaking another protocol`() {
         serve()
-        val reply = SocketChannel.open(UnixDomainSocketAddress.of(paths.socket)).use { channel ->
-            val lines = LineChannel(channel)
-            lines.writeLine(engineJson.encodeToString(ClientMessage(1, Request.Hello(PROTOCOL_VERSION + 1))))
-            engineJson.decodeFromString<ServerMessage>(lines.readLine()!!).reply
-        }
+        val reply = rawExchange(ClientMessage(1, Request.Hello(PROTOCOL_VERSION + 1)))
         assertEquals(FailureCode.Version, assertIs<Reply.Failure>(reply).code)
     }
+
+    @Test
+    fun `a request must follow a hello`() {
+        serve()
+        val reply = rawExchange(ClientMessage(1, Request.Status))
+        assertEquals(FailureCode.BadRequest, assertIs<Reply.Failure>(reply).code)
+    }
+
+    @Test
+    fun `a garbled line does not cancel a connect underway`() {
+        val chain = FakeChainRepository()
+        val dial = CompletableDeferred<Unit>()
+        val slow = object : ChainRepository by chain {
+            override suspend fun connect(): Result<Unit> = dial.await().let { chain.connect() }
+        }
+        ControlServer(handlerOver(slow, profiles, logs), paths, "1.2.3", scope, SilentLogger)
+            .start(EngineLock.tryAcquire(paths.lock)!!)
+        val reply = SocketChannel.open(UnixDomainSocketAddress.of(paths.socket)).use { channel ->
+            val lines = LineChannel(channel)
+            lines.writeLine(engineJson.encodeToString(ClientMessage(1, Request.Hello(PROTOCOL_VERSION))))
+            lines.readLine()
+            lines.writeLine(engineJson.encodeToString(ClientMessage(2, Request.Up())))
+            lines.writeLine("not json")
+            dial.complete(Unit)
+            engineJson.decodeFromString<ServerMessage>(lines.readLine()!!).reply
+        }
+        assertEquals(Reply.Ok, reply)
+        assertEquals(TunnelState.Connected, chain.status.value.state)
+    }
+
+    private fun rawExchange(message: ClientMessage): Reply =
+        SocketChannel.open(UnixDomainSocketAddress.of(paths.socket)).use { channel ->
+            val lines = LineChannel(channel)
+            lines.writeLine(engineJson.encodeToString(message))
+            engineJson.decodeFromString<ServerMessage>(lines.readLine()!!).reply
+        }
 
     @Test
     fun `a client refuses an engine speaking another protocol`() {

@@ -44,7 +44,7 @@ class EngineHandler(
         is Request.Use -> withProfile(request.profile) { switchProfile(it.id).toReply() }
         is Request.Logs -> {
             val entries = logs.entries.value
-            Reply.Logs((request.limit?.let(entries::takeLast) ?: entries).map(LogEntry::toWire))
+            Reply.Logs((request.limit?.let { entries.takeLast(it.coerceAtLeast(0)) } ?: entries).map(LogEntry::toWire))
         }
     }
 

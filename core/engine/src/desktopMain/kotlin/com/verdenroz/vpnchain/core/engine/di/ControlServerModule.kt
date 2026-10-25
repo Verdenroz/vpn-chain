@@ -44,7 +44,12 @@ val controlServerModule = module {
 fun startHostedEngine(koin: Koin) {
     val paths = koin.get<EnginePaths>()
     val logger = koin.get<Logger>()
-    val lock = EngineLock.tryAcquire(paths.lock)
+    val lock = try {
+        EngineLock.tryAcquire(paths.lock)
+    } catch (e: IOException) {
+        logger.e(TAG, "cannot open ${paths.lock}", e)
+        null
+    }
     startEngine(koin)
     if (lock == null) {
         logger.w(TAG, "another vpn-chain engine holds ${paths.lock}; not serving ${paths.socket}")

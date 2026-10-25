@@ -79,7 +79,7 @@ class EngineClient private constructor(private val lines: LineChannel) : Closeab
             return EngineClient(LineChannel(channel)).apply {
                 try {
                     handshake(appVersion)
-                } catch (e: IOException) {
+                } catch (e: Exception) {
                     close()
                     throw e
                 }

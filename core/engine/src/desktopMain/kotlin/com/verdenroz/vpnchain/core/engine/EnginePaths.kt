@@ -8,11 +8,9 @@ class EnginePaths(val runtimeDir: Path, val configDir: Path) {
     val lock: Path get() = configDir.resolve("engine.lock")
 
     companion object {
-        fun system(env: (String) -> String? = System::getenv): EnginePaths = EnginePaths(
-            runtimeDir = Path.of(
-                env("XDG_RUNTIME_DIR")?.takeIf(String::isNotEmpty) ?: System.getProperty("java.io.tmpdir"),
-                "vpn-chain",
-            ),
+        fun system(): EnginePaths = EnginePaths(
+            // Same directory DesktopTunnelController keeps relay.pid in.
+            runtimeDir = Path.of(System.getenv("XDG_RUNTIME_DIR") ?: "/tmp", "vpn-chain"),
             configDir = Path.of(System.getProperty("user.home"), ".config", "vpn-chain"),
         )
     }
