@@ -34,7 +34,7 @@ PIDFILE="$RUNDIR/relay.pid"
 STATEFILE="$RUNDIR/relay.state"                       # written by the GUI, cleared here
 LOGFILE="$RUNDIR/relay.log"
 KILLSWITCH_BIN="${VPN_CHAIN_KILLSWITCH_BIN:-vpn-chain-killswitch}"
-RELAY_UNIT="vpn-chain-relay"
+RELAY_UNIT="vpn-chain-relay.service"
 PROXY="127.0.0.1:1080"
 ENTRY_IF="proton0"                                   # interface the entry VPN app creates
 
