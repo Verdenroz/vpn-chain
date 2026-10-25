@@ -71,7 +71,7 @@ Cloudflare would otherwise see the VPS's unique address against every
 destination. Two invariants worth keeping: the endpoint always
 carries `detour` to the relay outbound (dialled through the chain, never
 around it — on desktop a bare-link handshake is rejected by the kill switch),
-and it is never added to the kill switch's exemption list. Read
+and it is never added to the kill switch's exemption list. Sites are learned by probing through loopback-only inbounds, and a site both exits refuse may fail open past the relay. Read
 **[docs/warp-exit.md](docs/warp-exit.md)** before changing it. Note that
 `RelayConfig` now distinguishes endpoints *by tag*: both hops are WireGuard,
 so "a wireguard endpoint exists" no longer means "an entry hop exists".

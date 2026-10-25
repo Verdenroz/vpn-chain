@@ -62,6 +62,13 @@ exemptions, and (by default) local networks.
   sing-box crashes and `tun0` stops existing; leaked traffic then falls back
   to the physical link, where only the VPS/entry IPs still get through and
   everything else is rejected.
+- **Direct traffic is not exempt.** sing-box's own `direct` outbound dials the
+  destination on the physical link, which the table rejects like any other
+  packet. That matters only to [failing open](warp-exit.md#failing-open) on a
+  chain with no entry hop, whose fallback path is `direct`: with the kill
+  switch armed the path does not carry, so such sites stay on the relay. No
+  exemption is added for it. Failing open to an entry hop needs none, since
+  the entry peer is already exempt.
 - **Local networks are exempt by default.** RFC1918 and link-local
   destinations are accepted, so Docker bridges, LAN hosts and printers stay
   reachable while the chain is up. Without it the `reject` RSTs

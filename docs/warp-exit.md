@@ -21,14 +21,16 @@ sees the relay's address — never the device's.
 | Mode | What routes through WARP |
 |---|---|
 | `off` | Nothing. Traffic exits from the VPS, as it did before. |
-| `blocked sites` | Exactly the domains listed in the settings field. **The default.** Suffix matches, so `example.com` covers its subdomains. |
+| `blocked sites` | The domains listed in the settings field, plus the sites the chain [learns](#automatic-detection) on its own. **The default.** Suffix matches, so `example.com` covers its subdomains. |
 | `everything` | All traffic. |
 
-The domain field is seeded with the sites known to refuse the relay's address
-(Reddit's and ChatGPT's), and is then an ordinary editable list: nothing is
-merged in underneath it, so deleting an entry really does stop routing it, and
-an empty list renders no tail at all. Paste what a URL bar shows —
-`https://Example.com/path` and `*.example.com` both normalise to
+The domain field is a list of overrides: an entry always takes the tail,
+whatever detection finds, so an entry for a site the tail also refuses keeps
+it pinned there and out of reach of [failing open](#failing-open). It starts
+empty. Installs that predate automatic detection had it seeded with Reddit's
+and ChatGPT's domains; a stored list that still equals that seed exactly reads
+as empty, and one the user edited is kept as it is. Paste what a URL bar
+shows — `https://Example.com/path` and `*.example.com` both normalise to
 `example.com`.
 
 `everything` costs nothing measurable in speed — WARP rides Cloudflare's
@@ -53,8 +55,109 @@ see the trade below.
   everyone using WARP. Some sites are stricter with them than with a quiet
   VPS: expect more CAPTCHAs, and some banks and streaming services block WARP
   ranges outright. That is what `blocked sites` and `off` are for.
-- **Sites can still say no.** WARP fixed Reddit reliably in testing; ChatGPT
-  went from a hard `403` to intermittently allowed on the same shared address.
+- **Sites can still say no.** ChatGPT went from a hard `403` to intermittently
+  allowed on the shared address. Reddit refuses WARP too: a plain `GET /`
+  returns a proof-of-work interstitial, and the JSON endpoints and a real
+  browser get its "blocked by network security" page. Routing alone does not
+  fix it, which is what [failing open](#failing-open) is for.
+- **The tail is declared whenever detection is on.** The WireGuard peer keeps a
+  handshake alive through the relay, so Cloudflare sees the relay's address
+  connecting even while no site uses the tail. It learns nothing about
+  destinations from that.
+
+## Automatic detection
+
+With **Learn blocked sites** on (the default, in `blocked sites` mode), the
+chain finds the sites that refuse the relay without a list.
+
+**What is watched.** Destination names come from the engine's own connection
+data: desktop polls sing-box's clash API (`/connections`, every two seconds,
+so a connection shorter than that can be missed), and Android listens to
+libbox's connection events (`CommandConnections`). Only sniffed names count;
+bare addresses, local names and the app's own probe connections are ignored.
+Names are reduced to a registrable domain with a short list of country
+second levels (`example.co.uk`), not the public suffix list, so a rule may
+come out broader or narrower than ideal.
+
+**How a site is probed.** Each new domain is fetched once, `GET /` with a
+browser User-Agent, through two loopback-only `mixed` inbounds that sing-box
+renders with a random port and credentials per config (`probe-relay` and
+`probe-warp`). Route rules on those inbounds sit ahead of every domain rule,
+so a probe exits where it asked to whatever the lists say. At most two probes
+run at once. Nothing is probed while the chain is down, on Android while the
+screen is off or the device is in Doze (names seen then wait in a bounded
+queue), or for a domain on the manual list or one the user removed.
+
+1. The **relay** is probed first. The relay already sees every destination,
+   so this tells it nothing new. If it answers, the site is left alone.
+2. Only if the relay refuses, **WARP** is probed. Cloudflare sees that
+   destination only at that point, and the relay's address, never the device.
+3. If WARP answers, the site is **learned for WARP** and routed there.
+4. If WARP refuses too, the site is recorded as refused by both. See
+   [failing open](#failing-open).
+
+**What counts as refused.** `403`, `429` and `451`, or a known marker in a
+page that arrived whole or came with an error status: "blocked by network
+security", a Cloudflare challenge, or a `js_challenge` form field (Reddit's
+interstitial answers `200`). A long page that merely quotes a marker is not a
+block, and server errors say nothing about the address. The rules are a pure
+function over the response (`SiteClassifier`) and are tested against recorded
+samples. They are heuristics: a site that refuses every non-browser client
+reads as refused on every exit, which is why a double refusal is checked on
+the fail-open path before anything moves.
+
+**What leaks to which exit.** A domain name reaches the relay as the probe's
+connect target (it sees the destination anyway), reaches WARP only after the
+relay refused it, and reaches the fail-open path only after both did and only
+while failing open is on. Probe traffic goes nowhere else.
+
+**The cache.** A reachable verdict is kept for 12 hours and persisted (the
+most recent 2,000 domains), so a restart or Android killing the process does
+not re-probe everything. An inconclusive probe (a timeout, a server error) is
+retried after 5 minutes. A learned site stays until the user removes it;
+removing one stops it being learned again for seven days.
+
+**How a learned site takes effect.** Learned domains live in a local sing-box
+rule-set file (source format, version 1) referenced by their own route rule
+beside the manual list's, because fields inside one rule are ANDed. sing-box
+reloads a local rule-set when its file changes (checked on 1.14.3 with a
+throwaway instance, including an atomic rename), so a learned site applies to
+new connections without a reconnect. The libbox 1.13.14 shipped on Android
+contains the same file watcher, but that has not been exercised on a device,
+and the app cannot observe whether a reload fired. If it does not, a learned
+site takes effect at the next reconnect, when the files are rewritten before
+the config is rendered. The files are written atomically under
+`/run/vpn-chain` (readable through the `vpn-chain` group) or the user's
+config directory on desktop, and in libbox's working directory on Android. A
+failed write costs the learned sites, never the connect.
+
+## Failing open
+
+Some sites refuse the relay and WARP both. **Fail open when both are
+refused** (on by default) lets the chain send such a site past the relay, to
+the **entry hop alone**, or to the **bare link** (`direct`) when the profile
+has no entry hop. The site then sees the entry provider's address, or this
+network's own address, instead of the relay's. That is a deliberate step out
+of the chain, so the app says so per site: the learned-sites list and the
+chain state (`OutsideChainSite`) carry which way each site leaves.
+
+Before a site moves, the same probe is run down that path. A site that refuses
+a non-browser client wherever it comes from also fails there, and then it is
+recorded as refused on every path and stays on the relay. The fail-open probe
+inbound only exists while the setting is on.
+
+The relay still sees the DNS lookup for a site that fails open; only the
+connection leaves past it.
+
+**Kill switch.** The entry peer is already exempt from the nftables table, so
+failing open to it adds no exemption. The bare link is not: on desktop the
+kill switch rejects sing-box's own direct packets, so with it armed a
+relay-only chain's fallback probe fails and the site stays on the relay. No
+exemption is added for it; see [kill-switch.md](kill-switch.md).
+
+**Invariants.** The tail always carries `detour` to the relay outbound and is
+never in the kill switch's exemption list. The probe inbounds listen on
+loopback only.
 
 ## Credentials
 
