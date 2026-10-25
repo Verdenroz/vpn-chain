@@ -10,22 +10,27 @@ enum class OutsideExit {
 }
 
 /**
- * The way [this] leaves outside the chain under [settings], or null when it
- * still goes through the relay. Reads the topology as dialled: a disabled entry
- * hop, or desktop's proxy mode, which never dials one, reads as no entry hop.
- * There a [LearnedRoute.FailOpen] site stays on the relay, and only a site the
- * user sent [LearnedRoute.Direct] leaves by the bare link. A WireGuard-only
- * connection has no relay to bypass, so nothing on it fails open.
+ * Where a site leaving the relay goes under [settings], or null when nothing
+ * may leave it. Reads the topology as dialled: a disabled entry hop, or
+ * desktop's proxy mode, which never dials one, reads as no entry hop. A
+ * WireGuard-only connection has no relay to bypass.
  */
-fun LearnedSite.outsideExit(settings: UserSettings, profile: SavedProfile?): OutsideExit? {
-    if (route != LearnedRoute.FailOpen && route != LearnedRoute.Direct) return null
+fun SavedProfile?.outsideExitFor(settings: UserSettings): OutsideExit? {
     if (!settings.failOpenActive) return null
-    if (profile != null && !profile.supportsWarpExit) return null
+    if (this != null && !supportsWarpExit) return null
     // Android never changes this desktop-only setting, so it always reads as TUN there.
-    val entryDialled = settings.systemWideTun && profile?.effectiveFor(settings)?.wireGuard != null
-    return when {
-        entryDialled -> OutsideExit.EntryHop
-        route == LearnedRoute.Direct -> OutsideExit.Direct
-        else -> null
-    }
+    val entryDialled = settings.systemWideTun && this?.effectiveFor(settings)?.wireGuard != null
+    return if (entryDialled) OutsideExit.EntryHop else OutsideExit.Direct
+}
+
+/**
+ * The way [this] leaves outside the chain, or null when it still goes through
+ * the relay. A [LearnedRoute.FailOpen] site was checked through the entry hop
+ * and leaves only by it; only a site the user sent [LearnedRoute.Direct] may
+ * take the bare link.
+ */
+fun LearnedSite.outsideExit(settings: UserSettings, profile: SavedProfile?): OutsideExit? = when (route) {
+    LearnedRoute.Direct -> profile.outsideExitFor(settings)
+    LearnedRoute.FailOpen -> profile.outsideExitFor(settings)?.takeIf { it == OutsideExit.EntryHop }
+    else -> null
 }
