@@ -14,7 +14,6 @@ import androidx.compose.ui.unit.dp
 import com.verdenroz.vpnchain.core.designsystem.component.InfoCard
 import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 
-/** A titled group: the name sits above a card holding the contents. */
 @Composable
 fun SectionCard(
     title: String,

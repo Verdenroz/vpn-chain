@@ -14,8 +14,8 @@ private const val AMBER_HUE = 65f
 /**
  * [surface] is the card, side panel and nav rail; [land] the map's continents.
  * [connected] and [unprotected] fill the status bar and the primary button;
- * their `Text` twins are the same hues lightened (dark) or deepened (light) to
- * read as text on [surface]. [route] is the drawn connected leg.
+ * their `Text` twins (and [reroutedText]) are the same hues lightened (dark) or
+ * deepened (light) to read as text on [surface]. [route] is the drawn connected leg.
  */
 @Immutable
 data class VpnChainColors(
@@ -33,7 +33,7 @@ data class VpnChainColors(
     val connecting: Color,
     val disconnect: Color,
     val rerouted: Color,
-    val link: Color,
+    val reroutedText: Color,
     val onFilled: Color,
     val outline: Color,
     val ring: Color,
@@ -50,15 +50,15 @@ val DarkVpnChainColors = VpnChainColors(
     line = oklch(0.31f, 0.03f, NEUTRAL_HUE),
     ink = oklch(0.96f, 0.005f, NEUTRAL_HUE),
     inkMuted = oklch(0.77f, 0.02f, NEUTRAL_HUE),
-    connected = oklch(0.62f, 0.15f, GREEN_HUE),
+    connected = oklch(0.53f, 0.15f, GREEN_HUE),
     connectedText = oklch(0.78f, 0.14f, GREEN_HUE),
     route = oklch(0.78f, 0.14f, GREEN_HUE),
-    unprotected = oklch(0.58f, 0.17f, RED_HUE),
+    unprotected = oklch(0.57f, 0.17f, RED_HUE),
     unprotectedText = oklch(0.75f, 0.13f, RED_HUE),
     connecting = oklch(0.36f, 0.03f, NEUTRAL_HUE),
     disconnect = oklch(0.50f, 0.15f, RED_HUE),
     rerouted = oklch(0.80f, 0.13f, AMBER_HUE),
-    link = oklch(0.85f, 0.03f, NEUTRAL_HUE),
+    reroutedText = oklch(0.80f, 0.13f, AMBER_HUE),
     onFilled = oklch(0.98f, 0.005f, NEUTRAL_HUE),
     outline = oklch(0.40f, 0.03f, NEUTRAL_HUE),
     ring = oklch(0.80f, 0.03f, NEUTRAL_HUE),
@@ -75,7 +75,7 @@ val LightVpnChainColors = VpnChainColors(
     line = oklch(0.91f, 0.01f, NEUTRAL_HUE),
     ink = oklch(0.24f, 0.03f, NEUTRAL_HUE),
     inkMuted = oklch(0.46f, 0.02f, NEUTRAL_HUE),
-    connected = oklch(0.56f, 0.14f, GREEN_HUE),
+    connected = oklch(0.54f, 0.14f, GREEN_HUE),
     connectedText = oklch(0.46f, 0.13f, GREEN_HUE),
     route = oklch(0.56f, 0.14f, GREEN_HUE),
     unprotected = oklch(0.52f, 0.16f, RED_HUE),
@@ -83,41 +83,27 @@ val LightVpnChainColors = VpnChainColors(
     connecting = oklch(0.50f, 0.03f, NEUTRAL_HUE),
     disconnect = oklch(0.52f, 0.16f, RED_HUE),
     rerouted = oklch(0.66f, 0.13f, AMBER_HUE),
-    link = oklch(0.42f, 0.10f, NEUTRAL_HUE),
+    reroutedText = oklch(0.52f, 0.12f, AMBER_HUE),
     onFilled = oklch(0.99f, 0.004f, NEUTRAL_HUE),
     outline = oklch(0.85f, 0.01f, NEUTRAL_HUE),
     ring = oklch(0.40f, 0.03f, NEUTRAL_HUE),
-    selected = oklch(0.94f, 0.012f, NEUTRAL_HUE),
+    selected = oklch(0.90f, 0.014f, NEUTRAL_HUE),
     idleRoute = oklch(0.62f, 0.02f, NEUTRAL_HUE),
     mapLabel = oklch(0.46f, 0.02f, NEUTRAL_HUE),
     isDark = false,
 )
 
+/** Only the slots Material components read here: selection handles, disabled switches, snackbars. */
 internal fun VpnChainColors.toMaterial(): ColorScheme {
     val base = if (isDark) darkColorScheme() else lightColorScheme()
     return base.copy(
         primary = connected,
         onPrimary = onFilled,
-        secondary = inkMuted,
-        onSecondary = background,
-        tertiary = rerouted,
         background = background,
         onBackground = ink,
         surface = surface,
         onSurface = ink,
-        surfaceVariant = selected,
-        onSurfaceVariant = inkMuted,
-        surfaceTint = surface,
-        surfaceContainerLowest = surface,
-        surfaceContainerLow = surface,
-        surfaceContainer = surface,
-        surfaceContainerHigh = selected,
-        surfaceContainerHighest = selected,
-        outline = outline,
-        outlineVariant = line,
-        error = unprotectedText,
-        onError = onFilled,
-        errorContainer = disconnect,
-        onErrorContainer = onFilled,
+        inverseSurface = ink,
+        inverseOnSurface = surface,
     )
 }

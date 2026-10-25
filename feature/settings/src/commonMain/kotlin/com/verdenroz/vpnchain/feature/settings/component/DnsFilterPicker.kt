@@ -11,7 +11,6 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** The two filter levels and off. */
 @Composable
 fun DnsFilterPicker(
     selected: DnsFilter,

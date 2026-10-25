@@ -11,7 +11,6 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_them
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** Three options on one selector. */
 @Composable
 fun ThemePicker(
     selected: ThemeConfig,

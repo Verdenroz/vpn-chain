@@ -10,11 +10,11 @@ import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.ObserveChainRouteUseCase
 import com.verdenroz.vpnchain.core.model.ChainStatus
-import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
@@ -24,7 +24,7 @@ data class ChainUiState(
     val status: ChainStatus = ChainStatus(),
     val hasProfile: Boolean = false,
     val route: ChainRoute = ChainRoute(),
-    val stats: SessionStats = SessionStats(),
+    val connectedSinceMillis: Long? = null,
     val warpMode: WarpMode = WarpMode.Off,
     val warpSiteCount: Int = 0,
 )
@@ -45,14 +45,14 @@ class ChainViewModel(
             // Seeded empty because the route is measured: waiting for the first
             // probe would show a live tunnel as an unconfigured one.
             observeChainRoute().onStart { emit(ChainRoute()) },
-            chainRepository.stats,
+            chainRepository.stats.map { it.connectedSinceMillis }.distinctUntilChanged(),
             settingsRepository.settings,
-        ) { status, hasProfile, route, stats, settings ->
+        ) { status, hasProfile, route, connectedSince, settings ->
             ChainUiState(
                 status = status,
                 hasProfile = hasProfile,
                 route = route,
-                stats = stats,
+                connectedSinceMillis = connectedSince,
                 warpMode = settings.warpMode,
                 warpSiteCount = settings.warpDomains.size,
             )

@@ -3,7 +3,7 @@ package com.verdenroz.vpnchain.widget
 import androidx.compose.ui.graphics.Color
 import androidx.glance.color.ColorProvider
 
-/** Day/night providers: widgets can't read the Compose theme, so their colors are restated here. */
+/** Day/night providers. Widgets can't read the Compose theme, so they keep their own palette. */
 internal object WidgetPalette {
     val shellFace = ColorProvider(day = Color(0xFFD7D6D2), night = Color(0xFF1E1B17))
     // Machined edge tones doubling as key outline and divider.

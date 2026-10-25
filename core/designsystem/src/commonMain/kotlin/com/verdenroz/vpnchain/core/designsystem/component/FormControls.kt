@@ -2,7 +2,6 @@ package com.verdenroz.vpnchain.core.designsystem.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -116,7 +117,8 @@ fun SegmentedSelector(
     Row(
         modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .height(48.dp)
+            .selectableGroup()
             .clip(ControlShape)
             .background(colors.background)
             .padding(3.dp),
@@ -129,7 +131,7 @@ fun SegmentedSelector(
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (!selected) Color.Transparent else if (colors.isDark) colors.selected else colors.surface)
-                    .clickable(role = Role.RadioButton) { onSelect(index) },
+                    .selectable(selected, role = Role.RadioButton) { onSelect(index) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(

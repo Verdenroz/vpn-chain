@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 
 private val LocalVpnChainColors = staticCompositionLocalOf { DarkVpnChainColors }
@@ -17,7 +18,7 @@ fun VpnChainTheme(
     val colors = if (darkTheme) DarkVpnChainColors else LightVpnChainColors
     CompositionLocalProvider(LocalVpnChainColors provides colors) {
         MaterialTheme(
-            colorScheme = colors.toMaterial(),
+            colorScheme = remember(colors) { colors.toMaterial() },
             typography = vpnChainTypography(),
             content = content,
         )

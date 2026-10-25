@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,7 +20,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.common.formatDuration
@@ -82,41 +83,13 @@ internal fun ChainDetails(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
-    modifier: Modifier = Modifier,
     fillHeight: Boolean = false,
 ) {
-    val status = uiState.status
-    val connected = status.state == TunnelState.Connected
-    val exit = uiState.route.hop(HopRole.Exit)
-
-    Column(if (fillHeight) modifier.fillMaxSize() else modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            StateLine(status.state, uiState.route.throughRttMs)
-            Text(
-                exit?.location?.countryName ?: stringResource(Res.string.chain_hop_unresolved),
-                style = MaterialTheme.typography.headlineMedium,
-                color = VpnChainTheme.colors.ink,
-            )
-            uptime(uiState, connected)?.let { elapsed ->
-                Text(
-                    stringResource(Res.string.chain_uptime, elapsed),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = VpnChainTheme.colors.inkMuted,
-                )
-            }
+    Column(if (fillHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f, fill = fillHeight).verticalScroll(rememberScrollState())) {
+            Readouts(uiState)
         }
-
-        Spacer(Modifier.height(12.dp))
-        uiState.route.hops.forEach { hop -> HopInfoRow(hop) }
-        RerouteRow(uiState)
-        InfoRow(
-            label = stringResource(Res.string.chain_row_ip),
-            value = exit?.ip ?: stringResource(Res.string.chain_row_placeholder),
-        )
-        KillSwitchRow(status)
-        Notices(status, connected)
-
-        if (fillHeight) Spacer(Modifier.weight(1f)) else Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(16.dp))
         if (uiState.hasProfile) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionButton(
@@ -124,9 +97,15 @@ internal fun ChainDetails(
                     onClick = onOpenSettings,
                     modifier = Modifier.weight(1f),
                 )
-                PrimaryAction(status.state, onConnect, onDisconnect, Modifier.weight(1f))
+                PrimaryAction(uiState.status.state, onConnect, onDisconnect, Modifier.weight(1f))
             }
         } else {
+            Text(
+                stringResource(Res.string.chain_empty_state_title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = VpnChainTheme.colors.inkMuted,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
             ActionButton(
                 stringResource(Res.string.chain_open_settings),
                 onClick = onOpenSettings,
@@ -134,6 +113,34 @@ internal fun ChainDetails(
             )
         }
     }
+}
+
+@Composable
+private fun Readouts(uiState: ChainUiState) {
+    val status = uiState.status
+    val connected = status.state == TunnelState.Connected
+    val exit = uiState.route.hop(HopRole.Exit)
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        StateLine(status.state, uiState.route.throughRttMs)
+        Text(
+            exit?.location?.countryName ?: stringResource(Res.string.chain_hop_unresolved),
+            style = MaterialTheme.typography.headlineMedium,
+            color = VpnChainTheme.colors.ink,
+        )
+        val since = uiState.connectedSinceMillis
+        if (connected && since != null) UptimeText(since)
+    }
+    Notices(status, connected)
+
+    Spacer(Modifier.height(12.dp))
+    uiState.route.hops.forEach { hop -> HopInfoRow(hop) }
+    RerouteRow(uiState)
+    InfoRow(
+        label = stringResource(Res.string.chain_row_ip),
+        value = exit?.ip ?: stringResource(Res.string.chain_row_placeholder),
+    )
+    KillSwitchRow(status)
 }
 
 @Composable
@@ -250,30 +257,34 @@ private fun Notices(status: ChainStatus, connected: Boolean) {
     }
     if (detail == null && hint == null) return
     SelectionContainer {
-        Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            detail?.let { text -> Notice(text, if (status.state == TunnelState.Error) colors.unprotectedText else colors.inkMuted) }
-            hint?.let { text -> Notice(text, colors.unprotectedText) }
+        Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            detail?.let { text ->
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (status.state == TunnelState.Error) colors.unprotectedText else colors.inkMuted,
+                )
+            }
+            hint?.let { text -> Text(text, style = MaterialTheme.typography.bodySmall, color = colors.unprotectedText) }
         }
     }
 }
 
+/** Owns its one-second tick so only this line recomposes as it counts. */
 @Composable
-private fun Notice(text: String, color: Color) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = color)
-}
-
-/** Ticks on its own clock: the stats flow only updates when traffic is sampled. */
-@Composable
-private fun uptime(uiState: ChainUiState, connected: Boolean): String? {
-    val since = uiState.stats.connectedSinceMillis
+private fun UptimeText(sinceMillis: Long) {
     var nowMillis by remember { mutableStateOf(currentTimeMillis()) }
-    LaunchedEffect(connected, since) {
-        while (connected && since != null) {
+    LaunchedEffect(sinceMillis) {
+        while (true) {
             nowMillis = currentTimeMillis()
             delay(1_000)
         }
     }
-    return if (connected && since != null) formatDuration(nowMillis - since) else null
+    Text(
+        stringResource(Res.string.chain_uptime, formatDuration(nowMillis - sinceMillis)),
+        style = MaterialTheme.typography.bodySmall,
+        color = VpnChainTheme.colors.inkMuted,
+    )
 }
 
 private fun TunnelState.labelRes(): StringResource = when (this) {

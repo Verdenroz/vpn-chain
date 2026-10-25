@@ -2,8 +2,10 @@
 <resources>
     <string name="logs_screen_title">Logs</string>
     <string name="logs_output_label">Output</string>
-    <string name="logs_line_count">%1$d lines</string>
-    <string name="logs_no_lines">No lines</string>
+    <plurals name="logs_line_count">
+        <item quantity="one">%1$d line</item>
+        <item quantity="other">%1$d lines</item>
+    </plurals>
     <string name="logs_clear">Clear</string>
     <string name="logs_empty_title">No output yet</string>
 </resources>

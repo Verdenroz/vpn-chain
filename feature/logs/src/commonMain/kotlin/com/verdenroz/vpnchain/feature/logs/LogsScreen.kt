@@ -38,9 +38,9 @@ import com.verdenroz.vpnchain.feature.logs.generated.resources.Res
 import com.verdenroz.vpnchain.feature.logs.generated.resources.logs_clear
 import com.verdenroz.vpnchain.feature.logs.generated.resources.logs_empty_title
 import com.verdenroz.vpnchain.feature.logs.generated.resources.logs_line_count
-import com.verdenroz.vpnchain.feature.logs.generated.resources.logs_no_lines
 import com.verdenroz.vpnchain.feature.logs.generated.resources.logs_output_label
 import com.verdenroz.vpnchain.feature.logs.generated.resources.logs_screen_title
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -77,7 +77,6 @@ fun LogsScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(colors.background)
             .padding(horizontal = 18.dp, vertical = 20.dp),
     ) {
         ScreenTitle(title = stringResource(Res.string.logs_screen_title))
@@ -97,7 +96,12 @@ fun LogsScreen(
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 if (entries.isEmpty()) {
-                    EmptyOutput()
+                    Text(
+                        stringResource(Res.string.logs_empty_title),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.inkMuted,
+                        modifier = Modifier.align(Alignment.CenterStart),
+                    )
                 } else {
                     SelectionContainer {
                         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
@@ -115,11 +119,7 @@ fun LogsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    if (entries.isEmpty()) {
-                        stringResource(Res.string.logs_no_lines)
-                    } else {
-                        stringResource(Res.string.logs_line_count, entries.size)
-                    },
+                    if (entries.isEmpty()) "" else pluralStringResource(Res.plurals.logs_line_count, entries.size, entries.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.inkMuted,
                 )
@@ -141,7 +141,7 @@ private fun LogLine(entry: LogEntry) {
     val parsed = remember(entry.message) { parseLogLine(entry.message) }
     val levelColor = when (parsed.level) {
         "ERROR", "FATAL", "PANIC" -> colors.unprotectedText
-        "WARN", "WARNING" -> colors.rerouted
+        "WARN", "WARNING" -> colors.reroutedText
         else -> colors.inkMuted
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
@@ -163,18 +163,6 @@ private fun LogLine(entry: LogEntry) {
             style = MaterialTheme.typography.bodySmall,
             color = if (parsed.level == null) colors.inkMuted else colors.ink,
             modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
-private fun EmptyOutput() {
-    val colors = VpnChainTheme.colors
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
-        Text(
-            stringResource(Res.string.logs_empty_title),
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.inkMuted,
         )
     }
 }

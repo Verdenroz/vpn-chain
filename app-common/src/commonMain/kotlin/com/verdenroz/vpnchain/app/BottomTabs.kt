@@ -1,22 +1,24 @@
 package com.verdenroz.vpnchain.app
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.verdenroz.vpnchain.core.designsystem.component.Edge
+import com.verdenroz.vpnchain.core.designsystem.component.hairline
 import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 import org.jetbrains.compose.resources.stringResource
 
@@ -30,15 +32,17 @@ internal fun BottomTabs(
         Modifier
             .fillMaxWidth()
             .background(colors.surface)
-            .drawBehind { drawLine(colors.line, Offset(0f, 0f), Offset(size.width, 0f), 1f) }
-            .navigationBarsPadding(),
+            .hairline(Edge.Top, colors.line)
+            .navigationBarsPadding()
+            .selectableGroup(),
     ) {
         TopLevelDestination.entries.forEach { destination ->
             val selected = isSelected(destination)
             Box(
                 Modifier
                     .weight(1f)
-                    .clickable(role = Role.Tab) { onSelect(destination) }
+                    .heightIn(min = 48.dp)
+                    .selectable(selected, role = Role.Tab) { onSelect(destination) }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center,
             ) {

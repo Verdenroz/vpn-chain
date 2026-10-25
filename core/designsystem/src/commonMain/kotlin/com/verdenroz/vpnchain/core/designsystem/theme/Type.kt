@@ -30,13 +30,6 @@ internal fun vpnChainTypography(): Typography {
     val base = Typography()
     return remember(family) {
         base.copy(
-            headlineLarge = base.headlineLarge.copy(
-                fontFamily = family,
-                fontWeight = FontWeight.Bold,
-                fontSize = 30.sp,
-                lineHeight = 36.sp,
-                letterSpacing = (-0.01).em,
-            ),
             headlineMedium = base.headlineMedium.copy(
                 fontFamily = family,
                 fontWeight = FontWeight.Bold,

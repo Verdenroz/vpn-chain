@@ -9,28 +9,29 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import com.verdenroz.vpnchain.core.designsystem.generated.resources.Res
-import com.verdenroz.vpnchain.core.designsystem.generated.resources.world_landmass
 import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
-import org.jetbrains.compose.resources.painterResource
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -57,7 +58,7 @@ fun RouteMap(
 ) {
     val colors = VpnChainTheme.colors
     val measurer = rememberTextMeasurer()
-    val landmass = painterResource(Res.drawable.world_landmass)
+    val landmass = rememberLandmass()
     val labelStyle = MaterialTheme.typography.labelMedium.copy(color = colors.mapLabel)
     val exitLabelStyle = labelStyle.copy(color = colors.ink, fontWeight = FontWeight.SemiBold)
     val routeColor by animateColorAsState(
@@ -66,66 +67,82 @@ fun RouteMap(
     )
 
     BoxWithConstraints(modifier) {
-        val camera = fit(nodes, aspect = maxWidth / maxHeight)
+        val camera = fit(nodes, aspect = maxWidth / maxHeight.coerceAtLeast(1.dp))
         val wrapped = camera.wrapped
-        val spec = tween<Float>(CAMERA_MS)
-        val centerLon by animateFloatAsState(camera.centerLon, spec, label = "camera-lon")
-        val centerLat by animateFloatAsState(camera.centerLat, spec, label = "camera-lat")
-        val spanLon by animateFloatAsState(camera.spanLon, spec, label = "camera-span")
+        // Longitudes change frame when wrapping flips, so the camera snaps instead of sweeping the globe.
+        key(wrapped) {
+            val spec = tween<Float>(CAMERA_MS)
+            val centerLon by animateFloatAsState(camera.centerLon, spec, label = "camera-lon")
+            val centerLat by animateFloatAsState(camera.centerLat, spec, label = "camera-lat")
+            val spanLon by animateFloatAsState(camera.spanLon, spec, label = "camera-span")
 
-        Canvas(Modifier.fillMaxSize()) {
-            val pxPerDegree = size.width / spanLon
-            fun project(node: MapNode) = Offset(
-                x = (unwrap(node.lon, wrapped) - centerLon) * pxPerDegree + size.width / 2f,
-                y = (centerLat - node.lat.toFloat()) * pxPerDegree + size.height / 2f,
-            )
-
-            clipRect {
-                val worldTopLeft = Offset(
-                    x = (-180f - centerLon) * pxPerDegree + size.width / 2f,
-                    y = (centerLat - 90f) * pxPerDegree + size.height / 2f,
+            Canvas(Modifier.fillMaxSize()) {
+                val pxPerDegree = size.width / spanLon
+                fun project(node: MapNode) = Offset(
+                    x = (unwrap(node.lon, wrapped) - centerLon) * pxPerDegree + size.width / 2f,
+                    y = (centerLat - node.lat.toFloat()) * pxPerDegree + size.height / 2f,
                 )
-                clipRect(top = worldTopLeft.y + (90f - NORTH) * pxPerDegree, bottom = worldTopLeft.y + (90f - SOUTH) * pxPerDegree) {
-                    val copies = if (wrapped) listOf(0f, 360f * pxPerDegree) else listOf(0f)
-                    copies.forEach { offset ->
-                        translate(worldTopLeft.x + offset, worldTopLeft.y) {
-                            with(landmass) {
-                                draw(Size(360f * pxPerDegree, 180f * pxPerDegree), colorFilter = ColorFilter.tint(colors.land))
+
+                clipRect {
+                    val worldTopLeft = Offset(
+                        x = (-180f - centerLon) * pxPerDegree + size.width / 2f,
+                        y = (centerLat - 90f) * pxPerDegree + size.height / 2f,
+                    )
+                    if (landmass != null) {
+                        clipRect(top = worldTopLeft.y + (90f - NORTH) * pxPerDegree, bottom = worldTopLeft.y + (90f - SOUTH) * pxPerDegree) {
+                            val copies = if (wrapped) listOf(0f, 360f * pxPerDegree) else listOf(0f)
+                            copies.forEach { offset ->
+                                translate(worldTopLeft.x + offset, worldTopLeft.y) {
+                                    scale(pxPerDegree, pivot = Offset.Zero) { drawPath(landmass, colors.land) }
+                                }
                             }
                         }
                     }
-                }
 
-                val points = nodes.map { it to project(it) }
-                points.zipWithNext { (_, from), (to, at) ->
-                    val towardExit = to.kind == NodeKind.Exit
-                    drawLeg(
-                        from = from,
-                        to = at,
-                        color = if (towardExit) routeColor else colors.ring,
-                        dashed = towardExit && !connected,
-                        width = if (towardExit) 2.5.dp.toPx() else 2.dp.toPx(),
-                    )
-                }
-
-                val placed = mutableListOf<Rect>()
-                val named = mutableSetOf<String>()
-                points.forEach { (node, at) ->
-                    if (node.kind == NodeKind.Exit) {
-                        drawCircle(routeColor.copy(alpha = 0.25f), radius = 14.dp.toPx(), center = at)
-                        drawCircle(routeColor, radius = 7.dp.toPx(), center = at)
-                    } else {
-                        drawCircle(colors.ink, radius = 5.dp.toPx(), center = at)
+                    val points = nodes.map { it to project(it) }
+                    points.zipWithNext { (_, from), (to, at) ->
+                        val towardExit = to.kind == NodeKind.Exit
+                        drawLeg(
+                            from = from,
+                            to = at,
+                            color = if (towardExit) routeColor else colors.ring,
+                            dashed = towardExit && !connected,
+                            width = if (towardExit) 2.5.dp.toPx() else 2.dp.toPx(),
+                        )
                     }
-                    if (named.add(node.label)) {
-                        val style = if (node.kind == NodeKind.Exit) exitLabelStyle else labelStyle
-                        placed += drawLabel(node.label, at, measurer, style, placed)
+
+                    points.forEach { (node, at) ->
+                        if (node.kind == NodeKind.Exit) {
+                            drawCircle(routeColor.copy(alpha = 0.25f), radius = 14.dp.toPx(), center = at)
+                            drawCircle(routeColor, radius = 7.dp.toPx(), center = at)
+                        } else {
+                            drawCircle(colors.ink, radius = 5.dp.toPx(), center = at)
+                        }
+                    }
+
+                    val placed = mutableListOf<Rect>()
+                    val named = mutableSetOf<String>()
+                    points.sortedByDescending { (node, _) -> node.kind == NodeKind.Exit }.forEach { (node, at) ->
+                        if (named.add(node.label)) {
+                            val style = if (node.kind == NodeKind.Exit) exitLabelStyle else labelStyle
+                            placed += drawLabel(node.label, at, measurer, style, placed)
+                        }
                     }
                 }
             }
         }
     }
 }
+
+/**
+ * The outline in degrees (x = lon + 180, y = 90 - lat). Drawn as a path, not a
+ * painter: a painter caches a bitmap the size of the zoomed world.
+ */
+@Composable
+private fun rememberLandmass(): Path? = produceState<Path?>(null) {
+    val xml = Res.readBytes("drawable/world_landmass.xml").decodeToString()
+    value = PathParser().parsePathString(xml.substringAfter("android:pathData=\"").substringBefore('"')).toPath()
+}.value
 
 internal class Camera(
     val centerLon: Float,

@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -254,7 +253,6 @@ fun SettingsScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(colors.background)
             .padding(horizontal = 18.dp, vertical = 20.dp),
     ) {
         ScreenTitle(title = stringResource(Res.string.settings_title))
@@ -586,7 +584,6 @@ private fun WarpSection(
     }
 }
 
-/** Label, rationale, and the switch that acts on it. */
 @Composable
 private fun SettingRow(
     title: String,
@@ -758,7 +755,7 @@ private fun QrPairingPanel(profile: ChainProfile, entryHop: WireGuardEntry?) {
         Text(
             stringResource(Res.string.settings_qr_warning),
             style = MaterialTheme.typography.bodyMedium,
-            color = colors.rerouted,
+            color = colors.reroutedText,
         )
         Spacer(Modifier.height(12.dp))
         bitmap?.let {

@@ -24,14 +24,14 @@
     <string name="chain_evidence_recalled">last seen</string>
     <string name="chain_kill_switch_protected">On</string>
     <string name="chain_kill_switch_none">Off</string>
-    <string name="chain_kill_switch_hint">See Settings to enable one.</string>
+    <string name="chain_kill_switch_hint">Set up in Settings</string>
     <string name="chain_kill_switch_hint_helper_failed">Helper failed. See Logs.</string>
     <string name="chain_kill_switch_hint_helper_not_found">Helper not installed. Run cli/killswitch/build.sh, then setcap it.</string>
     <string name="chain_kill_switch_hint_helper_unprivileged">Helper can't change the firewall. Run setcap on it (again after every build).</string>
     <string name="chain_kill_switch_hint_helper_timed_out">Helper didn't respond. Reconnect.</string>
     <string name="chain_kill_switch_hint_no_exempt">No relay address in the profile.</string>
     <string name="chain_kill_switch_hint_not_engaged">Not armed this session. Reconnect to arm it.</string>
-    <string name="chain_kill_switch_hint_external_app">Relay-only mode: your system VPN app provides the kill switch here.</string>
+    <string name="chain_kill_switch_hint_external_app">Provided by your system VPN app</string>
     <string name="chain_empty_state_title">No profile yet</string>
     <string name="chain_open_settings">Open Settings</string>
     <string name="chain_change">Change</string>

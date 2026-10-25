@@ -1,6 +1,5 @@
 package com.verdenroz.vpnchain.core.designsystem.component
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,8 +16,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,19 +42,16 @@ fun InfoRow(
         modifier
             .fillMaxWidth()
             .heightIn(min = 40.dp)
-            .drawBehind { drawLine(colors.line, Offset(0f, 0f), Offset(size.width, 0f), 1f) }
+            .hairline(Edge.Top, colors.line)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (marker != null) {
-            Box(
-                Modifier
-                    .size(10.dp)
-                    .then(
-                        if (marker.filled) Modifier.background(marker.color, CircleShape)
-                        else Modifier.border(2.dp, marker.color, CircleShape),
-                    ),
-            )
+            if (marker.filled) {
+                StatusDot(marker.color, size = 10.dp)
+            } else {
+                Box(Modifier.size(10.dp).border(2.dp, marker.color, CircleShape))
+            }
             Spacer(Modifier.width(12.dp))
         }
         Text(

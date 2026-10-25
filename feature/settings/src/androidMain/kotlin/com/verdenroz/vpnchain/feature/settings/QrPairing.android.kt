@@ -32,7 +32,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.verdenroz.vpnchain.core.designsystem.component.ActionButton
-import com.verdenroz.vpnchain.core.designsystem.component.ActionTone
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan_cancel
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan_hint

@@ -1,7 +1,6 @@
 package com.verdenroz.vpnchain.app
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,13 +18,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.verdenroz.vpnchain.app.generated.resources.Res
 import com.verdenroz.vpnchain.app.generated.resources.app_name
+import com.verdenroz.vpnchain.core.designsystem.component.Edge
+import com.verdenroz.vpnchain.core.designsystem.component.hairline
 import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 import org.jetbrains.compose.resources.stringResource
 
@@ -38,8 +39,9 @@ internal fun NavRail(
             .width(200.dp)
             .fillMaxHeight()
             .background(colors.surface)
-            .drawBehind { drawLine(colors.line, Offset(size.width, 0f), Offset(size.width, size.height), 1f) }
-            .padding(horizontal = 12.dp, vertical = 20.dp),
+            .hairline(Edge.Right, colors.line)
+            .padding(horizontal = 12.dp, vertical = 20.dp)
+            .selectableGroup(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
@@ -53,10 +55,10 @@ internal fun NavRail(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(40.dp)
+                    .height(48.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (selected) colors.selected else colors.surface)
-                    .clickable(role = Role.Tab) { onSelect(destination) }
+                    .selectable(selected, role = Role.Tab) { onSelect(destination) }
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {

@@ -7,13 +7,8 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /** [hue] in degrees. Out-of-gamut values clamp to the nearest sRGB colour. */
-fun oklch(
-    lightness: Float,
-    chroma: Float,
-    hue: Float,
-    alpha: Float = 1f,
-): Color {
+internal fun oklch(lightness: Float, chroma: Float, hue: Float): Color {
     val radians = hue * PI.toFloat() / 180f
-    return Color(lightness, chroma * cos(radians), chroma * sin(radians), alpha, ColorSpaces.Oklab)
+    return Color(lightness, chroma * cos(radians), chroma * sin(radians), 1f, ColorSpaces.Oklab)
         .convert(ColorSpaces.Srgb)
 }
