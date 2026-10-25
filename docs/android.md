@@ -1,154 +1,132 @@
 # Android
 
-## The one-VPN constraint (important)
-
-Android's `VpnService` allows **only one active VPN at a time**. You therefore
-**cannot** run a separate VPN app *and* a relay app chained together —
-the way the desktop can with the SOCKS-proxy mode.
-
-So on Android the app **is** the single VPN, and sing-box performs *both* hops
-itself: the entry hop as a WireGuard endpoint, then the VLESS relay on
-top. No separate VPN app is part of the chain here.
+The app is the device's only VPN and runs both hops itself. Android allows one
+active `VpnService`, so a separate VPN app cannot carry the entry hop.
 
 ```
-phone
-  → sing-box VpnService (this app)
-       → WireGuard endpoint → entry peer    (entry hop)
-          → VLESS+REALITY   → your VPS      (relay, exits from the VPS's own IP)
-             → internet
+phone → sing-box VpnService (this app)
+          → WireGuard endpoint → entry peer     (entry hop, optional)
+            → VLESS+REALITY    → your VPS       (relay, exits from the VPS's address)
+              → internet
 ```
 
-## Config
+## Set up
 
-`config-templates/sing-box-android.template.json` encodes exactly this: a
-`wireguard` **endpoint** (`entry-hop`) that the VLESS outbound reaches via
-`"detour": "entry-hop"`. Fill the placeholders:
+1. Install the APK from the
+   [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest)
+   (`arm64-v8a` for phones, `x86_64` for emulators), or build one with
+   `./gradlew :androidApp:assembleDebug`.
+2. Import a connection: **Settings → Chain identity → Import**. Scan the desktop
+   app's QR, or paste a `secrets.env` or a WireGuard `.conf`. Review the server
+   shown, then **Use it**.
+3. For the entry hop, use a WireGuard config made for this phone alone, so it
+   can be revoked independently. Without one the VPS sees your mobile IP.
+4. Tap **Connect** and accept the system VPN prompt once.
+5. Turn on [Always-on VPN](#kill-switch).
 
-| Placeholder | Source |
-|-------------|--------|
-| `VPS_IP`, `VLESS_UUID`, `REALITY_PUBKEY`, `SHORT_ID`, `SNI` | same relay identity as the desktop chain (`~/.config/vpn-chain/secrets.env`) |
-| `ENTRY_*` (private key, address, peer pubkey, endpoint host/port) | a **dedicated** WireGuard config for this device — generate a *separate* one with your provider so it can be revoked independently |
-| `ENTRY_DNS` (optional) | the `.conf`'s `DNS =` line — only present if you generated the config with the provider's filtering on; copying it over is what keeps that filtering working, since the resolver lives on the provider's network and is only reachable through this same peer |
+Settings you may want under **Automation**: Connect on launch, Reconnect
+automatically, Start on boot (needs the VPN permission granted already). The
+Quick Settings tile and the two home-screen widgets (toggle, controls) start and
+stop the chain.
 
 ## Two tiers
 
-- **Full chain (recommended):** the template above. Entry hop through the peer, so
-  your mobile carrier IP is hidden from the VPS.
-- **Relay only:** drop the `entry-hop` endpoint and the `detour`, pointing the
-  VLESS outbound straight out. Simpler, but the VPS sees your real mobile IP.
+| Tier | Path | Trade |
+|---|---|---|
+| Full chain (recommended) | Entry peer, then relay | The VPS never sees your carrier address |
+| Relay only | Straight to the relay | Simpler; the VPS sees your real mobile IP |
 
-This same choice is available on desktop when system-wide TUN mode is on — see
-the root `README.md`'s "System-wide routing on desktop (TUN)" section.
+Switch the entry hop off without editing the profile at **Settings → Routing →
+Wireguard entry hop**.
+
+| Placeholder | Source |
+|---|---|
+| `VPS_IP`, `VLESS_UUID`, `REALITY_PUBKEY`, `SHORT_ID`, `SNI` | The relay identity; for a revocable phone, `server/devices.sh add` ([devices.md](devices.md)) |
+| `ENTRY_PRIVKEY`, `ENTRY_ADDRESS`, `ENTRY_PEER_PUBKEY`, `ENTRY_HOST`, `ENTRY_PORT` | A dedicated WireGuard config for this device |
+| `ENTRY_DNS` (optional) | The `.conf`'s `DNS =` line. Copy it to keep the provider's DNS filtering: that resolver is reachable only through the same peer. |
+
+## Without building the app
+
+`config-templates/sing-box-android.template.json` encodes the same chain: a
+`wireguard` endpoint `entry-hop` and a VLESS outbound with `"detour":
+"entry-hop"`. Fill the placeholders above and import it into **sing-box for
+Android** (SFA) or **NekoBox**. For relay only, drop the endpoint and the `detour`.
 
 ## Kill switch
 
-There's no code-level kill switch the app can enable for you — Android
-deliberately keeps this a system Settings decision, the same category as the
-VPN consent prompt itself. The real one:
+The app cannot enable a kill switch; Android keeps that a system choice.
 
-**Settings → Network & Internet → VPN → (gear icon next to vpn-chain) → enable
-"Always-on VPN" and "Block connections without VPN".** With both on, if the
-tunnel ever drops unexpectedly, the OS blocks all network traffic instead of
-falling back to your carrier/Wi-Fi unencrypted.
+1. **Settings → Network & Internet → VPN**.
+2. Tap the gear next to vpn-chain.
+3. Turn on **Always-on VPN** and **Block connections without VPN**.
 
-The app's Settings screen has a "Kill switch" card that shows whether it's
-detected this — `VpnChainService.onStartCommand` gets called with a null
-`Intent` only when Always-on triggers it, which is the one reliable signal
-available to a normal app. If it hasn't detected that yet, the card links
-straight to the VPN settings screen so you can turn it on. This detection is
-best-effort: it only fires the first time Always-on actually launches the
-service, not proactively before you've ever triggered it.
+With both on, a dropped tunnel blocks all traffic instead of falling back to
+Wi-Fi or cellular.
 
-## Native app wiring (this repo)
-
-The Android tunnel is **implemented** and the app builds a runnable APK. The
-pieces, all in `core/tunnel/src/androidMain`:
-
-- **`VpnChainService`** — the single `VpnService`. It runs sing-box in-process
-  through libbox's command server: `CommandServer.startOrReloadService(config)`
-  boots the engine, which calls back into `openTun` to establish the TUN. A local
-  `CommandClient` (subscribed to `CommandLog`) streams engine output to the Logs
-  screen; `status` is driven from the service lifecycle. See
-  [Staying connected](#staying-connected) for the invariants that keep it up.
-- **`VpnPlatformInterface`** — implements libbox's `PlatformInterface`: builds the
-  Android TUN from the engine's `TunOptions`, `protect()`s the box's own sockets
-  so they skip the tunnel, and reports the default network for
-  `auto_detect_interface` via a `ConnectivityManager` callback.
-- **`AndroidTunnelController` + `TunnelBridge`** — the controller (in the UI
-  process) sends start/stop intents and mirrors the service's status/log flows
-  through the process-wide `TunnelBridge`.
-- **`VpnPermissionCoordinator`** — `MainActivity` binds a launcher that handles
-  the one-time `VpnService.prepare` consent; the controller awaits it before
-  starting.
-
-The core comes from the prebuilt `com.github.singbox-android:libbox` AAR (genuine
-sing-box, tag == sing-box version) via JitPack — see the repo root
-`settings.gradle.kts` and `gradle/libs.versions.toml`. The APK uses ABI splits
-(`arm64-v8a` for phones, `x86_64` for emulators) because `libbox.so` is ~60 MB
-per ABI.
-
-**Config:** `renderPlatformTunnelConfig` (in `core/config`) picks the shape per
-platform — Android calls `SingBoxConfigFactory.androidChainConfig`, which emits
-the `tun` inbound, the `wireguard` `entry-hop` endpoint, and the VLESS relay
-reached via that detour (mirrors `sing-box-android.template.json`). Supply the
-`ENTRY_*` fields (secrets.env or the Settings form) to enable the entry
-hop; omit them for a relay-only chain. All shapes are validated against
-`sing-box check` 1.13.14 (the version libbox embeds).
+The **Settings → Kill switch** card shows when the app has seen Always-on in
+action: Android starts the service with a null `Intent` only for Always-on, the
+one signal a normal app gets. It is best effort and stays "not armed" until
+Always-on has launched the service once. The card links to the VPN settings.
 
 ## Staying connected
 
-**1. The service outlives the engine.** `VpnChainService`'s lifetime is the
-*user's* connection intent, not the engine's. A drop tears down the engine and
-keeps the foreground notification (`dropEngine`, reporting `TunnelState.Error`);
-only `ACTION_STOP`, `ACTION_STOP_BY_USER`, `onRevoke`, or
-`ChainRepository.release()` end the service. This is not cosmetic — a service
-that stops itself here leaves the process *cached*, which is what Doze kills
-first, and the reconnect loop lives in that process. Android 12+ then refuses
-the background foreground-service start that would bring it back, so the
-session was unrecoverable without opening the app. An app already running a
-foreground service is exempt from that restriction, which is the other reason
-to hold it.
+Five invariants keep a long session alive. Each fixes a failure that is invisible
+in testing and obvious in a pocket. Code: `VpnChainService`, `ChainProbe`,
+`AndroidWakeGuard`, `NetworkMonitor.linkChanges`, `ChainSupervisor`.
 
-**2. Connected means it carries traffic.** The TUN exists within milliseconds,
-long before the entry hop has handshaked, and libbox's status stream is a
-*loopback* socket — it stays healthy while the entry hop's UDP socket sits on a
-network that is gone. So `ChainProbe` makes a real request through the TUN
-(this app's own sockets are not `protect()`ed, so they take the chain): once as
-a readiness gate before reporting Connected, then as a watchdog on a 45s tick,
-on every underlying-link change, and on screen-on. That last one matters
-because the tick runs off a clock Doze stops: without it, a chain that died in
-a pocket would go unexamined until well after the phone came back out. Two
-independent probe targets, so one host being blocked can't read as a dead
-chain, and a 10s debounce so triggers landing together cost one verdict.
-Mirrors what `DesktopTunnelController` already did.
+1. **The service outlives the engine.** Its lifetime is the user's connection
+   intent. A drop calls `dropEngine` (reporting `TunnelState.Error`) and keeps
+   the foreground notification. Only `ACTION_STOP`, `ACTION_STOP_BY_USER`,
+   `onRevoke` or `ChainRepository.release()` end it. A service that stops itself
+   leaves the process cached, Doze kills it first, and Android 12+ refuses the
+   background foreground-service start that would revive it. A process already
+   running a foreground service is exempt from that rule.
+2. **Connected means it carries traffic.** The TUN exists within milliseconds,
+   long before the entry hop has handshaked, and libbox's status stream is
+   loopback, so it stays healthy through a dead tunnel. `ChainProbe` makes a
+   real request through the TUN (the app's own sockets are not `protect()`ed, so
+   they take the chain): once as a readiness gate, then every 45 seconds, on every
+   underlying-link change, and on screen-on. The screen-on trigger covers the
+   tick running off a clock Doze stops. Two independent probe targets mean one
+   blocked host does not read as a dead chain; a 10-second debounce collapses
+   triggers that land together.
+3. **Handovers are a first-class signal.** `NetworkMonitor.linkChanges` reports
+   the identity of the non-VPN default link changing. A boolean `online` stays
+   `true` across Wi-Fi to cellular while every socket on the old link
+   black-holes. A link coming back after an outage counts too, and the watchdog
+   waits for `online` before probing it. It drives the watchdog and ends a
+   reconnect backoff early.
+4. **Doze does not suspend an attempt.** `AndroidWakeGuard` holds a partial wake
+   lock across the dial and the health probe, so a probe that times out because
+   the phone slept does not read as a dead chain. Backoff waits stay outside it:
+   a network callback ends them and wakes the device itself. The supervisor waits
+   for a usable link before dialling, because an attempt that cannot succeed
+   still holds the lock until its readiness gate times out.
+5. **An update brings the chain back.** Installing an update replaces the process
+   and drops the tunnel. `PackageReplacedReceiver` (`MY_PACKAGE_REPLACED`)
+   restarts it when the saved connection intent is on. That broadcast is exempt
+   from background-start limits, and `specialUse` is not a foreground service
+   type barred from such receivers.
 
-**3. Handovers are a first-class signal.** `NetworkMonitor.linkChanges` reports
-the *identity* of the non-VPN default link changing. A boolean `online` cannot:
-across a Wi-Fi → cellular handover both links are usable, so it never leaves
-`true` while every socket bound to the old one black-holes. A link coming back
-after an outage counts too, and the watchdog waits for `online` before probing
-it. It drives both the watchdog and the end of a reconnect backoff.
+## Where the code is
 
-**4. Doze does not get to suspend an attempt.** `AndroidWakeGuard` holds a
-partial wake lock across the dial and across a health probe — Doze otherwise
-stops the clock between the handshake and the first packet, and a probe that
-times out because the phone was asleep reads as a dead chain. Backoff waits are
-deliberately left outside it: what ends them early is a network callback, which
-wakes the device on its own.
+All in `core/tunnel/src/androidMain` unless noted.
 
-**5. An update brings the chain back.** Installing an update replaces the
-process and drops the tunnel. `PackageReplacedReceiver` (`MY_PACKAGE_REPLACED`)
-restarts it when the persisted connection intent is on. Android's background
-start restrictions list that broadcast as an exemption, and `specialUse` is not
-among the foreground service types barred from boot-time receivers, so the start
-is allowed.
+| Piece | Role |
+|---|---|
+| `VpnChainService` | The `VpnService`. Runs sing-box in-process through libbox's `CommandServer`; `CommandClient` streams logs, status and connections |
+| `VpnPlatformInterface` | libbox `PlatformInterface`: builds the TUN from `TunOptions`, `protect()`s the engine's sockets, reports the default network |
+| `AndroidTunnelController`, `TunnelBridge` | The controller sends start and stop intents and mirrors the service's status and log flows through a process-wide bridge |
+| `VpnPermissionCoordinator` | One-time `VpnService.prepare` consent, handled by `MainActivity` |
+| `core/config` `androidChainConfig` | Emits the `tun` inbound, the `entry-hop` endpoint and the VLESS relay detoured through it |
 
-**Security to harden:** the `ChainProfile` persists in app-private DataStore
-(`core/datastore`). Move the credential fields behind the Android Keystore / an
-encrypted DataStore before any real distribution — never ship them in the APK.
+The engine is the prebuilt `com.github.singbox-android:libbox` AAR (genuine
+sing-box, tag equals sing-box version) from JitPack; see `settings.gradle.kts` and
+`gradle/libs.versions.toml`. The APK splits by ABI because `libbox.so` is about
+60 MB each. Configs are validated against `sing-box check` 1.13.14, the version
+libbox embeds.
 
-## Import into an off-the-shelf client (no build)
+## Known limit
 
-For a quick start without building the app, import
-`sing-box-android.template.json` (placeholders filled) into **sing-box for
-Android** (SFA) or **NekoBox**. Same chain, no Kotlin required.
+The profile persists in app-private DataStore, unencrypted. Moving the credential
+fields behind the Android Keystore is not done.
