@@ -44,9 +44,9 @@ interface ProfileRepository {
     /**
      * Imports a WireGuard `.conf`. With [intoActive] it becomes the entry hop of
      * the active connection when that has a relay; otherwise it is added as a
-     * connection of its own, and becomes active.
+     * connection of its own, which becomes active only when [activate] is set.
      */
-    suspend fun importWireGuardConf(text: String, intoActive: Boolean): Result<WireGuardEntry>
+    suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean = true): Result<WireGuardEntry>
 }
 
 internal class DefaultProfileRepository(
@@ -69,12 +69,15 @@ internal class DefaultProfileRepository(
         )
     }
 
-    override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?): String {
+    override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?): String =
+        insert(name, relay, wireGuard, activate = true)
+
+    private suspend fun insert(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?, activate: Boolean): String {
         val id = newId()
         preferences.setProfiles(
             preferences.profiles.first() + SavedProfile(id = id, name = name, relay = relay, wireGuard = wireGuard),
         )
-        preferences.setActiveProfileId(id)
+        if (activate) preferences.setActiveProfileId(id)
         return id
     }
 
@@ -103,13 +106,13 @@ internal class DefaultProfileRepository(
             .onSuccess { add(name = it.relay.vpsIp, relay = it.relay, wireGuard = it.entryHop) }
             .map { it.relay }
 
-    override suspend fun importWireGuardConf(text: String, intoActive: Boolean): Result<WireGuardEntry> =
+    override suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean): Result<WireGuardEntry> =
         WireGuardConfParser.parse(text).onSuccess { entry ->
             val relay = preferences.profile.first()?.relay
-            if (intoActive && relay != null) {
+            if (intoActive && activate && relay != null) {
                 save(relay, entry)
             } else {
-                add(name = entry.endpointHost, relay = null, wireGuard = entry)
+                insert(name = entry.endpointHost, relay = null, wireGuard = entry, activate = activate)
             }
         }
 }

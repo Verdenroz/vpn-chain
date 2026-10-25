@@ -20,6 +20,7 @@ import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_failed
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_saved
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_imported_not_connected
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_imported_profile
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_secrets_env_found
@@ -46,6 +47,12 @@ data class SettingsUiState(
     val profiles: List<SavedProfile> = emptyList(),
     val activeProfileId: String? = null,
 )
+
+/**
+ * A parsed WireGuard conf waiting for the user to look at its endpoint. Nothing
+ * is saved and no tunnel is touched until they pick "Use it" or "Save".
+ */
+data class PendingConfImport(val text: String, val entry: WireGuardEntry, val intoActive: Boolean)
 
 /** One-shot user feedback (import result), consumed by the UI. */
 sealed interface SettingsMessage {
@@ -87,6 +94,13 @@ class SettingsViewModel(
 
     private val _message = MutableStateFlow<SettingsMessage?>(null)
     val message: StateFlow<SettingsMessage?> = _message.asStateFlow()
+
+    private val _pendingImport = MutableStateFlow<PendingConfImport?>(null)
+    val pendingImport: StateFlow<PendingConfImport?> = _pendingImport.asStateFlow()
+
+    /** Bumped each time pasted text is taken, so the UI can clear the paste field. */
+    private val _importsTaken = MutableStateFlow(0)
+    val importsTaken: StateFlow<Int> = _importsTaken.asStateFlow()
 
     fun setThemeConfig(themeConfig: ThemeConfig) = viewModelScope.launch {
         settingsRepository.setThemeConfig(themeConfig)
@@ -172,11 +186,12 @@ class SettingsViewModel(
 
     fun importSecretsEnv(text: String) = viewModelScope.launch {
         if (WireGuardConfParser.looksLikeConf(text)) {
-            importConf(text, intoActive = false)
+            reviewConf(text, intoActive = false)
             return@launch
         }
         importProfile(text).fold(
             onSuccess = {
+                _importsTaken.value++
                 _message.value = SettingsMessage.Info(
                     UiText.Resource(Res.string.settings_imported_profile, listOf(it.vpsIp)),
                 )
@@ -185,7 +200,42 @@ class SettingsViewModel(
         )
     }
 
-    fun importAsEntryHop(text: String) = viewModelScope.launch { importConf(text, intoActive = true) }
+    fun importAsEntryHop(text: String) = reviewConf(text, intoActive = true)
+
+    private fun reviewConf(text: String, intoActive: Boolean) {
+        WireGuardConfParser.parse(text).fold(
+            onSuccess = { entry ->
+                _importsTaken.value++
+                _pendingImport.value = PendingConfImport(text, entry, intoActive)
+            },
+            onFailure = { _message.value = it.toError(Res.string.settings_import_failed) },
+        )
+    }
+
+    /** Saves the reviewed conf as active (or as the entry hop) and moves a wanted tunnel onto it. */
+    fun usePendingImport() = viewModelScope.launch {
+        val pending = _pendingImport.value ?: return@launch
+        _pendingImport.value = null
+        importConf(pending.text, pending.intoActive)
+    }
+
+    /** Keeps the reviewed conf as another connection without switching to it. */
+    fun savePendingImport() = viewModelScope.launch {
+        val pending = _pendingImport.value ?: return@launch
+        _pendingImport.value = null
+        importWireGuardConf.save(pending.text).fold(
+            onSuccess = {
+                _message.value = SettingsMessage.Info(
+                    UiText.Resource(Res.string.settings_import_saved, listOf(it.endpointHost)),
+                )
+            },
+            onFailure = { _message.value = it.toError(Res.string.settings_import_failed) },
+        )
+    }
+
+    fun cancelPendingImport() {
+        _pendingImport.value = null
+    }
 
     private suspend fun importConf(text: String, intoActive: Boolean) {
         importWireGuardConf(text, intoActive).fold(

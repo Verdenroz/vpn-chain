@@ -46,6 +46,20 @@ class DefaultProfileRepositoryTest {
     }
 
     @Test
+    fun `saving a conf without activating it leaves the active connection alone`() = runTest {
+        val repository = repository()
+        repository.add("relay", RELAY, null)
+        val relayId = repository.activeProfileId.first()
+
+        repository.importWireGuardConf(CONF, intoActive = true, activate = false)
+
+        val profiles = repository.profiles.first()
+        assertEquals(listOf(ConnectionKind.Relay, ConnectionKind.WireGuard), profiles.map { it.kind })
+        assertEquals(relayId, repository.activeProfileId.first())
+        assertNull(repository.profile.first()?.wireGuard)
+    }
+
+    @Test
     fun `an entry hop import with no relay falls back to a new connection`() = runTest {
         val repository = repository()
 

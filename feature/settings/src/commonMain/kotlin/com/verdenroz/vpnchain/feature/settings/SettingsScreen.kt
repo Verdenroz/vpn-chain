@@ -93,6 +93,12 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_delete
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_wireguard_summary
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_pasted
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_cancel
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_save
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_use
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_entry_hop
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_new
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_detail
@@ -127,6 +133,8 @@ fun SettingsRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val pendingImport by viewModel.pendingImport.collectAsStateWithLifecycle()
+    val importsTaken by viewModel.importsTaken.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Hoisted above SettingsScreen so an external QrScanRequest (widget/deep
@@ -166,6 +174,11 @@ fun SettingsRoute(
         onImportAsEntryHop = viewModel::importAsEntryHop,
         onImportDefault = viewModel::importDefaultSecretsEnv,
         onScanQr = scanQr,
+        pendingImport = pendingImport,
+        importsTaken = importsTaken,
+        onUsePendingImport = viewModel::usePendingImport,
+        onSavePendingImport = viewModel::savePendingImport,
+        onCancelPendingImport = viewModel::cancelPendingImport,
         onToggleSystemWide = viewModel::setSystemWideTun,
         onToggleEntryHop = viewModel::setEntryHopEnabled,
         onToggleKillSwitch = viewModel::setKillSwitchEnabled,
@@ -195,6 +208,11 @@ fun SettingsScreen(
     onImportAsEntryHop: (String) -> Unit,
     onImportDefault: () -> Unit,
     onScanQr: () -> Unit,
+    pendingImport: PendingConfImport?,
+    importsTaken: Int,
+    onUsePendingImport: () -> Unit,
+    onSavePendingImport: () -> Unit,
+    onCancelPendingImport: () -> Unit,
     onToggleSystemWide: (Boolean) -> Unit,
     onToggleEntryHop: (Boolean) -> Unit,
     onToggleKillSwitch: (Boolean) -> Unit,
@@ -309,9 +327,23 @@ fun SettingsScreen(
                     }
                 }
 
+                Reveal(visible = pendingImport != null) {
+                    pendingImport?.let {
+                        Spacer(Modifier.height(16.dp))
+                        ImportReview(
+                            pending = it,
+                            activeName = uiState.profile?.name.orEmpty(),
+                            canSaveOnly = hasProfile,
+                            onUse = onUsePendingImport,
+                            onSave = onSavePendingImport,
+                            onCancel = onCancelPendingImport,
+                        )
+                    }
+                }
                 Reveal(visible = importExpanded) {
                     Spacer(Modifier.height(16.dp))
                     ImportSection(
+                        clearKey = importsTaken,
                         onImportText = onImportText,
                         onImportAsEntryHop = onImportAsEntryHop.takeIf { uiState.profile?.relay != null },
                         onImportDefault = onImportDefault,
@@ -593,14 +625,53 @@ private fun AlwaysOnGuidance(detected: Boolean, onOpenSystemVpnSettings: () -> U
 }
 
 @Composable
+private fun ImportReview(
+    pending: PendingConfImport,
+    activeName: String,
+    canSaveOnly: Boolean,
+    onUse: () -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val colors = PanelTheme.colors
+    val endpoint = "${pending.entry.endpointHost}:${pending.entry.endpointPort}"
+    Column {
+        Text(
+            if (pending.intoActive) {
+                stringResource(Res.string.settings_import_review_entry_hop, activeName, endpoint)
+            } else {
+                stringResource(Res.string.settings_import_review_new, pending.entry.endpointHost, endpoint)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.readout,
+        )
+        Spacer(Modifier.height(5.dp))
+        Text(
+            stringResource(Res.string.settings_import_review_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.muted,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PanelButton(text = stringResource(Res.string.settings_import_use), onClick = onUse, prominent = true)
+            if (canSaveOnly) {
+                PanelButton(text = stringResource(Res.string.settings_import_save), onClick = onSave)
+            }
+            PanelButton(text = stringResource(Res.string.settings_import_cancel), onClick = onCancel)
+        }
+    }
+}
+
+@Composable
 private fun ImportSection(
+    clearKey: Int,
     onImportText: (String) -> Unit,
     onImportAsEntryHop: ((String) -> Unit)?,
     onImportDefault: () -> Unit,
     onScanQr: () -> Unit,
 ) {
     val colors = PanelTheme.colors
-    var pasted by remember { mutableStateOf("") }
+    var pasted by remember(clearKey) { mutableStateOf("") }
 
     Column {
         // Typing 12 secret fields on a phone keyboard is miserable — scanning the
@@ -627,6 +698,7 @@ private fun ImportSection(
             label = stringResource(Res.string.settings_secrets_env_label),
             value = pasted,
             minLines = 4,
+            sensitive = true,
             onValueChange = { pasted = it },
         )
         Spacer(Modifier.height(12.dp))

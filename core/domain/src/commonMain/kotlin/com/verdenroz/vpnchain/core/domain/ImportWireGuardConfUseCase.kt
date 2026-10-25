@@ -5,9 +5,10 @@ import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 
 /**
- * Imports a WireGuard `.conf` as a new connection, or as the active chain's
- * entry hop. Either changes what the active connection dials, so a wanted
- * tunnel is restarted onto it.
+ * Imports a WireGuard `.conf`. A pasted or scanned conf names a server the user
+ * may not have meant to trust, so [invoke] is only for after they have seen its
+ * endpoint and chosen to use it: it switches the active connection (or its
+ * entry hop) and restarts a wanted tunnel onto it. [save] only keeps it.
  */
 class ImportWireGuardConfUseCase(
     private val profileRepository: ProfileRepository,
@@ -20,4 +21,8 @@ class ImportWireGuardConfUseCase(
         profileRepository.importWireGuardConf(confText, intoActive).map { entry ->
             Imported(entry, chainRepository.restartIfWanted())
         }
+
+    /** Adds it as another saved connection; the active one and its tunnel are left alone. */
+    suspend fun save(confText: String): Result<WireGuardEntry> =
+        profileRepository.importWireGuardConf(confText, intoActive = false, activate = false)
 }

@@ -151,6 +151,7 @@ fun PanelField(
     modifier: Modifier = Modifier,
     masked: Boolean = false,
     numeric: Boolean = false,
+    sensitive: Boolean = false,
     minLines: Int = 1,
     onValueChange: (String) -> Unit,
 ) {
@@ -171,8 +172,14 @@ fun PanelField(
             minLines = minLines,
             visualTransformation =
                 if (masked) PasswordVisualTransformation() else VisualTransformation.None,
+            // Password is the input type keyboards honour for not learning or suggesting what is typed.
             keyboardOptions = KeyboardOptions(
-                keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text,
+                keyboardType = when {
+                    numeric -> KeyboardType.Number
+                    sensitive -> KeyboardType.Password
+                    else -> KeyboardType.Text
+                },
+                autoCorrectEnabled = !sensitive,
             ),
             modifier = Modifier
                 .fillMaxWidth()
