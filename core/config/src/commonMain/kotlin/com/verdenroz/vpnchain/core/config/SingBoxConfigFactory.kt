@@ -40,12 +40,13 @@ object SingBoxConfigFactory {
     ): String {
         val tail = warp.takeIf { warpMode != WarpMode.Off }
         val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.Automatic }
-        val openPath = learnedOpenPath.takeIf { failOpen && warpMode == WarpMode.Automatic }
+        val opensDirect = failOpen && warpMode == WarpMode.Automatic
+        val openPath = learnedOpenPath.takeIf { opensDirect }
         return render {
             putInfoLog()
             putExperimental(clashApi, cacheFile = false, cachePath = null)
             // The relay resolves its own names; WARP and direct would otherwise ask the local resolver.
-            if (tail != null || failOpen) putJsonObject("dns") { putDnsServers(entry = null, remoteDetour = "proxy") }
+            if (tail != null || opensDirect) putJsonObject("dns") { putDnsServers(entry = null, remoteDetour = "proxy") }
             putJsonArray("inbounds") {
                 addJsonObject {
                     put("type", "mixed")
