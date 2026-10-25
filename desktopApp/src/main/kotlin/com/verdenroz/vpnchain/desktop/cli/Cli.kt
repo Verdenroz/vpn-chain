@@ -12,6 +12,7 @@ import com.verdenroz.vpnchain.core.model.TunnelState
 import java.io.IOException
 import java.io.PrintStream
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.SerializationException
 
 private val appVersion: String get() = System.getProperty("vpnchain.version").orEmpty()
 
@@ -41,6 +42,9 @@ internal fun runCli(
     } catch (e: IOException) {
         err.println("vpn-chain: ${e.message}")
         1
+    } catch (e: SerializationException) {
+        err.println("vpn-chain: unreadable reply from the engine (${e.message}): restart the engine")
+        1
     }
 }
 
@@ -69,7 +73,7 @@ private class Session(
         }
         is Command.Use -> expectOk(client.call(Request.Use(command.profile))) {
             val status = currentStatus()
-            if (json) printStatus(status) else out.println("using ${status.profile?.name}")
+            if (json) printStatus(status) else out.println("using ${status.profile?.name ?: command.profile}")
             0
         }
         is Command.Logs -> when (val reply = client.call(Request.Logs(command.lines))) {
@@ -84,19 +88,20 @@ private class Session(
         Command.Help, Command.Version -> error("handled before connecting")
     }
 
-    private fun currentStatus(): EngineStatus = when (val reply = client.call(Request.Status)) {
+    private fun currentStatus(): EngineStatus = statusOf(client.call(Request.Status))
+
+    private fun statusOf(reply: Reply): EngineStatus = when (reply) {
         is Reply.Status -> reply.status
+        is Reply.Failure -> throw IOException(reply.message)
         else -> throw IOException("unexpected reply $reply")
     }
 
-    /** Follows the chain until it is up or has failed: 0 for up, 1 for failed. */
+    /** Follows the chain until it is up or has stopped trying: 0 for up, 1 otherwise. */
     private fun awaitSettled(): Int {
         var settled: EngineStatus? = null
         client.subscribe(Topic.Status) { reply ->
-            val status = (reply as Reply.Status).status
-            val done = status.state == TunnelState.Connected || status.state == TunnelState.Error
-            if (done) settled = status
-            !done
+            settled = statusOf(reply).takeIf { it.state != TunnelState.Connecting }
+            settled == null
         }
         val status = settled ?: throw IOException("the engine closed the connection")
         printStatus(status)
@@ -108,7 +113,7 @@ private class Session(
         client.subscribe(Topic.Status) { reply ->
             if (!json && !first) out.println()
             first = false
-            printStatus((reply as Reply.Status).status)
+            printStatus(statusOf(reply))
             true
         }
         err.println("vpn-chain: the engine stopped")

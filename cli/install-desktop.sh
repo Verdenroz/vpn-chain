@@ -86,16 +86,15 @@ fi
 
 ln -sfn "$root/current/vpn-chain/bin/vpn-chain" "$bin_dir/vpn-chain-gui"
 cli="$bin_dir/vpn-chain"
+# The launcher opens the window when given no arguments, so a bare vpn-chain asks for help instead.
+wrapper="$(printf '#!/usr/bin/env bash\n[ $# -gt 0 ] || set -- --help\nexec %q "$@"\n' "$root/current/vpn-chain/bin/vpn-chain")"
 if [ -L "$cli" ]; then
   echo "replacing $cli -> $(readlink "$cli") with the app's own command line" >&2
+elif [ -e "$cli" ] && [ "$(cat "$cli")" != "$wrapper" ]; then
+  echo "replacing $cli with the app's own command line" >&2
 fi
 rm -f "$cli"
-# The launcher opens the window when given no arguments, so a bare vpn-chain asks for help instead.
-cat >"$cli" <<EOF
-#!/bin/sh
-[ \$# -gt 0 ] || set -- --help
-exec "$root/current/vpn-chain/bin/vpn-chain" "\$@"
-EOF
+printf '%s\n' "$wrapper" >"$cli"
 chmod +x "$cli"
 cat >"$data_home/applications/vpn-chain.desktop" <<EOF
 [Desktop Entry]
