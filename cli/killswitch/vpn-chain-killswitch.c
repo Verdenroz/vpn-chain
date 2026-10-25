@@ -15,7 +15,7 @@
  * confuses that detection. nftables leaves the routing table untouched.
  *
  * Usage:
- *   vpn-chain-killswitch up [--allow-local] <exempt_ip> [<exempt_ip> ...]
+ *   vpn-chain-killswitch up [--allow-local] [--allow-mark <hex>] <exempt_ip> [<exempt_ip> ...]
  *   vpn-chain-killswitch down
  *   vpn-chain-killswitch status
  *
@@ -23,6 +23,10 @@
  *
  * --allow-local additionally accepts RFC1918 and link-local destinations, so
  * Docker bridges and LAN hosts stay reachable while the chain is up.
+ *
+ * --allow-mark additionally accepts packets carrying that fwmark (0x-prefixed,
+ * up to 8 hex digits, not zero). sing-box stamps it on its `direct` outbound, so
+ * the hole closes when sing-box dies; any process with CAP_NET_ADMIN can set it too.
  *
  * All exempt IPs are validated as strict IPv4 dotted-quads before touching
  * anything, and malformed input is rejected outright. `up` renders the whole
@@ -69,6 +73,7 @@ static const char *LOCAL_RANGES[] = {
 
 struct options {
     int allow_local;
+    const char *allow_mark;
     char **exempt_ips;
     int exempt_count;
 };
@@ -117,6 +122,19 @@ static int is_valid_ipv4(const char *s) {
     return *p == '\0';
 }
 
+/* "0x" followed by 1-8 hex digits, not all zero: a mark of 0 is "unmarked" and
+ * would exempt every packet. */
+static int is_valid_mark(const char *s) {
+    if (s[0] != '0' || s[1] != 'x') return 0;
+    int digits = 0, nonzero = 0;
+    for (const char *p = s + 2; *p; p++) {
+        if (!isxdigit((unsigned char)*p)) return 0;
+        if (*p != '0') nonzero = 1;
+        if (++digits > 8) return 0;
+    }
+    return digits > 0 && nonzero;
+}
+
 static int emit(char *buf, size_t *len, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -156,6 +174,7 @@ static int build_script(char *buf, const struct options *opts) {
     for (int i = 0; opts->allow_local && LOCAL_RANGES[i] != NULL; i++) {
         bad |= emit(buf, &len, "\t\tip daddr %s accept\n", LOCAL_RANGES[i]);
     }
+    if (opts->allow_mark) bad |= emit(buf, &len, "\t\tmeta mark %s accept\n", opts->allow_mark);
     bad |= emit(buf, &len, "\t\treject\n\t}\n}\n");
     return bad ? -1 : (int)len;
 }
@@ -221,6 +240,12 @@ static int parse_up_args(int argc, char *argv[], struct options *opts) {
     for (; i < argc && strncmp(argv[i], "--", 2) == 0; i++) {
         if (strcmp(argv[i], "--allow-local") == 0) {
             opts->allow_local = 1;
+        } else if (strcmp(argv[i], "--allow-mark") == 0 && i + 1 < argc) {
+            opts->allow_mark = argv[++i];
+            if (!is_valid_mark(opts->allow_mark)) {
+                fprintf(stderr, "invalid mark: %s\n", opts->allow_mark);
+                return -1;
+            }
         } else {
             fprintf(stderr, "unknown option: %s\n", argv[i]);
             return -1;
@@ -252,7 +277,7 @@ int main(int argc, char *argv[]) {
                   strcmp(argv[1], "status") != 0)) {
         fprintf(
             stderr,
-            "usage: %s up [--allow-local] <exempt_ip> [<exempt_ip> ...]\n"
+            "usage: %s up [--allow-local] [--allow-mark <hex>] <exempt_ip> [<exempt_ip> ...]\n"
             "       %s down\n"
             "       %s status\n",
             prog, prog, prog

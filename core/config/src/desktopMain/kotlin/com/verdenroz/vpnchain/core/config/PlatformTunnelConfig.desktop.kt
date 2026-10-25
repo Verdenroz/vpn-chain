@@ -52,6 +52,7 @@ actual fun renderPlatformTunnelConfig(
             learnedWarpPath = learned?.path(RuleSetKind.Warp),
             learnedOpenPath = learned?.path(RuleSetKind.Open),
             failOpen = settings.failOpen,
+            directMark = SingBoxConfigFactory.FAIL_OPEN_MARK.takeIf { settings.failOpen && profile.entryHop == null },
         )
     } else {
         SingBoxConfigFactory.mixedProxyConfig(

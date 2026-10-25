@@ -387,7 +387,7 @@ class DesktopTunnelController(
      */
     private suspend fun engageKillSwitch(configJson: String) {
         val exemptIps = RelayConfig.exemptIps(configJson)
-        val (fault, engaged) = engageKillSwitch(exemptIps, allowLocalNetworks, ::runKillSwitchHelper)
+        val (fault, engaged) = engageKillSwitch(exemptIps, allowLocalNetworks, ::runKillSwitchHelper, RelayConfig.markArgs(configJson))
         killSwitchFault = fault
         killSwitchEngaged = engaged
         when (fault) {

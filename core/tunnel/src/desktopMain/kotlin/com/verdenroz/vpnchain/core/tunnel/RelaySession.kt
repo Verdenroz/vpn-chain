@@ -4,6 +4,7 @@ import com.verdenroz.vpnchain.core.config.ClashApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -107,6 +108,17 @@ internal object RelayConfig {
     }.getOrNull()
 
     private const val ENTRY_HOP_TAG = "entry-hop"
+
+    /**
+     * The mark the kill switch must accept for the `direct` outbound, as the
+     * helper's `--allow-mark <hex>` arguments; empty when the config has none.
+     */
+    fun markArgs(configJson: String): List<String> = runCatching {
+        val direct = Json.parseToJsonElement(configJson).jsonObject.getValue("outbounds").jsonArray
+            .map { it.jsonObject }
+            .first { it["tag"]?.jsonPrimitive?.contentOrNull == "direct" }
+        listOf("--allow-mark", "0x%x".format(direct.getValue("routing_mark").jsonPrimitive.int))
+    }.getOrDefault(emptyList())
 
     /**
      * The clash API this config exposes, if any. A relay adopted from the CLI

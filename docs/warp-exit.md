@@ -157,14 +157,15 @@ The relay still sees the DNS lookup for a site that fails open; only the
 connection leaves past it.
 
 **Kill switch.** The entry peer is already exempt from the nftables table, so
-failing open to it adds no exemption. The bare link is not: on desktop the
-kill switch rejects sing-box's own direct packets, so with it armed a
-relay-only chain's fallback probe fails and the site stays on the relay. No
-exemption is added for it; see [kill-switch.md](kill-switch.md).
+failing open to it adds no exemption. The bare link is not an address: on a
+chain with no entry hop, sing-box's `direct` outbound carries a fixed packet
+mark that the table accepts, which needs the kill-switch helper rebuilt and
+`setcap` run on it once. See [kill-switch.md](kill-switch.md) for the mark and
+its risks.
 
 **Invariants.** The tail always carries `detour` to the relay outbound and is
 never in the kill switch's exemption list. The probe inbounds listen on
-loopback only.
+loopback only. Failing open adds no address to the exemption list.
 
 ## Credentials
 

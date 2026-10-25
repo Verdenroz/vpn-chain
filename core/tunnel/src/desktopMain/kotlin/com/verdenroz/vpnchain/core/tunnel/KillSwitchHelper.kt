@@ -25,6 +25,8 @@ fun processHelperRunner(bin: String, timeoutSeconds: Long = 5): HelperRunner = {
     }.getOrDefault(HelperOutcome.NotFound)
 }
 
+private const val HELPER_USAGE_EXIT = 2
+
 private val DENIED = listOf("could not acquire CAP_NET_ADMIN", "Operation not permitted", "Permission denied")
 
 /** [fault] is why the chain is left unprotected; [engaged] is whether a table is in place regardless. */
@@ -39,10 +41,17 @@ internal suspend fun engageKillSwitch(
     exemptIps: List<String>,
     allowLocal: Boolean,
     run: HelperRunner,
+    markArgs: List<String> = emptyList(),
+    onMarkRefused: suspend () -> Unit = {},
 ): KillSwitchEngagement {
     if (exemptIps.isEmpty()) return KillSwitchEngagement(KillSwitchState.NoExemptAddresses, engaged = false)
     val localArgs = if (allowLocal) listOf("--allow-local") else emptyList()
-    val outcome = run(listOf("up") + localArgs + exemptIps)
+    var outcome = run(listOf("up") + localArgs + markArgs + exemptIps)
+    // A helper built before --allow-mark rejects it as a usage error: keep the table, without the hole.
+    if (markArgs.isNotEmpty() && (outcome as? HelperOutcome.Exited)?.code == HELPER_USAGE_EXIT) {
+        onMarkRefused()
+        outcome = run(listOf("up") + localArgs + exemptIps)
+    }
     val fault = when (outcome) {
         is HelperOutcome.Exited -> when {
             outcome.code == 0 -> null

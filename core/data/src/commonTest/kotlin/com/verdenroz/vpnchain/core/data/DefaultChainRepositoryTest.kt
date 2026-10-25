@@ -131,6 +131,17 @@ class DefaultChainRepositoryTest {
     }
 
     @Test
+    fun `a chain with no entry hop marks its direct outbound for the kill switch`() = runTest {
+        val world = RepositoryWorld(backgroundScope)
+        world.profiles.stored.value = REPOSITORY_PROFILE
+        runCurrent()
+
+        val config = world.controller.configProvider?.invoke()
+
+        assertTrue("\"routing_mark\"" in config.orEmpty())
+    }
+
+    @Test
     fun `a rule-set that cannot be written costs the learned sites, not the config`() = runTest {
         val world = RepositoryWorld(backgroundScope, store = ThrowingRuleSetStore())
         world.profiles.stored.value = REPOSITORY_PROFILE

@@ -93,6 +93,7 @@ object SingBoxConfigFactory {
         learnedWarpPath: String? = null,
         learnedOpenPath: String? = null,
         failOpen: Boolean = false,
+        directMark: Int? = null,
     ): String {
         val filtering = dnsFilter != DnsFilter.Off
         // No credentials means no tail, whatever the mode says: registration
@@ -138,7 +139,7 @@ object SingBoxConfigFactory {
                     detour = if (entry != null) ENTRY_HOP_TAG else null,
                     tcpOnly = false,
                 )
-                addDirectOutbound()
+                addDirectOutbound(directMark)
             }
             putJsonObject("route") {
                 put("auto_detect_interface", true)
@@ -368,8 +369,11 @@ object SingBoxConfigFactory {
 
     private fun WireGuardEntry.addresses(): List<String> = address.split(',').map(String::trim)
 
-    private fun JsonArrayBuilder.addDirectOutbound() =
-        addJsonObject { put("type", "direct"); put("tag", DIRECT_TAG) }
+    private fun JsonArrayBuilder.addDirectOutbound(mark: Int? = null) = addJsonObject {
+        put("type", "direct")
+        put("tag", DIRECT_TAG)
+        if (mark != null) put("routing_mark", mark)
+    }
 
     private fun JsonArrayBuilder.addVlessOutbound(
         profile: ChainProfile,
@@ -506,6 +510,14 @@ object SingBoxConfigFactory {
     private const val LEARNED_WARP_TAG = "learned-warp"
     private const val LEARNED_OPEN_TAG = "learned-open"
     private const val DIRECT_TAG = "direct"
+
+    /**
+     * The packet mark on the `direct` outbound that the desktop kill switch
+     * accepts. Chosen to stay clear of marks other tooling claims: sing-box's
+     * auto_redirect (0x2023 to 0x2025), WireGuard quick (51820), Kubernetes
+     * (0x4000, 0x8000) and Tailscale (0x40000, 0x80000 under mask 0xff0000).
+     */
+    const val FAIL_OPEN_MARK = 0x760000
 
     private data class Blocklist(val tag: String, val url: String)
 

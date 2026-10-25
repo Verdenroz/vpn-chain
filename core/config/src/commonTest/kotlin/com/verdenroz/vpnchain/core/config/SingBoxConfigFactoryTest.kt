@@ -760,6 +760,16 @@ class SingBoxConfigFactoryTest {
         assertEquals("vless-proxy", config.array("endpoints").taggedWith("warp-exit")?.getValue("detour")?.jsonPrimitive?.content)
         assertEquals("entry-hop", config.array("outbounds").taggedWith("vless-proxy")?.getValue("detour")?.jsonPrimitive?.content)
     }
+
+    @Test
+    fun `the direct outbound carries the kill switch mark only when one is given`() {
+        val marked = parse(SingBoxConfigFactory.androidChainConfig(profile(), directMark = SingBoxConfigFactory.FAIL_OPEN_MARK))
+        val plain = parse(SingBoxConfigFactory.androidChainConfig(profile()))
+
+        assertEquals(0x760000, marked.array("outbounds").taggedWith("direct")?.getValue("routing_mark")?.jsonPrimitive?.int)
+        assertEquals(null, plain.array("outbounds").taggedWith("direct")?.get("routing_mark"))
+        assertEquals(null, marked.array("outbounds").taggedWith("vless-proxy")?.get("routing_mark"))
+    }
 }
 
 private fun fallbackRule(config: JsonObject): JsonObject =
