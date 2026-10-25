@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
+import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -43,37 +44,37 @@ class DefaultLearnedSitesRepositoryTest {
 
     @Test
     fun `a learned site is stored with its reason and time and written to the rule-set`() = runTest {
-        repository.learn("example.com", LearnedRoute.Warp, "403")
+        repository.learn("example.com", LearnedRoute.Warp, BlockReason.Forbidden)
 
         val site = repository.sites.first().single()
         assertEquals("example.com", site.domain)
-        assertEquals("403", site.reason)
+        assertEquals(BlockReason.Forbidden, site.reason)
         assertEquals(1_000L, site.learnedAtMillis)
         assertEquals(listOf("example.com"), store.written)
     }
 
     @Test
     fun `sites that stay on the relay are kept out of the warp rule-set`() = runTest {
-        repository.learn("a.com", LearnedRoute.Warp, "403")
-        repository.learn("b.com", LearnedRoute.RefusedByBoth, "403")
+        repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
+        repository.learn("b.com", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
 
         assertEquals(listOf("a.com"), store.written)
     }
 
     @Test
     fun `learning a domain twice keeps one entry`() = runTest {
-        repository.learn("example.com", LearnedRoute.Warp, "403")
-        repository.learn("example.com", LearnedRoute.Warp, "challenge")
+        repository.learn("example.com", LearnedRoute.Warp, BlockReason.Forbidden)
+        repository.learn("example.com", LearnedRoute.Warp, BlockReason.Challenge)
 
-        assertEquals(listOf("challenge"), repository.sites.first().map { it.reason })
+        assertEquals(listOf(BlockReason.Challenge), repository.sites.first().map { it.reason })
     }
 
     @Test
     fun `a removed site leaves the rule-set and is not relearned for a week`() = runTest {
-        repository.learn("example.com", LearnedRoute.Warp, "403")
+        repository.learn("example.com", LearnedRoute.Warp, BlockReason.Forbidden)
 
         repository.remove("example.com")
-        repository.learn("example.com", LearnedRoute.Warp, "403")
+        repository.learn("example.com", LearnedRoute.Warp, BlockReason.Forbidden)
 
         assertTrue(repository.sites.first().isEmpty())
         assertEquals(emptyList(), store.written)
@@ -85,7 +86,7 @@ class DefaultLearnedSitesRepositoryTest {
         repository.remove("example.com")
 
         clock += WEEK + 1
-        repository.learn("example.com", LearnedRoute.Warp, "403")
+        repository.learn("example.com", LearnedRoute.Warp, BlockReason.Forbidden)
 
         assertEquals(listOf("example.com"), repository.sites.first().map { it.domain })
     }

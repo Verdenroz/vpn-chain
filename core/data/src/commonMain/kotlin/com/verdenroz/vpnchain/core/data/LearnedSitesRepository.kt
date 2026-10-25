@@ -2,6 +2,7 @@ package com.verdenroz.vpnchain.core.data
 
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
+import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
 import kotlinx.coroutines.flow.Flow
@@ -14,7 +15,7 @@ interface LearnedSitesRepository {
     suspend fun isSuppressed(domain: String): Boolean
 
     /** A suppressed domain is left alone. */
-    suspend fun learn(domain: String, route: LearnedRoute, reason: String)
+    suspend fun learn(domain: String, route: LearnedRoute, reason: BlockReason)
 
     /** Drops the entry and keeps it from being learned again for a week. */
     suspend fun remove(domain: String)
@@ -34,7 +35,7 @@ internal class DefaultLearnedSitesRepository(
     override suspend fun isSuppressed(domain: String): Boolean =
         (preferences.learnedSuppressions.first()[domain] ?: 0L) > now()
 
-    override suspend fun learn(domain: String, route: LearnedRoute, reason: String) {
+    override suspend fun learn(domain: String, route: LearnedRoute, reason: BlockReason) {
         if (isSuppressed(domain)) return
         preferences.putLearnedSite(LearnedSite(domain, reason, now(), route))
         syncRuleSets()

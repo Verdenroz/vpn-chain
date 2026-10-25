@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.warp.probe
 
+import com.verdenroz.vpnchain.core.model.BlockReason
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

@@ -12,13 +12,13 @@ enum class LearnedRoute {
 }
 
 /**
- * A site the chain found out for itself, by probing. [reason] is the name of what the
- * relay answered with (a block reason), left for the UI to word.
+ * A site the chain found out for itself, by probing. [reason] is what the
+ * relay answered with.
  */
 @Serializable
 data class LearnedSite(
     val domain: String,
-    val reason: String,
+    val reason: BlockReason,
     val learnedAtMillis: Long,
     val route: LearnedRoute,
 )

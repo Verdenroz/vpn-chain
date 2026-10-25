@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
 import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
+import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.TunnelState
@@ -95,7 +96,7 @@ class SiteLearnerTest {
         val site = world.learned.sites.first().single()
         assertEquals("example.com", site.domain)
         assertEquals(LearnedRoute.Warp, site.route)
-        assertEquals("Forbidden", site.reason)
+        assertEquals(BlockReason.Forbidden, site.reason)
     }
 
     @Test

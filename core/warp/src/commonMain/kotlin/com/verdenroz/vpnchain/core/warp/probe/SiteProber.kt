@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.warp.probe
 
 import com.verdenroz.vpnchain.core.config.ProbeProxy
+import com.verdenroz.vpnchain.core.model.BlockReason
 
 /** One GET of `https://<host>/` through a probe proxy; null on any transport failure. */
 interface SiteFetcher {

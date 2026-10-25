@@ -49,6 +49,7 @@ import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ConnectionKind
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
+import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.ui.ScreenNameplate
@@ -117,6 +118,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_secrets_env_label
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_show_qr
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_title
+import com.verdenroz.vpnchain.feature.settings.component.LearnedSites
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learn_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_all
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_domains_hint
@@ -188,6 +191,8 @@ fun SettingsRoute(
         onSetDnsFilter = viewModel::setDnsFilter,
         onSetWarpMode = viewModel::setWarpMode,
         onSetWarpDomains = viewModel::setWarpDomains,
+        onToggleLearn = viewModel::setLearnBlockedSites,
+        onRemoveLearned = viewModel::removeLearned,
         onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
         onToggleAutoReconnect = viewModel::setAutoReconnect,
         onToggleAutoStart = viewModel::setAutoStartOnLogin,
@@ -223,6 +228,8 @@ fun SettingsScreen(
     onSetDnsFilter: (DnsFilter) -> Unit,
     onSetWarpMode: (WarpMode) -> Unit,
     onSetWarpDomains: (String) -> Unit,
+    onToggleLearn: (Boolean) -> Unit,
+    onRemoveLearned: (String) -> Unit,
     onToggleAutoConnect: (Boolean) -> Unit,
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleAutoStart: (Boolean) -> Unit,
@@ -450,8 +457,12 @@ fun SettingsScreen(
                     WarpSection(
                         mode = uiState.settings.warpMode,
                         domains = uiState.settings.warpDomains,
+                        learn = uiState.settings.learnBlockedSites,
+                        learned = uiState.learned,
                         onSetMode = onSetWarpMode,
                         onSetDomains = onSetWarpDomains,
+                        onToggleLearn = onToggleLearn,
+                        onRemoveLearned = onRemoveLearned,
                     )
                 }
             }
@@ -525,8 +536,12 @@ fun SettingsScreen(
 private fun WarpSection(
     mode: WarpMode,
     domains: List<String>,
+    learn: Boolean,
+    learned: List<LearnedSite>,
     onSetMode: (WarpMode) -> Unit,
     onSetDomains: (String) -> Unit,
+    onToggleLearn: (Boolean) -> Unit,
+    onRemoveLearned: (String) -> Unit,
 ) {
     val colors = PanelTheme.colors
     var domainText by remember { mutableStateOf(domains.joinToString("\n")) }
@@ -557,6 +572,14 @@ private fun WarpSection(
         Reveal(visible = mode == WarpMode.BlockedSites) {
             Column {
                 Spacer(Modifier.height(14.dp))
+                SettingRow(
+                    title = stringResource(Res.string.settings_learn_title),
+                    detail = null,
+                    checked = learn,
+                    onCheckedChange = onToggleLearn,
+                )
+                LearnedSites(learned, onRemoveLearned)
+                Spacer(Modifier.height(14.dp))
                 Text(
                     stringResource(Res.string.settings_warp_domains_hint),
                     style = MaterialTheme.typography.bodyMedium,
@@ -581,7 +604,7 @@ private fun WarpSection(
 @Composable
 private fun SettingRow(
     title: String,
-    detail: String,
+    detail: String?,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
@@ -589,9 +612,11 @@ private fun SettingRow(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f).padding(end = 16.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.readout)
-            Spacer(Modifier.height(5.dp))
-            SelectionContainer {
-                Text(detail, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+            if (detail != null) {
+                Spacer(Modifier.height(5.dp))
+                SelectionContainer {
+                    Text(detail, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+                }
             }
         }
         PanelToggle(checked = checked, onCheckedChange = onCheckedChange)

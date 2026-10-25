@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.config.SecretsEnvParser
 import com.verdenroz.vpnchain.core.config.WireGuardConfParser
+import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
@@ -16,6 +17,7 @@ import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
@@ -49,6 +51,7 @@ data class SettingsUiState(
     val autostartSupported: Boolean = false,
     val profiles: List<SavedProfile> = emptyList(),
     val activeProfileId: String? = null,
+    val learned: List<LearnedSite> = emptyList(),
 )
 
 /**
@@ -82,6 +85,7 @@ class SettingsViewModel(
     private val importWireGuardConf: ImportWireGuardConfUseCase,
     private val switchProfile: SwitchProfileUseCase,
     private val chainRepository: ChainRepository,
+    private val learnedSites: LearnedSitesRepository,
 ) : ViewModel() {
 
     val uiState: StateFlow<SettingsUiState> =
@@ -89,9 +93,13 @@ class SettingsViewModel(
             settingsRepository.settings,
             profileRepository.profile,
             chainRepository.alwaysOnDetected,
-            profileRepository.profiles,
-            profileRepository.activeProfileId,
-        ) { settings, profile, alwaysOnDetected, profiles, activeProfileId ->
+            combine(
+                profileRepository.profiles,
+                profileRepository.activeProfileId,
+                learnedSites.sites,
+                ::Triple,
+            ),
+        ) { settings, profile, alwaysOnDetected, (profiles, activeProfileId, learned) ->
             SettingsUiState(
                 settings = settings,
                 profile = profile,
@@ -100,6 +108,7 @@ class SettingsViewModel(
                 autostartSupported = settingsRepository.autostartSupported,
                 profiles = profiles,
                 activeProfileId = activeProfileId,
+                learned = learned.sortedByDescending { it.learnedAtMillis },
             )
         }.stateIn(
             scope = viewModelScope,
@@ -152,6 +161,14 @@ class SettingsViewModel(
         settingsRepository.setWarpDomains(
             text.lines().map(String::trim).filter(String::isNotEmpty),
         )
+    }
+
+    fun setLearnBlockedSites(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setLearnBlockedSites(enabled)
+    }
+
+    fun removeLearned(domain: String) = viewModelScope.launch {
+        learnedSites.remove(domain)
     }
 
     fun setAutoConnectOnLaunch(enabled: Boolean) = viewModelScope.launch {

@@ -76,8 +76,8 @@ internal class SiteLearner(
         val ttl = if (outcome == ProbeOutcome.Unknown) RETRY_MILLIS else CHECKED_MILLIS
         lock.withLock { checkedUntil[domain] = now() + ttl }
         when (outcome) {
-            is ProbeOutcome.WarpOnly -> learned.learn(domain, LearnedRoute.Warp, outcome.reason.name)
-            is ProbeOutcome.RefusedByBoth -> learned.learn(domain, LearnedRoute.RefusedByBoth, outcome.reason.name)
+            is ProbeOutcome.WarpOnly -> learned.learn(domain, LearnedRoute.Warp, outcome.reason)
+            is ProbeOutcome.RefusedByBoth -> learned.learn(domain, LearnedRoute.RefusedByBoth, outcome.reason)
             ProbeOutcome.Reachable, ProbeOutcome.Unknown -> Unit
         }
     }

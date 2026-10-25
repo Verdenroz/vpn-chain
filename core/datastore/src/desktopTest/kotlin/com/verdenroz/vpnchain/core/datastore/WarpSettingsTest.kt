@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.WarpMode
@@ -103,18 +104,18 @@ class WarpSettingsTest {
     @Test
     fun `a learned site survives a reread and is replaced by domain`() = runTest {
         val source = VpnChainPreferencesDataSource(newStore())
-        val site = LearnedSite("example.com", "403", 5L, LearnedRoute.Warp)
+        val site = LearnedSite("example.com", BlockReason.Forbidden, 5L, LearnedRoute.Warp)
 
         source.putLearnedSite(site)
-        source.putLearnedSite(site.copy(reason = "challenge"))
+        source.putLearnedSite(site.copy(reason = BlockReason.Challenge))
 
-        assertEquals(listOf(site.copy(reason = "challenge")), source.learnedSites.first())
+        assertEquals(listOf(site.copy(reason = BlockReason.Challenge)), source.learnedSites.first())
     }
 
     @Test
     fun `removing a learned site records when it may be learned again`() = runTest {
         val source = VpnChainPreferencesDataSource(newStore())
-        source.putLearnedSite(LearnedSite("example.com", "403", 5L, LearnedRoute.Warp))
+        source.putLearnedSite(LearnedSite("example.com", BlockReason.Forbidden, 5L, LearnedRoute.Warp))
 
         source.removeLearnedSite("example.com", suppressUntilMillis = 99L)
 

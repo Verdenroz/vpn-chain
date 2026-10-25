@@ -1,7 +1,6 @@
 package com.verdenroz.vpnchain.core.warp.probe
 
-/** Why an exit was refused. */
-enum class BlockReason { Forbidden, RateLimited, LegalBlock, NetworkSecurity, Challenge }
+import com.verdenroz.vpnchain.core.model.BlockReason
 
 sealed interface ExitVerdict {
     data object Open : ExitVerdict
