@@ -3,134 +3,103 @@ package com.verdenroz.vpnchain.core.designsystem.theme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.verdenroz.vpnchain.core.designsystem.generated.resources.Res
-import com.verdenroz.vpnchain.core.designsystem.generated.resources.archivo_variable
-import com.verdenroz.vpnchain.core.designsystem.generated.resources.martian_mono_variable
+import com.verdenroz.vpnchain.core.designsystem.generated.resources.hanken_grotesk_bold
+import com.verdenroz.vpnchain.core.designsystem.generated.resources.hanken_grotesk_medium
+import com.verdenroz.vpnchain.core.designsystem.generated.resources.hanken_grotesk_regular
+import com.verdenroz.vpnchain.core.designsystem.generated.resources.hanken_grotesk_semibold
 import org.jetbrains.compose.resources.Font
 
-/**
- * Archivo — a grotesque cut for high-density print, with a width axis. Used
- * narrow for engraved panel labels and normal for everything else, so the
- * silkscreen and the prose come off the same tool.
- */
 @Composable
-private fun archivo(width: Float): FontFamily {
-    val regular = variableFont(Res.font.archivo_variable, FontWeight.Normal, 400f, width)
-    val medium = variableFont(Res.font.archivo_variable, FontWeight.Medium, 500f, width)
-    val semiBold = variableFont(Res.font.archivo_variable, FontWeight.SemiBold, 600f, width)
-    val bold = variableFont(Res.font.archivo_variable, FontWeight.Bold, 700f, width)
-    return remember(regular, medium, semiBold, bold) {
-        FontFamily(regular, medium, semiBold, bold)
-    }
+private fun hankenGrotesk(): FontFamily {
+    val regular = Font(Res.font.hanken_grotesk_regular, FontWeight.Normal)
+    val medium = Font(Res.font.hanken_grotesk_medium, FontWeight.Medium)
+    val semiBold = Font(Res.font.hanken_grotesk_semibold, FontWeight.SemiBold)
+    val bold = Font(Res.font.hanken_grotesk_bold, FontWeight.Bold)
+    return remember(regular, medium, semiBold, bold) { FontFamily(regular, medium, semiBold, bold) }
 }
 
-/**
- * Martian Mono — wide, squared, mechanical. Reserved for values a machine
- * produced: addresses, round-trip times, counters, log lines.
- */
-@Composable
-private fun martianMono(width: Float = MONO_WIDTH): FontFamily {
-    val regular = variableFont(Res.font.martian_mono_variable, FontWeight.Normal, 400f, width)
-    val medium = variableFont(Res.font.martian_mono_variable, FontWeight.Medium, 500f, width)
-    return remember(regular, medium) { FontFamily(regular, medium) }
-}
-
-@Composable
-private fun variableFont(
-    resource: org.jetbrains.compose.resources.FontResource,
-    weight: FontWeight,
-    weightAxis: Float,
-    widthAxis: Float,
-) = Font(
-    resource = resource,
-    weight = weight,
-    variationSettings = FontVariation.Settings(
-        FontVariation.weight(weightAxis.toInt()),
-        FontVariation.width(widthAxis),
-    ),
-)
-
-/**
- * Five sizes, ≥1.25× apart, so hierarchy survives being glanced at. Panel
- * labels are small and tracked wide — engraved text is cut shallow and spaced
- * out to stay legible, and copying that reads as manufactured.
- */
+/** Hanken Grotesk throughout; digits are tabular so readouts don't jitter as they tick. */
 @Composable
 internal fun vpnChainTypography(): Typography {
-    val panel = archivo(PANEL_WIDTH)
-    val label = archivo(LABEL_WIDTH)
-    val mono = martianMono()
+    val family = hankenGrotesk()
     val base = Typography()
-    return remember(panel, label, mono) {
+    return remember(family) {
         base.copy(
-            // Device nameplate.
-            headlineMedium = base.headlineMedium.copy(
-                fontFamily = label,
+            headlineLarge = base.headlineLarge.copy(
+                fontFamily = family,
                 fontWeight = FontWeight.Bold,
                 fontSize = 30.sp,
-                lineHeight = 34.sp,
-                letterSpacing = 0.14.em,
+                lineHeight = 36.sp,
+                letterSpacing = (-0.01).em,
             ),
-            // Section engraving: "ROUTE", "CHAIN".
+            headlineMedium = base.headlineMedium.copy(
+                fontFamily = family,
+                fontWeight = FontWeight.Bold,
+                fontSize = 28.sp,
+                lineHeight = 34.sp,
+                letterSpacing = (-0.01).em,
+            ),
+            titleLarge = base.titleLarge.copy(
+                fontFamily = family,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                lineHeight = 24.sp,
+            ),
             titleMedium = base.titleMedium.copy(
-                fontFamily = label,
+                fontFamily = family,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+                letterSpacing = 0.02.em,
+            ),
+            titleSmall = base.titleSmall.copy(
+                fontFamily = family,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                letterSpacing = 0.22.em,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
             ),
             bodyLarge = base.bodyLarge.copy(
-                fontFamily = panel,
+                fontFamily = family,
                 fontWeight = FontWeight.Normal,
                 fontSize = 15.sp,
-                lineHeight = 23.sp,
+                lineHeight = 22.sp,
             ),
             bodyMedium = base.bodyMedium.copy(
-                fontFamily = panel,
+                fontFamily = family,
                 fontWeight = FontWeight.Normal,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 lineHeight = 20.sp,
             ),
-            // Machine-produced values.
             bodySmall = base.bodySmall.copy(
-                fontFamily = mono,
+                fontFamily = family,
                 fontWeight = FontWeight.Normal,
-                fontSize = 11.sp,
-                lineHeight = 17.sp,
-                letterSpacing = (-0.02).em,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                fontFeatureSettings = "tnum",
             ),
-            // Switch legends and row labels.
             labelLarge = base.labelLarge.copy(
-                fontFamily = label,
+                fontFamily = family,
                 fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+            ),
+            labelMedium = base.labelMedium.copy(
+                fontFamily = family,
+                fontWeight = FontWeight.Medium,
                 fontSize = 12.sp,
-                letterSpacing = 0.18.em,
+                lineHeight = 16.sp,
             ),
             labelSmall = base.labelSmall.copy(
-                fontFamily = label,
+                fontFamily = family,
                 fontWeight = FontWeight.Medium,
-                fontSize = 10.sp,
-                letterSpacing = 0.20.em,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
             ),
         )
     }
 }
-
-/** Inline technical readouts outside the type-scale slots (IPs, RTT, log body). */
-@Composable
-fun monospaceTextStyle(): TextStyle {
-    val mono = martianMono()
-    return remember(mono) { TextStyle(fontFamily = mono, letterSpacing = (-0.02).em) }
-}
-
-// Archivo's width axis: labels are drawn condensed like silkscreen, running
-// text sits at normal width. Martian Mono is narrowed so addresses fit a row.
-private const val PANEL_WIDTH = 100f
-private const val LABEL_WIDTH = 87f
-private const val MONO_WIDTH = 87.5f

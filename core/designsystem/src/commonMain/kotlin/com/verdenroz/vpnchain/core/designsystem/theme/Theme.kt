@@ -1,11 +1,10 @@
 package com.verdenroz.vpnchain.core.designsystem.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
@@ -79,48 +78,12 @@ private val LightPanel = PanelColors(
 
 val LocalPanelColors = staticCompositionLocalOf { DarkPanel }
 
+private val LocalVpnChainColors = staticCompositionLocalOf { DarkVpnChainColors }
+
 /** Panel tokens, read as `PanelTheme.colors` at any call site. */
 object PanelTheme {
     val colors: PanelColors
         @Composable get() = LocalPanelColors.current
-}
-
-private fun PanelColors.toMaterialScheme() = if (dark) {
-    darkColorScheme(
-        background = shellDeep,
-        onBackground = readout,
-        surface = shellFace,
-        onSurface = readout,
-        surfaceVariant = shellRaised,
-        onSurfaceVariant = muted,
-        outline = edgeHighlight,
-        outlineVariant = edgeShadow,
-        primary = lampGreen,
-        onPrimary = shellDeep,
-        secondary = lampAmber,
-        onSecondary = shellDeep,
-        tertiary = lampWhite,
-        error = lampRed,
-        onError = shellDeep,
-    )
-} else {
-    lightColorScheme(
-        background = shellDeep,
-        onBackground = readout,
-        surface = shellFace,
-        onSurface = readout,
-        surfaceVariant = shellRaised,
-        onSurfaceVariant = muted,
-        outline = edgeShadow,
-        outlineVariant = edgeShadow,
-        primary = lampGreen,
-        onPrimary = edgeHighlight,
-        secondary = lampAmber,
-        onSecondary = edgeHighlight,
-        tertiary = lampWhite,
-        error = lampRed,
-        onError = edgeHighlight,
-    )
 }
 
 @Composable
@@ -129,11 +92,18 @@ fun VpnChainTheme(
     content: @Composable () -> Unit,
 ) {
     val panel = if (darkTheme) DarkPanel else LightPanel
-    CompositionLocalProvider(LocalPanelColors provides panel) {
+    val colors = if (darkTheme) DarkVpnChainColors else LightVpnChainColors
+    CompositionLocalProvider(LocalPanelColors provides panel, LocalVpnChainColors provides colors) {
         MaterialTheme(
-            colorScheme = panel.toMaterialScheme(),
+            colorScheme = colors.toMaterial(),
             typography = vpnChainTypography(),
             content = content,
         )
     }
+}
+
+object VpnChainTheme {
+    val colors: VpnChainColors
+        @Composable @ReadOnlyComposable
+        get() = LocalVpnChainColors.current
 }
