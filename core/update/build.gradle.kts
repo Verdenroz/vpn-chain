@@ -13,6 +13,9 @@ kotlin {
             implementation(libs.okio)
             implementation(libs.koin.core)
         }
+        // Both targets are JVM, so code that needs only java.* is compiled into each.
+        androidMain { kotlin.srcDir("src/jvmShared/kotlin") }
+        desktopMain { kotlin.srcDir("src/jvmShared/kotlin") }
         commonTest.dependencies {
             implementation(libs.okio.fakefilesystem)
         }
