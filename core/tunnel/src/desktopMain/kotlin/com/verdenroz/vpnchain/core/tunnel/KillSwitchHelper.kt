@@ -11,18 +11,19 @@ sealed interface HelperOutcome {
 
 typealias HelperRunner = suspend (args: List<String>) -> HelperOutcome
 
-fun processHelperRunner(bin: String): HelperRunner = { args ->
+fun processHelperRunner(bin: String, timeoutSeconds: Long = 5): HelperRunner = { args ->
     runCatching {
         val proc = ProcessBuilder(listOf(bin) + args).redirectErrorStream(true).start()
-        val output = proc.inputStream.bufferedReader().readText()
-        if (proc.waitFor(5, TimeUnit.SECONDS)) {
-            HelperOutcome.Exited(proc.exitValue(), output)
+        if (proc.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+            HelperOutcome.Exited(proc.exitValue(), proc.inputStream.bufferedReader().readText())
         } else {
             proc.destroyForcibly()
             HelperOutcome.TimedOut
         }
     }.getOrDefault(HelperOutcome.NotFound)
 }
+
+private val DENIED = listOf("Operation not permitted", "Permission denied")
 
 /** Null when the table was installed, otherwise why the chain is left unprotected. */
 internal suspend fun engageKillSwitchFault(
@@ -33,7 +34,11 @@ internal suspend fun engageKillSwitchFault(
     if (exemptIps.isEmpty()) return KillSwitchState.NoExemptAddresses
     val localArgs = if (allowLocal) listOf("--allow-local") else emptyList()
     return when (val outcome = run(listOf("up") + localArgs + exemptIps)) {
-        is HelperOutcome.Exited -> KillSwitchState.HelperUnprivileged.takeIf { outcome.code != 0 }
+        is HelperOutcome.Exited -> when {
+            outcome.code == 0 -> null
+            DENIED.any { outcome.output.contains(it, ignoreCase = true) } -> KillSwitchState.HelperUnprivileged
+            else -> KillSwitchState.HelperFailed
+        }
         HelperOutcome.NotFound -> KillSwitchState.HelperNotFound
         HelperOutcome.TimedOut -> KillSwitchState.HelperTimedOut
     }

@@ -122,7 +122,7 @@ cmd_down() {
   local stopped=0
   if managed_relay_up; then
     log "Stopping $RELAY_UNIT..."
-    systemctl stop "$RELAY_UNIT" || die "could not stop $RELAY_UNIT; relay and kill switch left as they were"
+    systemctl stop "$RELAY_UNIT" || die "Could not stop $RELAY_UNIT; nothing changed."
     stopped=1
   fi
   if relay_up; then

@@ -36,6 +36,28 @@ class KillSwitchHelperTest {
     }
 
     @Test
+    fun `other non-zero exit is helper failed`() {
+        assertEquals(KillSwitchState.HelperFailed, fault { HelperOutcome.Exited(2, "usage: vpn-chain-killswitch") })
+    }
+
+    @Test
+    fun `permission denied output is helper unprivileged`() {
+        assertEquals(KillSwitchState.HelperUnprivileged, fault { HelperOutcome.Exited(1, "Permission denied") })
+    }
+
+    @Test
+    fun `hung process times out instead of blocking`() {
+        val outcome = runBlocking { processHelperRunner("sleep", timeoutSeconds = 1)(listOf("10")) }
+        assertEquals(HelperOutcome.TimedOut, outcome)
+    }
+
+    @Test
+    fun `absent binary is not found`() {
+        val outcome = runBlocking { processHelperRunner("vpn-chain-no-such-bin")(emptyList()) }
+        assertEquals(HelperOutcome.NotFound, outcome)
+    }
+
+    @Test
     fun `timeout is helper timed out`() {
         assertEquals(KillSwitchState.HelperTimedOut, fault { HelperOutcome.TimedOut })
     }

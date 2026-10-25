@@ -73,6 +73,7 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_hop_origin
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_hop_unresolved
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_external_app
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_helper_failed
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_helper_not_found
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_helper_timed_out
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_helper_unprivileged
@@ -483,6 +484,7 @@ private fun StatusStrip(status: ChainStatus, rttMs: Int?) {
                         when (status.killSwitch) {
                             KillSwitchState.HelperNotFound -> Res.string.chain_kill_switch_hint_helper_not_found
                             KillSwitchState.HelperUnprivileged -> Res.string.chain_kill_switch_hint_helper_unprivileged
+                            KillSwitchState.HelperFailed -> Res.string.chain_kill_switch_hint_helper_failed
                             KillSwitchState.HelperTimedOut -> Res.string.chain_kill_switch_hint_helper_timed_out
                             KillSwitchState.NoExemptAddresses -> Res.string.chain_kill_switch_hint_no_exempt
                             KillSwitchState.NotEngaged -> Res.string.chain_kill_switch_hint_not_engaged

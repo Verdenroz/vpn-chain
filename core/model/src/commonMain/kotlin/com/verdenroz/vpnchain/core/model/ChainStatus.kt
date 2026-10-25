@@ -21,6 +21,9 @@ enum class KillSwitchState {
     /** The helper runs but the firewall call is refused, i.e. it lacks cap_net_admin. */
     HelperUnprivileged,
 
+    /** The helper ran and failed for a reason other than missing privileges. */
+    HelperFailed,
+
     /** The helper didn't answer in time. */
     HelperTimedOut,
 
