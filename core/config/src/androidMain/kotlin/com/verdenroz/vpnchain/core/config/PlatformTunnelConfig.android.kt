@@ -11,11 +11,18 @@ actual fun renderPlatformTunnelConfig(
     profile: SavedProfile,
     settings: UserSettings,
     warp: WarpExit?,
-): String = SingBoxConfigFactory.androidChainConfig(
-    profile = requireNotNull(profile.relay),
-    entry = profile.wireGuard,
-    dnsFilter = settings.dnsFilter,
-    warp = warp,
-    warpMode = settings.warpMode,
-    warpDomains = settings.warpDomains,
-)
+): String {
+    val relay = profile.relay
+        ?: return SingBoxConfigFactory.wireGuardConfig(
+            entry = requireNotNull(profile.wireGuard),
+            dnsFilter = settings.dnsFilter,
+        )
+    return SingBoxConfigFactory.androidChainConfig(
+        profile = relay,
+        entry = profile.wireGuard,
+        dnsFilter = settings.dnsFilter,
+        warp = warp,
+        warpMode = settings.warpMode,
+        warpDomains = settings.warpDomains,
+    )
+}

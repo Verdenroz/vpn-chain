@@ -18,9 +18,20 @@ actual fun renderPlatformTunnelConfig(
     settings: UserSettings,
     warp: WarpExit?,
 ): String {
-    val relay = requireNotNull(profile.relay)
+    val relay = profile.relay
     val clashApi = newClashApi()
-    return if (settings.systemWideTun) {
+    // No relay means no SOCKS-proxy shape to fall back on: a bare WireGuard
+    // peer only exists as a TUN.
+    return if (relay == null) {
+        SingBoxConfigFactory.wireGuardConfig(
+            entry = requireNotNull(profile.wireGuard),
+            clashApi = clashApi,
+            dnsFilter = settings.dnsFilter,
+            cachePath = if (SystemdRelay.available) SystemdRelay.cachePath else cacheFilePath(),
+            allowLocalNetworks = settings.allowLocalNetworks,
+            logPath = if (SystemdRelay.available) SystemdRelay.logFile.absolutePath else null,
+        )
+    } else if (settings.systemWideTun) {
         SingBoxConfigFactory.androidChainConfig(
             profile = relay,
             entry = profile.wireGuard,

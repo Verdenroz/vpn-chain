@@ -29,6 +29,10 @@ data class SavedProfile(
             else -> ConnectionKind.WireGuard
         }
 
+    /** The WARP tail and its auto-detect probing are dialled through the relay, so a bare WireGuard peer has neither. */
+    val supportsWarpExit: Boolean
+        get() = relay != null
+
     /** The address the user would recognise this connection by. */
     val host: String
         get() = relay?.vpsIp ?: wireGuard?.endpointHost.orEmpty()

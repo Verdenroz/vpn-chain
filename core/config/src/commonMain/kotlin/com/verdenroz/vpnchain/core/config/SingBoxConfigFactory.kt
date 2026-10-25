@@ -101,33 +101,14 @@ object SingBoxConfigFactory {
                 if (filtering) putBlocklistRules(dnsFilter)
             }
             putJsonArray("inbounds") {
-                addJsonObject {
-                    put("type", "tun")
-                    put("tag", "tun-in")
-                    // 10.19.19.1/30 avoids the common Docker 172.16/12 bridge range
-                    // (sing-box's usual 172.19.0.1 default collides with br-* bridges).
-                    // The ULA address is required too: without it auto_route only
-                    // programs an IPv4 default route, so IPv6 traffic skips the tun
-                    // entirely and leaks straight out the real interface.
-                    putJsonArray("address") { add("10.19.19.1/30"); add("fdfe:dcba:9876::1/126") }
-                    // Default TUN MTU is 9000; capped at 1280 to nest inside the entry
-                    // WG tunnel (also 1280), else 1400 for VLESS/TLS headroom under 1500.
-                    // A WARP tail is another 1280 WireGuard hop, so it caps this the
-                    // same way even when there is no entry hop in front.
-                    put("mtu", if (entry != null || tail != null) 1280 else 1400)
-                    put("auto_route", true)
-                    put("strict_route", true)
-                    // auto_route otherwise pulls bridge and LAN destinations into the
-                    // tun, so Docker containers and local hosts never see a reply.
-                    if (allowLocalNetworks) {
-                        putJsonArray("route_exclude_address") {
-                            LOCAL_ROUTE_EXCLUDES.forEach { add(it) }
-                        }
-                    }
-                    // gVisor terminates TCP and clamps MSS itself, avoiding kernel PMTU
-                    // discovery, which black-holes large packets over a nested tunnel.
-                    put("stack", "gvisor")
-                }
+                // Default TUN MTU is 9000; capped at 1280 to nest inside the entry
+                // WG tunnel (also 1280), else 1400 for VLESS/TLS headroom under 1500.
+                // A WARP tail is another 1280 WireGuard hop, so it caps this the
+                // same way even when there is no entry hop in front.
+                addTunInbound(
+                    mtu = if (entry != null || tail != null) 1280 else 1400,
+                    allowLocalNetworks = allowLocalNetworks,
+                )
             }
             if (entry != null || tail != null) {
                 putJsonArray("endpoints") {
@@ -169,6 +150,52 @@ object SingBoxConfigFactory {
                     "final",
                     if (tail != null && warpMode == WarpMode.AllTraffic) WARP_TAG else VLESS_TAG,
                 )
+            }
+        }
+    }
+
+    /**
+     * A WireGuard peer on its own: TUN → peer, with no relay. The WARP tail is
+     * defined as dialled through the relay, so there is none here.
+     */
+    fun wireGuardConfig(
+        entry: WireGuardEntry,
+        clashApi: ClashApi? = null,
+        dnsFilter: DnsFilter = DnsFilter.Off,
+        cachePath: String? = null,
+        allowLocalNetworks: Boolean = false,
+        logPath: String? = null,
+    ): String {
+        val filtering = dnsFilter != DnsFilter.Off
+        val addresses = entry.address.split(',').map(String::trim)
+        return render {
+            putInfoLog(logPath)
+            putExperimental(clashApi, cacheFile = filtering, cachePath = cachePath)
+            putJsonObject("dns") {
+                putDnsServers(entry, remoteDetour = ENTRY_HOP_TAG)
+                if (filtering) putBlocklistRules(dnsFilter)
+            }
+            putJsonArray("inbounds") {
+                addTunInbound(mtu = entry.mtu ?: 1280, allowLocalNetworks = allowLocalNetworks)
+            }
+            putJsonArray("endpoints") {
+                val v6 = addresses.any { ':' in it }
+                addWireGuardEndpoint(entry, allowedIps = if (v6) listOf("0.0.0.0/0", "::/0") else listOf("0.0.0.0/0"))
+            }
+            putJsonArray("outbounds") { addDirectOutbound() }
+            putJsonObject("route") {
+                put("auto_detect_interface", true)
+                if (filtering) putBlocklistRuleSet(dnsFilter, detour = ENTRY_HOP_TAG)
+                putJsonArray("rules") {
+                    addJsonObject { put("action", "sniff") }
+                    addJsonObject { put("protocol", "dns"); put("action", "hijack-dns") }
+                    addJsonObject {
+                        put("network", "udp")
+                        put("port", 443)
+                        put("action", "reject")
+                    }
+                }
+                put("final", ENTRY_HOP_TAG)
             }
         }
     }
@@ -229,7 +256,7 @@ object SingBoxConfigFactory {
      * the bare link would announce the app to the network it is hiding from.
      * Binary `.srs` is the compiled form sing-box loads directly.
      */
-    private fun JsonObjectBuilder.putBlocklistRuleSet(filter: DnsFilter) {
+    private fun JsonObjectBuilder.putBlocklistRuleSet(filter: DnsFilter, detour: String = VLESS_TAG) {
         putJsonArray("rule_set") {
             blocklistsFor(filter).forEach { list ->
                 addJsonObject {
@@ -237,7 +264,7 @@ object SingBoxConfigFactory {
                     put("tag", list.tag)
                     put("format", "binary")
                     put("url", list.url)
-                    put("download_detour", VLESS_TAG)
+                    put("download_detour", detour)
                     put("update_interval", "168h")
                 }
             }
@@ -265,7 +292,7 @@ object SingBoxConfigFactory {
      * it via the relay like the public fallback would make it unreachable, not
      * merely unfiltered.
      */
-    private fun JsonObjectBuilder.putDnsServers(entry: WireGuardEntry?) {
+    private fun JsonObjectBuilder.putDnsServers(entry: WireGuardEntry?, remoteDetour: String = VLESS_TAG) {
         putJsonArray("servers") {
             if (entry?.dns != null) {
                 addJsonObject {
@@ -279,12 +306,36 @@ object SingBoxConfigFactory {
                     put("type", "https")
                     put("tag", "dns-remote")
                     put("server", "1.1.1.1")
-                    put("detour", VLESS_TAG)
+                    put("detour", remoteDetour)
                 }
             }
         }
         put("final", if (entry?.dns != null) "dns-entry" else "dns-remote")
         put("strategy", "ipv4_only")
+    }
+
+    private fun JsonArrayBuilder.addTunInbound(mtu: Int, allowLocalNetworks: Boolean) = addJsonObject {
+        put("type", "tun")
+        put("tag", "tun-in")
+        // 10.19.19.1/30 avoids the common Docker 172.16/12 bridge range
+        // (sing-box's usual 172.19.0.1 default collides with br-* bridges).
+        // The ULA address is required too: without it auto_route only
+        // programs an IPv4 default route, so IPv6 traffic skips the tun
+        // entirely and leaks straight out the real interface.
+        putJsonArray("address") { add("10.19.19.1/30"); add("fdfe:dcba:9876::1/126") }
+        put("mtu", mtu)
+        put("auto_route", true)
+        put("strict_route", true)
+        // auto_route otherwise pulls bridge and LAN destinations into the
+        // tun, so Docker containers and local hosts never see a reply.
+        if (allowLocalNetworks) {
+            putJsonArray("route_exclude_address") {
+                LOCAL_ROUTE_EXCLUDES.forEach { add(it) }
+            }
+        }
+        // gVisor terminates TCP and clamps MSS itself, avoiding kernel PMTU
+        // discovery, which black-holes large packets over a nested tunnel.
+        put("stack", "gvisor")
     }
 
     private fun JsonArrayBuilder.addDirectOutbound() =
@@ -319,19 +370,23 @@ object SingBoxConfigFactory {
         if (detour != null) put("detour", detour)
     }
 
-    private fun JsonArrayBuilder.addWireGuardEndpoint(entry: WireGuardEntry) = addJsonObject {
+    private fun JsonArrayBuilder.addWireGuardEndpoint(
+        entry: WireGuardEntry,
+        allowedIps: List<String> = listOf("0.0.0.0/0"),
+    ) = addJsonObject {
         put("type", "wireguard")
         put("tag", ENTRY_HOP_TAG)
-        put("mtu", 1280)
-        putJsonArray("address") { add(entry.address) }
+        put("mtu", entry.mtu ?: 1280)
+        putJsonArray("address") { entry.address.split(',').forEach { add(it.trim()) } }
         put("private_key", entry.privateKey)
         putJsonArray("peers") {
             addJsonObject {
                 put("address", entry.endpointHost)
                 put("port", entry.endpointPort)
                 put("public_key", entry.peerPublicKey)
-                putJsonArray("allowed_ips") { add("0.0.0.0/0") }
-                put("persistent_keepalive_interval", 25)
+                entry.presharedKey?.let { put("pre_shared_key", it) }
+                putJsonArray("allowed_ips") { allowedIps.forEach { add(it) } }
+                put("persistent_keepalive_interval", entry.keepaliveSeconds ?: 25)
             }
         }
     }

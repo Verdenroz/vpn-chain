@@ -115,7 +115,8 @@ internal class DefaultChainRepository(
         // Registration talks to Cloudflare over the untunnelled link, so it
         // happens here rather than at render time — and a failure costs the
         // tail, never the connect.
-        val warp = if (settings.warpMode == WarpMode.Off) null else warpRepository.exit()
+        val wantsTail = settings.warpMode != WarpMode.Off && profile.supportsWarpExit
+        val warp = if (wantsTail) warpRepository.exit() else null
         return runCatching { renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp) }
             .onFailure { logger.e(TAG, "config render failed", it) }
             .getOrNull()
