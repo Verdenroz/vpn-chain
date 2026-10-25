@@ -4,6 +4,8 @@
 #   - Desktop: jpackage can't cross-compile, so each package builds on its
 #     native runner — Linux .deb + portable .tar.gz, Windows .msi,
 #     macOS .dmg (arm64; unsigned — right-click → Open past Gatekeeper).
+#   - manifest.json: sizes + SHA-256 of the APKs and the Linux tarball, which
+#     the apps' in-app updater reads from the latest release.
 #
 # Optional secrets for stable Android signing across releases:
 #   ANDROID_KEYSTORE_B64       base64 of the .jks  (base64 -w0 release.jks)
@@ -125,10 +127,13 @@ jobs:
     needs: [android, desktop]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+      - name: Write update manifest
+        run: .github/scripts/release-manifest.sh "${GITHUB_REF_NAME#v}" dist
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
