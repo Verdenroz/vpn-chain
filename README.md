@@ -41,12 +41,12 @@ instead of Hilt, so `commonMain` works on both Android and desktop).
 | `core/warp` | KMP Cloudflare WARP registration for the tail exit (X25519 keygen + the free reg API). |
 | `core/data` | KMP repositories: `ChainRepository`, `ProfileRepository`, `SettingsRepository`, `LogRepository`, `WarpRepository`. |
 | `core/domain` | KMP use cases (`ConnectChainUseCase`, `ImportProfileUseCase`, …). |
-| `core/designsystem` | KMP `VpnChainTheme`, colors/type, `StatusIndicator`. |
+| `core/designsystem` | KMP `VpnChainTheme`, colors/type, `StatusBar`. |
 | `core/ui` | KMP shared composables (`SectionCard`, theme resolution). |
 | `feature/chain` | Connect/disconnect + status (`ChainViewModel`). |
 | `feature/settings` | Profile form, secrets.env import, theme picker. |
 | `feature/logs` | Live sing-box log viewer. |
-| `app-common` | Themed shell: bottom-nav `Scaffold` + `NavHost`, Koin graph aggregation. |
+| `app-common` | Themed shell: status bar, bottom tabs or nav rail, `NavHost`, Koin graph aggregation. |
 | `androidApp` | Native Android app (Compose + VpnService). |
 | `desktopApp` | Compose Multiplatform desktop (Windows/macOS/Linux). |
 | `server/` | VPS provisioning, entry key rotation, link generator. |

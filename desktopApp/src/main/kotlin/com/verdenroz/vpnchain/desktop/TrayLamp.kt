@@ -8,11 +8,10 @@ import androidx.compose.ui.graphics.painter.Painter
 import com.verdenroz.vpnchain.core.model.TunnelState
 
 /**
- * The tray icon: the panel's indicator lamp, shrunk to a tray slot.
+ * The tray icon: a state-colored dot.
  *
- * Drawn rather than shipped as four PNGs so the states stay in step with the
- * lamp colors used everywhere else, and so it scales to whatever size the tray
- * asks for.
+ * Drawn rather than shipped as four PNGs so it scales to whatever size the
+ * tray asks for.
  */
 internal class TrayLamp(private val state: TunnelState) : Painter() {
 
@@ -40,7 +39,6 @@ internal class TrayLamp(private val state: TunnelState) : Painter() {
     }
 }
 
-/** Same phosphor vocabulary as the on-panel lamps. */
 internal fun TunnelState.lampColor(): Color = when (this) {
     TunnelState.Connected -> Color(0xFF34D399)
     TunnelState.Connecting -> Color(0xFFFBBF24)

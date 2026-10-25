@@ -73,7 +73,7 @@ fun main() {
                     stringResource(
                         if (connected) Res.string.tray_disconnect else Res.string.tray_connect,
                     ),
-                    // The same repository call the panel's throw switch makes,
+                    // The same repository call the Connect button makes,
                     // so the tray never drives the tunnel by a second path.
                     onClick = {
                         scope.launch { if (connected) chain.disconnect() else chain.connect() }

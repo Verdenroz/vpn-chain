@@ -122,9 +122,8 @@ it doesn't touch the routing table) encodes several non-obvious constraints
 from sing-box's own interface auto-detection.
 
 **Design system**: `.impeccable.md` at the repo root captures the UI's brand
-direction (a "front-panel instrument" aesthetic — lamps not badges, engraved
-labels, machined depth, dark-first) for the `impeccable`/`frontend-design`
-skills. Read it before touching `core/designsystem` or any feature's Compose
+direction (a map with a status bar, plain copy, light and dark following the
+system) for the `impeccable`/`frontend-design` skills. Read it before touching `core/designsystem` or any feature's Compose
 UI.
 
 ## Package/namespace
