@@ -39,7 +39,8 @@ interface ProfileRepository {
     /** Removes every saved profile. */
     suspend fun clear()
 
-    suspend fun importFromSecretsEnv(text: String): Result<ChainProfile>
+    /** Adds the relay (and entry hop) in [text] as a connection, which becomes active only when [activate] is set. */
+    suspend fun importFromSecretsEnv(text: String, activate: Boolean = true): Result<ChainProfile>
 
     /**
      * Imports a WireGuard `.conf`. With [intoActive] it becomes the entry hop of
@@ -101,9 +102,9 @@ internal class DefaultProfileRepository(
 
     override suspend fun clear() = preferences.clearProfile()
 
-    override suspend fun importFromSecretsEnv(text: String): Result<ChainProfile> =
+    override suspend fun importFromSecretsEnv(text: String, activate: Boolean): Result<ChainProfile> =
         SecretsEnvParser.parse(text)
-            .onSuccess { add(name = it.relay.vpsIp, relay = it.relay, wireGuard = it.entryHop) }
+            .onSuccess { insert(name = it.relay.vpsIp, relay = it.relay, wireGuard = it.entryHop, activate = activate) }
             .map { it.relay }
 
     override suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean): Result<WireGuardEntry> =

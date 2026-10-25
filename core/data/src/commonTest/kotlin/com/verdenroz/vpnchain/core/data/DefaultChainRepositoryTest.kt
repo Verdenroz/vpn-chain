@@ -184,7 +184,7 @@ private class StubProfileRepository : ProfileRepository {
     override suspend fun delete(id: String) = Unit
     override suspend fun setActive(id: String) = Unit
     override suspend fun clear() = Unit
-    override suspend fun importFromSecretsEnv(text: String) =
+    override suspend fun importFromSecretsEnv(text: String, activate: Boolean) =
         Result.failure<ChainProfile>(IllegalStateException("not used"))
     override suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean) =
         Result.failure<WireGuardEntry>(IllegalStateException("not used"))

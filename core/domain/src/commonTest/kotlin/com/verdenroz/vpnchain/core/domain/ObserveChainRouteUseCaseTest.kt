@@ -329,7 +329,7 @@ private class FakeProfiles(profile: SavedProfile?) : ProfileRepository {
     override suspend fun delete(id: String) = Unit
     override suspend fun setActive(id: String) = Unit
     override suspend fun clear() = Unit
-    override suspend fun importFromSecretsEnv(text: String) = Result.failure<ChainProfile>(
+    override suspend fun importFromSecretsEnv(text: String, activate: Boolean) = Result.failure<ChainProfile>(
         UnsupportedOperationException("not used in these tests"),
     )
     override suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean) =

@@ -410,7 +410,7 @@ private class FakeProfileRepository : ProfileRepository {
     override suspend fun delete(id: String) = Unit
     override suspend fun setActive(id: String) = Unit
     override suspend fun clear() = Unit
-    override suspend fun importFromSecretsEnv(text: String) = Result.success(SUPERVISED_RELAY)
+    override suspend fun importFromSecretsEnv(text: String, activate: Boolean) = Result.success(SUPERVISED_RELAY)
     override suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean) =
         Result.failure<WireGuardEntry>(IllegalStateException("not used"))
 }

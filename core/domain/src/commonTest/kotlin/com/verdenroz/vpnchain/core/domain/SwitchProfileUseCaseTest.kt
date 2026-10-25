@@ -99,7 +99,7 @@ private class RecordingProfiles(private val log: MutableList<String>) : ProfileR
         log += "setActive:$id"
     }
     override suspend fun clear() = Unit
-    override suspend fun importFromSecretsEnv(text: String) = Result.failure<ChainProfile>(IllegalStateException())
+    override suspend fun importFromSecretsEnv(text: String, activate: Boolean) = Result.failure<ChainProfile>(IllegalStateException())
     override suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean): Result<WireGuardEntry> {
         log += "import:$intoActive:$activate"
         return Result.success(WireGuardEntry("k", "10.0.0.2/32", "p", "198.51.100.7"))

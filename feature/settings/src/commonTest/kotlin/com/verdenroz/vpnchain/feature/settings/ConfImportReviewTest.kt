@@ -14,7 +14,6 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -35,7 +34,7 @@ class ConfImportReviewTest {
 
         viewModel.importSecretsEnv(CONF)
 
-        val pending = assertNotNull(viewModel.pendingImport.value)
+        val pending = assertIs<PendingImport.Conf>(viewModel.pendingImport.value)
         assertEquals("198.51.100.7", pending.entry.endpointHost)
         assertEquals(51820, pending.entry.endpointPort)
         assertEquals(emptyList(), log)
@@ -99,6 +98,51 @@ class ConfImportReviewTest {
         assertTrue(log.isEmpty())
     }
 
+    @Test
+    fun `a pasted secrets env waits for review and changes nothing`() {
+        val viewModel = viewModel(TunnelState.Connected)
+
+        viewModel.importSecretsEnv(SECRETS)
+
+        val pending = assertIs<PendingImport.SecretsEnv>(viewModel.pendingImport.value)
+        assertEquals("203.0.113.10", pending.relay.vpsIp)
+        assertNull(pending.entryHop)
+        assertEquals(1, viewModel.importsTaken.value)
+        assertEquals(emptyList(), log)
+    }
+
+    @Test
+    fun `use it makes a reviewed secrets env the active connection`() {
+        val viewModel = viewModel(TunnelState.Disconnected)
+        viewModel.importSecretsEnv(SECRETS)
+
+        viewModel.usePendingImport()
+
+        assertEquals(listOf("secrets:true"), log)
+        assertNull(viewModel.pendingImport.value)
+    }
+
+    @Test
+    fun `save keeps a reviewed secrets env without switching`() {
+        val viewModel = viewModel(TunnelState.Connected)
+        viewModel.importSecretsEnv(SECRETS)
+
+        viewModel.savePendingImport()
+
+        assertEquals(listOf("secrets:false"), log)
+    }
+
+    @Test
+    fun `cancel drops a reviewed secrets env`() {
+        val viewModel = viewModel(TunnelState.Connected)
+        viewModel.importSecretsEnv(SECRETS)
+
+        viewModel.cancelPendingImport()
+
+        assertNull(viewModel.pendingImport.value)
+        assertEquals(emptyList(), log)
+    }
+
     private fun viewModel(state: TunnelState): SettingsViewModel {
         val profiles = FakeProfiles(log)
         val chain = FakeChain(state, log)
@@ -112,6 +156,8 @@ class ConfImportReviewTest {
         )
     }
 }
+
+private const val SECRETS = "VPS_IP=203.0.113.10\nVLESS_UUID=u\nREALITY_PUBKEY=k\nSHORT_ID=ab"
 
 private val CONF = """
     [Interface]

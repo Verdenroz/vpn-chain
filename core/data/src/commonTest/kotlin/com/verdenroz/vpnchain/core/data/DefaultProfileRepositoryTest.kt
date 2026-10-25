@@ -94,6 +94,18 @@ class DefaultProfileRepositoryTest {
     }
 
     @Test
+    fun `saving a secrets env without activating it leaves the active connection alone`() = runTest {
+        val repository = repository()
+        repository.importWireGuardConf(CONF, intoActive = false)
+        val active = repository.activeProfileId.first()
+
+        repository.importFromSecretsEnv("VPS_IP=198.51.100.1\nVLESS_UUID=u\nREALITY_PUBKEY=k\nSHORT_ID=ab", activate = false)
+
+        assertEquals(2, repository.profiles.first().size)
+        assertEquals(active, repository.activeProfileId.first())
+    }
+
+    @Test
     fun `saving with a stale selection edits the profile on screen`() = runTest {
         val repository = repository()
         repository.add("relay", RELAY, null)

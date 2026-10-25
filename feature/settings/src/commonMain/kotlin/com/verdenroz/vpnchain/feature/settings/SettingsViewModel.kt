@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.verdenroz.vpnchain.core.data.ChainRepository
+import com.verdenroz.vpnchain.core.config.SecretsEnvParser
 import com.verdenroz.vpnchain.core.config.WireGuardConfParser
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
@@ -51,10 +52,18 @@ data class SettingsUiState(
 )
 
 /**
- * A parsed WireGuard conf waiting for the user to look at its endpoint. Nothing
- * is saved and no tunnel is touched until they pick "Use it" or "Save".
+ * A parsed import waiting for the user to look at where it connects. Nothing is
+ * saved and nothing becomes active until they pick "Use it" or "Save".
  */
-data class PendingConfImport(val text: String, val entry: WireGuardEntry, val intoActive: Boolean)
+sealed interface PendingImport {
+    val text: String
+
+    /** A WireGuard `.conf`, as a connection of its own or as the active one's entry hop. */
+    data class Conf(override val text: String, val entry: WireGuardEntry, val intoActive: Boolean) : PendingImport
+
+    /** A CLI `secrets.env`: a relay, and its entry hop when the file has one. */
+    data class SecretsEnv(override val text: String, val relay: ChainProfile, val entryHop: WireGuardEntry?) : PendingImport
+}
 
 /** One-shot user feedback (import result), consumed by the UI. */
 sealed interface SettingsMessage {
@@ -97,8 +106,8 @@ class SettingsViewModel(
     private val _message = MutableStateFlow<SettingsMessage?>(null)
     val message: StateFlow<SettingsMessage?> = _message.asStateFlow()
 
-    private val _pendingImport = MutableStateFlow<PendingConfImport?>(null)
-    val pendingImport: StateFlow<PendingConfImport?> = _pendingImport.asStateFlow()
+    private val _pendingImport = MutableStateFlow<PendingImport?>(null)
+    val pendingImport: StateFlow<PendingImport?> = _pendingImport.asStateFlow()
 
     /** Bumped each time pasted text is taken, so the UI can clear the paste field. */
     private val _importsTaken = MutableStateFlow(0)
@@ -196,49 +205,63 @@ class SettingsViewModel(
         _message.value = SettingsMessage.Info(UiText.Resource(Res.string.settings_profile_cleared))
     }
 
-    fun importSecretsEnv(text: String) = viewModelScope.launch {
+    /** Pasted or scanned text, reviewed before anything is saved. */
+    fun importSecretsEnv(text: String) {
         if (WireGuardConfParser.looksLikeConf(text)) {
             reviewConf(text, intoActive = false)
-            return@launch
+        } else {
+            review(SecretsEnvParser.parse(text).map { PendingImport.SecretsEnv(text, it.relay, it.entryHop) })
         }
-        importProfile(text).fold(
-            onSuccess = {
-                _importsTaken.value++
-                _message.value = SettingsMessage.Info(
-                    UiText.Resource(Res.string.settings_imported_profile, listOf(it.vpsIp)),
-                )
-            },
-            onFailure = { _message.value = it.toError(Res.string.settings_import_failed) },
-        )
     }
 
     fun importAsEntryHop(text: String) = reviewConf(text, intoActive = true)
 
-    private fun reviewConf(text: String, intoActive: Boolean) {
-        WireGuardConfParser.parse(text).fold(
-            onSuccess = { entry ->
+    private fun reviewConf(text: String, intoActive: Boolean) =
+        review(WireGuardConfParser.parse(text).map { PendingImport.Conf(text, it, intoActive) })
+
+    private fun review(parsed: Result<PendingImport>) {
+        parsed.fold(
+            onSuccess = {
                 _importsTaken.value++
-                _pendingImport.value = PendingConfImport(text, entry, intoActive)
+                _pendingImport.value = it
             },
             onFailure = { _message.value = it.toError(Res.string.settings_import_failed) },
         )
     }
 
-    /** Saves the reviewed conf as active (or as the entry hop) and moves a wanted tunnel onto it. */
+    /** Saves the reviewed import as active (or as the entry hop); a reviewed conf also moves a wanted tunnel onto it. */
     fun usePendingImport() = viewModelScope.launch {
-        val pending = _pendingImport.value ?: return@launch
-        _pendingImport.value = null
-        importConf(pending.text, pending.intoActive)
+        when (val pending = _pendingImport.value ?: return@launch) {
+            is PendingImport.Conf -> {
+                _pendingImport.value = null
+                importConf(pending.text, pending.intoActive)
+            }
+            is PendingImport.SecretsEnv -> {
+                _pendingImport.value = null
+                importSecretsEnvNow(pending.text)
+            }
+        }
     }
 
-    /** Keeps the reviewed conf as another connection without switching to it. */
+    /** Keeps the reviewed import as another connection without switching to it. */
     fun savePendingImport() = viewModelScope.launch {
         val pending = _pendingImport.value ?: return@launch
         _pendingImport.value = null
-        importWireGuardConf.save(pending.text).fold(
+        val saved = when (pending) {
+            is PendingImport.Conf -> importWireGuardConf.save(pending.text).map { it.endpointHost }
+            is PendingImport.SecretsEnv -> importProfile.save(pending.text).map { it.vpsIp }
+        }
+        saved.fold(
+            onSuccess = { _message.value = SettingsMessage.Info(UiText.Resource(Res.string.settings_import_saved, listOf(it))) },
+            onFailure = { _message.value = it.toError(Res.string.settings_import_failed) },
+        )
+    }
+
+    private suspend fun importSecretsEnvNow(text: String) {
+        importProfile(text).fold(
             onSuccess = {
                 _message.value = SettingsMessage.Info(
-                    UiText.Resource(Res.string.settings_import_saved, listOf(it.endpointHost)),
+                    UiText.Resource(Res.string.settings_imported_profile, listOf(it.vpsIp)),
                 )
             },
             onFailure = { _message.value = it.toError(Res.string.settings_import_failed) },
@@ -263,13 +286,13 @@ class SettingsViewModel(
         )
     }
 
-    /** Desktop convenience: import the CLI's secrets.env if it exists. */
+    /** Desktop convenience: import the CLI's secrets.env if it exists. The user's own file needs no review. */
     fun importDefaultSecretsEnv() {
         val text = readDefaultSecretsEnv()
         if (text == null) {
             _message.value = SettingsMessage.Error(UiText.Resource(Res.string.settings_no_secrets_env_found))
         } else {
-            importSecretsEnv(text)
+            viewModelScope.launch { importSecretsEnvNow(text) }
         }
     }
 

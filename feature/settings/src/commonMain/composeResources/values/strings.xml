@@ -98,8 +98,10 @@
     <string name="settings_import_failed">Import failed</string>
     <string name="settings_import_saved">Saved %1$s. Your current connection is unchanged.</string>
     <string name="settings_import_review_new">New connection %1$s, endpoint %2$s</string>
+    <string name="settings_import_review_relay">Relay %1$s, no entry hop</string>
+    <string name="settings_import_review_relay_entry">Relay %1$s, entry hop %2$s</string>
     <string name="settings_import_review_entry_hop">Entry hop for %1$s, endpoint %2$s</string>
-    <string name="settings_import_review_detail">Only use a server you trust. Use it switches to it and reconnects. Save keeps it for later.</string>
+    <string name="settings_import_review_detail">Only use a server you trust. Use it makes it your connection. Save keeps it for later.</string>
     <string name="settings_import_use">use it</string>
     <string name="settings_import_save">save</string>
     <string name="settings_import_cancel">cancel</string>

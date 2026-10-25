@@ -29,7 +29,10 @@ internal class FakeProfiles(private val log: MutableList<String>) : ProfileRepos
     override suspend fun delete(id: String) = Unit
     override suspend fun setActive(id: String) = Unit
     override suspend fun clear() = Unit
-    override suspend fun importFromSecretsEnv(text: String) = Result.failure<ChainProfile>(IllegalStateException())
+    override suspend fun importFromSecretsEnv(text: String, activate: Boolean): Result<ChainProfile> {
+        log += "secrets:$activate"
+        return Result.success(RELAY)
+    }
     override suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean): Result<WireGuardEntry> {
         log += "import:$intoActive:$activate"
         return Result.success(WireGuardEntry("k", "10.0.0.2/32", "p", "198.51.100.7"))

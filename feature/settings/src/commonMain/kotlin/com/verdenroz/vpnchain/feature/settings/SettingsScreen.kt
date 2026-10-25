@@ -99,6 +99,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_entry_hop
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_new
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_relay
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_relay_entry
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_detail
@@ -209,7 +211,7 @@ fun SettingsScreen(
     onImportAsEntryHop: (String) -> Unit,
     onImportDefault: () -> Unit,
     onScanQr: () -> Unit,
-    pendingImport: PendingConfImport?,
+    pendingImport: PendingImport?,
     importsTaken: Int,
     onUsePendingImport: () -> Unit,
     onSavePendingImport: () -> Unit,
@@ -627,7 +629,7 @@ private fun AlwaysOnGuidance(detected: Boolean, onOpenSystemVpnSettings: () -> U
 
 @Composable
 private fun ImportReview(
-    pending: PendingConfImport,
+    pending: PendingImport,
     activeName: String,
     canSaveOnly: Boolean,
     onUse: () -> Unit,
@@ -635,13 +637,20 @@ private fun ImportReview(
     onCancel: () -> Unit,
 ) {
     val colors = PanelTheme.colors
-    val endpoint = "${pending.entry.endpointHost}:${pending.entry.endpointPort}"
     Column {
         Text(
-            if (pending.intoActive) {
-                stringResource(Res.string.settings_import_review_entry_hop, activeName, endpoint)
-            } else {
-                stringResource(Res.string.settings_import_review_new, pending.entry.endpointHost, endpoint)
+            when (pending) {
+                is PendingImport.Conf -> {
+                    val endpoint = pending.entry.endpoint()
+                    if (pending.intoActive) {
+                        stringResource(Res.string.settings_import_review_entry_hop, activeName, endpoint)
+                    } else {
+                        stringResource(Res.string.settings_import_review_new, pending.entry.endpointHost, endpoint)
+                    }
+                }
+                is PendingImport.SecretsEnv -> pending.entryHop?.let {
+                    stringResource(Res.string.settings_import_review_relay_entry, pending.relay.vpsIp, it.endpoint())
+                } ?: stringResource(Res.string.settings_import_review_relay, pending.relay.vpsIp)
             },
             style = MaterialTheme.typography.bodyMedium,
             color = colors.readout,
@@ -662,6 +671,8 @@ private fun ImportReview(
         }
     }
 }
+
+private fun WireGuardEntry.endpoint() = "$endpointHost:$endpointPort"
 
 @Composable
 private fun ImportSection(
