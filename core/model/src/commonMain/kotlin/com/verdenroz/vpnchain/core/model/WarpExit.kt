@@ -32,6 +32,8 @@ data class WarpExit(
     fun isStale(nowMillis: Long): Boolean =
         nowMillis - registeredAtMillis >= REFRESH_AFTER_MILLIS
 
+    override fun toString() = "WarpExit(endpoint=$endpointHost:$endpointPort, registeredAtMillis=$registeredAtMillis)"
+
     companion object {
         const val DEFAULT_ENDPOINT_HOST = "162.159.192.1"
         const val DEFAULT_ENDPOINT_PORT = 2408

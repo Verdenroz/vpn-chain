@@ -21,6 +21,8 @@ data class ProbeProxy(
     val username: String,
     val password: String,
 ) {
+    override fun toString() = "ProbeProxy(relayPort=$relayPort, warpPort=$warpPort, fallbackPort=$fallbackPort)"
+
     companion object {
         private const val TAG_PREFIX = "probe-"
         const val RELAY_TAG = "${TAG_PREFIX}relay"
