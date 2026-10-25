@@ -4,4 +4,4 @@ import kotlinx.serialization.Serializable
 
 /** Why an exit was refused. */
 @Serializable
-enum class BlockReason { Forbidden, RateLimited, LegalBlock, NetworkSecurity, Challenge }
+enum class BlockReason { Forbidden, RateLimited, LegalBlock, NetworkSecurity }

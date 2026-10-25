@@ -11,7 +11,7 @@ interface SiteFetcher {
 expect fun createSiteFetcher(): SiteFetcher
 
 sealed interface ProbeOutcome {
-    /** The relay is not refused, so nothing needs routing. */
+    /** The relay does not refuse it, so nothing needs routing. */
     data object Reachable : ProbeOutcome
 
     /** Refused from the relay, answered from WARP. */
@@ -35,9 +35,10 @@ sealed interface ProbeOutcome {
 
 /**
  * The relay is probed first, because the relay already sees every destination:
- * that probe tells it nothing new. WARP is only asked once the relay refuses or
- * challenges, and the fail-open path only once WARP has too, since failing open
- * would expose the site to that path anyway.
+ * that probe tells it nothing new. A challenge there is a site a browser can
+ * use, so only an outright refusal starts the chain of probes. WARP is asked
+ * then, and the fail-open path only once WARP has refused or challenged too,
+ * since failing open would expose the site to that path anyway.
  *
  * WARP has to answer cleanly to take a site: a challenge there is the shared
  * address being suspect, not the site being reachable. The fail-open path
@@ -48,9 +49,8 @@ class SiteProber(private val fetcher: SiteFetcher) {
 
     suspend fun probe(host: String, proxy: ProbeProxy): ProbeOutcome {
         val relayReason = when (val relay = verdict(host, proxy.relayPort, proxy)) {
-            ExitVerdict.Open -> return ProbeOutcome.Reachable
+            ExitVerdict.Open, ExitVerdict.Challenged -> return ProbeOutcome.Reachable
             ExitVerdict.Inconclusive -> return ProbeOutcome.Unknown
-            ExitVerdict.Challenged -> BlockReason.Challenge
             is ExitVerdict.Blocked -> relay.reason
         }
         if (proxy.warpPort == 0) return ProbeOutcome.Unknown

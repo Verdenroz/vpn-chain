@@ -58,7 +58,6 @@
     <string name="settings_reason_rate_limited">429</string>
     <string name="settings_reason_legal_block">451</string>
     <string name="settings_reason_network_security">network security</string>
-    <string name="settings_reason_challenge">challenge</string>
     <string name="settings_kill_switch_title">kill switch</string>
     <string name="settings_dns_title">dns</string>
     <string name="settings_dns_filter_title">Block unwanted domains</string>

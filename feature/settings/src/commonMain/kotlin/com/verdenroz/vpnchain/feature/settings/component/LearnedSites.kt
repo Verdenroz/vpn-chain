@@ -32,7 +32,6 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_lear
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_remove
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_warp
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_reason_challenge
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_reason_forbidden
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_reason_legal_block
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_reason_network_security
@@ -115,7 +114,6 @@ private fun BlockReason.label(): StringResource = when (this) {
     BlockReason.RateLimited -> Res.string.settings_reason_rate_limited
     BlockReason.LegalBlock -> Res.string.settings_reason_legal_block
     BlockReason.NetworkSecurity -> Res.string.settings_reason_network_security
-    BlockReason.Challenge -> Res.string.settings_reason_challenge
 }
 
 private const val MINUTE = 60_000L

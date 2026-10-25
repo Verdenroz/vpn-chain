@@ -86,7 +86,8 @@ chain is down, on Android while the screen is off or the device is in Doze
 
 1. The **relay** is probed first. The relay already sees every destination,
    so this tells it nothing new. If it answers, the site is left alone.
-2. Only if the relay refuses or challenges, **WARP** is probed. Cloudflare
+2. Only if the relay refuses outright, **WARP** is probed. A challenge on the
+   relay leaves the site alone: a browser passes it. Cloudflare
    sees that destination only at that point, and the relay's address, never
    the device.
 3. If WARP answers **cleanly** (a 2xx or 3xx with no challenge), the site is

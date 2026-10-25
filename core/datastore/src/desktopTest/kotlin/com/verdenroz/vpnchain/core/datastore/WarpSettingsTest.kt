@@ -92,9 +92,9 @@ class WarpSettingsTest {
         val site = LearnedSite("example.com", BlockReason.Forbidden, 5L, LearnedRoute.Warp)
 
         source.putLearnedSite(site)
-        source.putLearnedSite(site.copy(reason = BlockReason.Challenge))
+        source.putLearnedSite(site.copy(reason = BlockReason.RateLimited))
 
-        assertEquals(listOf(site.copy(reason = BlockReason.Challenge)), source.learnedSites.first())
+        assertEquals(listOf(site.copy(reason = BlockReason.RateLimited)), source.learnedSites.first())
     }
 
     @Test

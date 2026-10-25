@@ -75,9 +75,9 @@ class DefaultLearnedSitesRepositoryTest {
     @Test
     fun `learning a domain twice keeps one entry`() = runTest {
         repository.learn("example.com", LearnedRoute.Warp, BlockReason.Forbidden)
-        repository.learn("example.com", LearnedRoute.Warp, BlockReason.Challenge)
+        repository.learn("example.com", LearnedRoute.Warp, BlockReason.RateLimited)
 
-        assertEquals(listOf(BlockReason.Challenge), repository.sites.first().map { it.reason })
+        assertEquals(listOf(BlockReason.RateLimited), repository.sites.first().map { it.reason })
     }
 
     @Test

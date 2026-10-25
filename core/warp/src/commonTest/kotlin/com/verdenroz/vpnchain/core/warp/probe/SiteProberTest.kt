@@ -128,12 +128,20 @@ class SiteProberTest {
     }
 
     @Test
-    fun `a relay challenge is enough to try warp`() = runTest {
+    fun `a relay challenge goes nowhere`() = runTest {
         val challenge = ProbeResponse(200, emptyMap(), "<input name=\"js_challenge\">", complete = true)
-        val fetcher = FakeFetcher(mapOf(1 to challenge, 2 to OPEN))
+        val fetcher = FakeFetcher(mapOf(1 to challenge, 2 to OPEN, 3 to OPEN))
+
+        assertEquals(ProbeOutcome.Reachable, SiteProber(fetcher).probe("example.com", PROXY))
+        assertEquals(listOf(1), fetcher.ports)
+    }
+
+    @Test
+    fun `a status-only relay refusal and a clean warp answer goes to warp`() = runTest {
+        val fetcher = FakeFetcher(mapOf(1 to REFUSED, 2 to response(ORDINARY_PAGE), 3 to REFUSED))
 
         assertEquals(
-            ProbeOutcome.WarpOnly(BlockReason.Challenge),
+            ProbeOutcome.WarpOnly(BlockReason.Forbidden),
             SiteProber(fetcher).probe("example.com", PROXY),
         )
     }
