@@ -100,8 +100,10 @@ private class RecordingProfiles(private val log: MutableList<String>) : ProfileR
     }
     override suspend fun clear() = Unit
     override suspend fun importFromSecretsEnv(text: String) = Result.failure<ChainProfile>(IllegalStateException())
-    override suspend fun importWireGuardConf(text: String, intoActive: Boolean) =
-        Result.failure<WireGuardEntry>(IllegalStateException("not used"))
+    override suspend fun importWireGuardConf(text: String, intoActive: Boolean): Result<WireGuardEntry> {
+        log += "import:$intoActive"
+        return Result.success(WireGuardEntry("k", "10.0.0.2/32", "p", "198.51.100.7"))
+    }
 }
 
 private class RecordingChain(
@@ -125,4 +127,35 @@ private class RecordingChain(
         log += "disconnect"
     }
     override suspend fun release() = Unit
+}
+
+class ImportWireGuardConfUseCaseTest {
+
+    @Test
+    fun `importing while connected restarts onto the imported connection`() = runTest {
+        val log = mutableListOf<String>()
+        val import = ImportWireGuardConfUseCase(RecordingProfiles(log), RecordingChain(TunnelState.Connected, log, Result.success(Unit), false))
+
+        assertTrue(import("conf").isSuccess)
+
+        assertEquals(listOf("import:false", "disconnect", "connect"), log)
+    }
+
+    @Test
+    fun `importing while stopped leaves the tunnel alone`() = runTest {
+        val log = mutableListOf<String>()
+        val import = ImportWireGuardConfUseCase(RecordingProfiles(log), RecordingChain(TunnelState.Disconnected, log, Result.success(Unit), false))
+
+        import("conf", intoActive = true)
+
+        assertEquals(listOf("import:true"), log)
+    }
+
+    @Test
+    fun `a failed restart is reported`() = runTest {
+        val log = mutableListOf<String>()
+        val chain = RecordingChain(TunnelState.Connected, log, Result.failure(IllegalStateException("no")), false)
+
+        assertTrue(ImportWireGuardConfUseCase(RecordingProfiles(log), chain)("conf").isFailure)
+    }
 }

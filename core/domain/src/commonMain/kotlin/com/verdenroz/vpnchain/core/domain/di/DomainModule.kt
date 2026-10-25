@@ -24,7 +24,7 @@ val domainModule = module {
     factory { ConnectChainUseCase(get()) }
     factory { DisconnectChainUseCase(get()) }
     factory { ImportProfileUseCase(get()) }
-    factory { ImportWireGuardConfUseCase(get()) }
+    factory { ImportWireGuardConfUseCase(get(), get()) }
     factory { SwitchProfileUseCase(get(), get()) }
     // Singleton so origin-probe throttling holds across collectors.
     single { ObserveChainRouteUseCase(get(), get(), get(), get(), get(), get()) }
