@@ -184,6 +184,24 @@ class WireGuardConfParserTest {
     }
 
     @Test
+    fun `refuses endpoints that only look like addresses`() {
+        listOf("999.1.1.1", "1.2.3", "1.2.3.4.5", "[1:2:3]", "[::1::2]", "[12345::1]", "[g::1]").forEach { host ->
+            val error = failure(PROTON.replace("203.0.113.9:51820", "$host:51820"))
+
+            assertEquals("Use an IP endpoint.", error.message, host)
+        }
+    }
+
+    @Test
+    fun `accepts compressed and full v6 endpoints`() {
+        listOf("::1", "2001:db8::1", "2001:db8:0:0:0:0:0:1", "::ffff:192.0.2.1").forEach { host ->
+            val entry = WireGuardConfParser.parse(PROTON.replace("203.0.113.9:51820", "[$host]:51820"))
+
+            assertTrue(entry.isSuccess, host)
+        }
+    }
+
+    @Test
     fun `refuses text that is not a config`() {
         assertEquals("Config has no peer.", failure("hello").message)
     }

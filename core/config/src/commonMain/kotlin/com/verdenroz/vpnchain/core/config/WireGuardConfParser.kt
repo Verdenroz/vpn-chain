@@ -112,11 +112,29 @@ object WireGuardConfParser {
         val port = rawPort.toIntOrNull()?.takeIf { it in 1..MAX_PORT }
         if (host.isEmpty() || port == null) throw WireGuardConfError.Invalid("Endpoint")
         // The kill switch can only exempt an address, so a name would leave the tunnel unprotected.
-        if (!IP_LITERAL.matches(host)) throw WireGuardConfError.HostnameEndpoint()
+        if (!isIpv4(host) && !isIpv6(host)) throw WireGuardConfError.HostnameEndpoint()
         return host to port
     }
 
-    private val IP_LITERAL = Regex("""(\d{1,3}\.){3}\d{1,3}|[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*""")
+    private fun isIpv4(text: String): Boolean {
+        val octets = text.split('.')
+        return octets.size == 4 && octets.all { it.length in 1..3 && it.all(Char::isDigit) && it.toInt() <= 255 }
+    }
+
+    private fun isIpv6(text: String): Boolean {
+        if (':' !in text || ":::" in text) return false
+        val halves = text.split("::")
+        if (halves.size > 2) return false
+        val groups = halves.flatMap { half -> if (half.isEmpty()) emptyList() else half.split(':') }
+        // A trailing dotted quad stands for two groups.
+        val embedded = groups.lastOrNull()?.takeIf { '.' in it }
+        if (embedded != null && !isIpv4(embedded)) return false
+        val hex = if (embedded != null) groups.dropLast(1) else groups
+        val size = hex.size + if (embedded != null) 2 else 0
+        val valid = hex.all { it.length in 1..4 && it.all { c -> c.isDigit() || c.lowercaseChar() in 'a'..'f' } }
+        return valid && if (halves.size == 2) size < 8 else size == 8
+    }
+
     private val KEY_PATTERN = Regex("[A-Za-z0-9+/]{43}=")
     private const val MAX_PORT = 65535
 }
