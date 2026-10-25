@@ -6,6 +6,7 @@
     <string name="tunnel_error_relay_already_running_pid">a relay is already running (pid %1$s). Disconnect first</string>
     <string name="tunnel_error_cannot_launch">cannot launch '%1$s': is sing-box installed and on PATH?</string>
     <string name="tunnel_error_managed_config_write">cannot write %1$s. Are you in the vpn-chain group? Log out and back in after setup.</string>
+    <string name="tunnel_error_runtime_dir">cannot write to %1$s. Check its owner and permissions.</string>
     <string name="tunnel_error_managed_start">could not start the relay service: %1$s</string>
     <string name="tunnel_log_managed_unusable">relay service installed but not usable yet (the vpn-chain group needs a fresh login) — starting sing-box directly instead</string>
     <string name="tunnel_error_exit_kill_switch_engaged">sing-box exited (%1$d). Kill switch engaged, network is blocked. Reconnect, or Disconnect to restore normal routing.</string>

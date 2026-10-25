@@ -33,7 +33,7 @@ internal class DefaultWarpRepository(
                 // we call stale is usually still good — and the usual reason
                 // registration fails is a network that can't reach Cloudflare
                 // at all, which says nothing about the key already held.
-                logger.w(TAG, "WARP registration failed: ${failure.message}")
+                logger.w(TAG, "WARP registration failed", failure)
                 stored
             },
         )

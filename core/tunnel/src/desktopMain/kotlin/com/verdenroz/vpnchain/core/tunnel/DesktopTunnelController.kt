@@ -12,6 +12,7 @@ import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.Res
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_already_running_hint
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_cannot_launch
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_runtime_dir
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_exit_generic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_exit_kill_switch_engaged
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_kill_switch_unavailable
@@ -419,14 +420,21 @@ class DesktopTunnelController(
     }
 
     private suspend fun startOwnedRelay(configJson: String): RelayProcess? {
-        // Carries credentials. XDG_RUNTIME_DIR is a tmpfs, so a crash leaves no copy on disk.
-        val cfgDir = System.getenv("XDG_RUNTIME_DIR")?.let { runtimeDir.apply { mkdirs() } }
-        val cfg = PrivateStorage.createTempFile(cfgDir, "vpn-chain-", ".json").apply {
-            deleteOnExit()
-            writeText(configJson)
-        }
-        runtimeDir.mkdirs()
         relayLog = File(runtimeDir, "relay.log")
+        val cfg = try {
+            PrivateStorage.privateDir(runtimeDir)
+            PrivateStorage.ensurePrivateFile(relayLog)
+            PrivateStorage.createTempFile(runtimeDir, "vpn-chain-", ".json").apply {
+                deleteOnExit()
+                writeText(configJson)
+            }
+        } catch (e: IOException) {
+            _status.value = ChainStatus(
+                state = TunnelState.Error,
+                detail = UiText.Resource(Res.string.tunnel_error_runtime_dir, listOf(runtimeDir.path)),
+            )
+            return null
+        }
 
         val proc = try {
             ProcessBuilder(singBoxBin, "run", "-c", cfg.absolutePath)

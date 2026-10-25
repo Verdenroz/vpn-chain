@@ -105,7 +105,7 @@ internal class DefaultChainRepository(
         val configJson = renderConfig()
             ?: return Result.failure(IllegalStateException("No chain profile configured"))
         return runCatching { controller.start(configJson, settings.killSwitchEnabled, settings.allowLocalNetworks) }
-            .onFailure { logger.e(TAG, "connect failed: ${it::class.simpleName}") }
+            .onFailure { logger.e(TAG, "connect failed", it) }
     }
 
     /** @return null when there is nothing to dial, or the render itself failed. */
@@ -117,19 +117,19 @@ internal class DefaultChainRepository(
         // tail, never the connect.
         val warp = if (settings.warpMode == WarpMode.Off) null else warpRepository.exit()
         return runCatching { renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp) }
-            .onFailure { logger.e(TAG, "config render failed: ${it::class.simpleName}") }
+            .onFailure { logger.e(TAG, "config render failed", it) }
             .getOrNull()
     }
 
     override suspend fun disconnect() {
         preferences.setConnectionIntent(false)
         runCatching { controller.stop() }
-            .onFailure { logger.e(TAG, "disconnect failed: ${it::class.simpleName}") }
+            .onFailure { logger.e(TAG, "disconnect failed", it) }
     }
 
     override suspend fun release() {
         runCatching { controller.release() }
-            .onFailure { logger.e(TAG, "release failed: ${it::class.simpleName}") }
+            .onFailure { logger.e(TAG, "release failed", it) }
     }
 
     private companion object {
