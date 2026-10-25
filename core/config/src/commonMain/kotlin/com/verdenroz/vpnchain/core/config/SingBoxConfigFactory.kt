@@ -34,9 +34,10 @@ object SingBoxConfigFactory {
         warp: WarpExit? = null,
         warpMode: WarpMode = WarpMode.Off,
         warpDomains: List<String> = emptyList(),
+        probe: ProbeProxy? = null,
     ): String {
         val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
-        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains) }
+        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null) }
         return render {
             putInfoLog()
             putExperimental(clashApi, cacheFile = false, cachePath = null)
@@ -47,6 +48,7 @@ object SingBoxConfigFactory {
                     put("listen", "127.0.0.1")
                     put("listen_port", profile.localProxyPort)
                 }
+                probe?.let { addProbeInbounds(it, withWarp = tail != null) }
             }
             if (tail != null) {
                 putJsonArray("endpoints") { addWarpEndpoint(tail, detour = "proxy") }
@@ -59,7 +61,8 @@ object SingBoxConfigFactory {
                 put("auto_detect_interface", false)
                 putJsonArray("rules") {
                     addJsonObject { put("action", "sniff") }
-                    if (tail != null && warpMode == WarpMode.BlockedSites) {
+                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy") }
+                    if (tail != null && warpMode == WarpMode.BlockedSites && tailDomains.isNotEmpty()) {
                         addWarpDomainRule(tailDomains)
                     }
                 }
@@ -84,13 +87,14 @@ object SingBoxConfigFactory {
         warpDomains: List<String> = emptyList(),
         allowLocalNetworks: Boolean = false,
         logPath: String? = null,
+        probe: ProbeProxy? = null,
     ): String {
         val filtering = dnsFilter != DnsFilter.Off
         val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
         // No credentials means no tail, whatever the mode says: registration
         // can fail on a network that blocks Cloudflare, and the chain still has
         // to come up — one hop shorter, not not at all.
-        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains) }
+        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null) }
         return render {
             putInfoLog(logPath)
             // The rule-set is remote, so it needs somewhere to persist between
@@ -107,6 +111,7 @@ object SingBoxConfigFactory {
                     mtu = if (entry != null || tail != null) (entry?.mtu?.coerceAtMost(1280) ?: 1280) else 1400,
                     allowLocalNetworks = allowLocalNetworks,
                 )
+                probe?.let { addProbeInbounds(it, withWarp = tail != null) }
             }
             if (entry != null || tail != null) {
                 putJsonArray("endpoints") {
@@ -132,7 +137,8 @@ object SingBoxConfigFactory {
                 if (filtering) putBlocklistRuleSet(dnsFilter)
                 putJsonArray("rules") {
                     addTunBaseRules()
-                    if (tail != null && warpMode == WarpMode.BlockedSites) {
+                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = VLESS_TAG) }
+                    if (tail != null && warpMode == WarpMode.BlockedSites && tailDomains.isNotEmpty()) {
                         addWarpDomainRule(tailDomains)
                     }
                 }
@@ -412,6 +418,42 @@ object SingBoxConfigFactory {
         }
     }
 
+    /** Loopback only: these accept any destination, so they must never face the network. */
+    private fun JsonArrayBuilder.addProbeInbounds(probe: ProbeProxy, withWarp: Boolean) {
+        addProbeInbound(ProbeProxy.RELAY_TAG, probe.relayPort, probe)
+        if (withWarp) addProbeInbound(ProbeProxy.WARP_TAG, probe.warpPort, probe)
+    }
+
+    private fun JsonArrayBuilder.addProbeInbound(tag: String, port: Int, probe: ProbeProxy) =
+        addJsonObject {
+            put("type", "mixed")
+            put("tag", tag)
+            put("listen", "127.0.0.1")
+            put("listen_port", port)
+            putJsonArray("users") {
+                addJsonObject {
+                    put("username", probe.username)
+                    put("password", probe.password)
+                }
+            }
+        }
+
+    /** Ahead of the domain rules, so a probe exits where it asked to whatever the list says. */
+    private fun JsonArrayBuilder.addProbeRules(withWarp: Boolean, relayTag: String) {
+        addJsonObject {
+            put("inbound", ProbeProxy.RELAY_TAG)
+            put("action", "route")
+            put("outbound", relayTag)
+        }
+        if (withWarp) {
+            addJsonObject {
+                put("inbound", ProbeProxy.WARP_TAG)
+                put("action", "route")
+                put("outbound", WARP_TAG)
+            }
+        }
+    }
+
     /** Sends just the listed names down the tail; everything else keeps the relay's exit. */
     private fun JsonArrayBuilder.addWarpDomainRule(domains: List<String>) = addJsonObject {
         putJsonArray("domain_suffix") { domains.forEach { add(it) } }
@@ -429,9 +471,9 @@ object SingBoxConfigFactory {
      * Selective mode with an empty list routes nothing, so the tail is left
      * out entirely rather than declared as an endpoint nothing ever reaches.
      */
-    private fun WarpMode.carriesTraffic(domains: List<String>): Boolean = when (this) {
+    private fun WarpMode.carriesTraffic(domains: List<String>, probing: Boolean): Boolean = when (this) {
         WarpMode.Off -> false
-        WarpMode.BlockedSites -> domains.isNotEmpty()
+        WarpMode.BlockedSites -> domains.isNotEmpty() || probing
         WarpMode.AllTraffic -> true
     }
 

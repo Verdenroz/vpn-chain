@@ -62,6 +62,11 @@ data class UserSettings(
      */
     val warpDomains: List<String> = DEFAULT_WARP_DOMAINS,
     /**
+     * Probe new destinations through the relay, and through the tail when the
+     * relay is refused, and route the sites only the tail can reach down it.
+     */
+    val learnBlockedSites: Boolean = true,
+    /**
      * Bring the chain up on app start when a profile exists. Off by default:
      * connecting without being asked is a surprise, not a convenience.
      */

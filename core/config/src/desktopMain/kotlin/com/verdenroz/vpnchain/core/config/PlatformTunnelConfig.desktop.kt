@@ -24,6 +24,7 @@ actual fun renderPlatformTunnelConfig(
     // this user's home nor its stdout.
     val cachePath = if (SystemdRelay.available) SystemdRelay.cachePath else cacheFilePath()
     val logPath = if (SystemdRelay.available) SystemdRelay.logFile.absolutePath else null
+    val probe = if (settings.learnBlockedSites) newProbeProxy() else null
     // No relay means no SOCKS-proxy shape to fall back on: a bare WireGuard
     // peer only exists as a TUN.
     return if (relay == null) {
@@ -47,6 +48,7 @@ actual fun renderPlatformTunnelConfig(
             warpDomains = settings.warpDomains,
             allowLocalNetworks = settings.allowLocalNetworks,
             logPath = logPath,
+            probe = probe,
         )
     } else {
         SingBoxConfigFactory.mixedProxyConfig(
@@ -55,6 +57,7 @@ actual fun renderPlatformTunnelConfig(
             warp = warp,
             warpMode = settings.warpMode,
             warpDomains = settings.warpDomains,
+            probe = probe,
         )
     }
 }

@@ -24,5 +24,6 @@ actual fun renderPlatformTunnelConfig(
         warp = warp,
         warpMode = settings.warpMode,
         warpDomains = settings.warpDomains,
+        probe = if (settings.learnBlockedSites) newProbeProxy() else null,
     )
 }

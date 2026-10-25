@@ -43,6 +43,8 @@ private fun warp() = WarpExit(
     peerPublicKey = "warp-peer",
 )
 
+private fun probe() = ProbeProxy(relayPort = 41001, warpPort = 41002, username = "u", password = "p")
+
 private fun parse(raw: String): JsonObject = Json.parseToJsonElement(raw).jsonObject
 
 private fun JsonObject.array(key: String): JsonArray = getValue(key).jsonArray
@@ -551,5 +553,114 @@ class SingBoxConfigFactoryTest {
         assertEquals("pubkey", reality?.getValue("public_key")?.jsonPrimitive?.content)
         assertEquals("shortid", reality?.getValue("short_id")?.jsonPrimitive?.content)
         assertTrue(tls?.getValue("utls")?.jsonObject?.getValue("enabled")?.jsonPrimitive?.boolean == true)
+    }
+
+    @Test
+    fun `probe inbounds listen on loopback with credentials`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                probe = probe(),
+            ),
+        )
+
+        val inbounds = config.array("inbounds")
+        for ((tag, port) in listOf("probe-relay" to 41001, "probe-warp" to 41002)) {
+            val inbound = inbounds.taggedWith(tag)
+            assertEquals("mixed", inbound?.getValue("type")?.jsonPrimitive?.content)
+            assertEquals("127.0.0.1", inbound?.getValue("listen")?.jsonPrimitive?.content)
+            assertEquals(port, inbound?.getValue("listen_port")?.jsonPrimitive?.int)
+            val user = inbound?.getValue("users")?.jsonArray?.single()?.jsonObject
+            assertEquals("u", user?.getValue("username")?.jsonPrimitive?.content)
+            assertEquals("p", user?.getValue("password")?.jsonPrimitive?.content)
+        }
+    }
+
+    @Test
+    fun `probe rules precede the domain rules and pick their exit by inbound`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                warpDomains = listOf("example.com"),
+                probe = probe(),
+            ),
+        )
+
+        val rules = config.getValue("route").jsonObject.array("rules").map { it.jsonObject }
+        val relayAt = rules.indexOfFirst { it["inbound"]?.jsonPrimitive?.content == "probe-relay" }
+        val warpAt = rules.indexOfFirst { it["inbound"]?.jsonPrimitive?.content == "probe-warp" }
+        val domainAt = rules.indexOfFirst { "domain_suffix" in it }
+        assertTrue(relayAt in 0 until domainAt && warpAt in 0 until domainAt)
+        assertEquals("vless-proxy", rules[relayAt].getValue("outbound").jsonPrimitive.content)
+        assertEquals("warp-exit", rules[warpAt].getValue("outbound").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `probing keeps the tail present even with no listed domains`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                probe = probe(),
+            ),
+        )
+
+        val tail = config.array("endpoints").taggedWith("warp-exit")
+        assertEquals("vless-proxy", tail?.getValue("detour")?.jsonPrimitive?.content)
+        val rules = config.getValue("route").jsonObject.array("rules").map { it.jsonObject }
+        assertFalse(rules.any { "domain_suffix" in it })
+    }
+
+    @Test
+    fun `no tail means no warp probe inbound or rule`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(profile(), warpMode = WarpMode.Off, probe = probe()),
+        )
+
+        assertEquals(null, config.array("inbounds").taggedWith("probe-warp"))
+        assertFalse("probe-warp" in config.toString())
+        assertTrue(config["endpoints"] == null)
+    }
+
+    @Test
+    fun `no probe renders neither inbound`() {
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(), warp = warp(), warpMode = WarpMode.AllTraffic))
+
+        assertEquals(1, config.array("inbounds").size)
+        assertFalse("probe-" in config.toString())
+    }
+
+    @Test
+    fun `the proxy config renders probes that exit through its own relay outbound`() {
+        val config = parse(
+            SingBoxConfigFactory.mixedProxyConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                probe = probe(),
+            ),
+        )
+
+        val rules = config.getValue("route").jsonObject.array("rules").map { it.jsonObject }
+        assertEquals("proxy", rules.single { it["inbound"]?.jsonPrimitive?.content == "probe-relay" }
+            .getValue("outbound").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `probes are recovered from the rendered config`() {
+        val raw = SingBoxConfigFactory.androidChainConfig(
+            profile(),
+            warp = warp(),
+            warpMode = WarpMode.BlockedSites,
+            probe = probe(),
+        )
+
+        assertEquals(probe(), ProbeProxy.fromConfig(raw))
+        assertEquals(null, ProbeProxy.fromConfig(SingBoxConfigFactory.androidChainConfig(profile())))
     }
 }
