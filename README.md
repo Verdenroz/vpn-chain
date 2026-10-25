@@ -31,6 +31,7 @@ instead of Hilt, so `commonMain` works on both Android and desktop).
 |------|------|
 | `cli/vpn-chain` | Linux CLI: renders a sing-box config from secrets, drives the entry hop + the relay. |
 | `cli/import-entry-conf.sh` | Imports a WireGuard `.conf` into `secrets.env`, file-to-file (never prints the key). |
+| `cli/install-desktop.sh` | Installs the latest released desktop app (Linux x64) as the self-updating managed copy. |
 | `cli/killswitch/` | nftables kill-switch helper for desktop's WireGuard-entry-hop mode. |
 | `core/model` | KMP data classes: `ChainProfile`, `ChainStatus`, `TunnelState`, `UserSettings`, `LogEntry`. |
 | `core/common` | KMP coroutine scope/dispatcher qualifiers, `currentTimeMillis`. |
@@ -39,6 +40,7 @@ instead of Hilt, so `commonMain` works on both Android and desktop).
 | `core/datastore` | KMP DataStore-backed profile + settings persistence. |
 | `core/tunnel` | KMP `TunnelController`: Android `VpnChainService` (libbox), desktop sing-box process; live log flow. |
 | `core/warp` | KMP Cloudflare WARP registration for the tail exit (X25519 keygen + the free reg API). |
+| `core/update` | KMP in-app updater: release manifest, verified download, update state, Android/Linux installers. |
 | `core/data` | KMP repositories: `ChainRepository`, `ProfileRepository`, `SettingsRepository`, `LogRepository`, `WarpRepository`. |
 | `core/domain` | KMP use cases (`ConnectChainUseCase`, `ImportProfileUseCase`, …). |
 | `core/designsystem` | KMP `VpnChainTheme`, colors/type, `StatusBar`. |
@@ -150,13 +152,39 @@ it off. GUI only; the CLI still exits from the VPS. See [docs/warp-exit.md](docs
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`: Android release
 APKs, a Linux `.deb` + portable `.tar.gz`, a Windows `.msi`, and a macOS
-`.dmg` (unsigned), each built on its own native runner. The version lives in
-one place, `vpnchain.version` in `gradle.properties`.
+`.dmg` (unsigned), each built on its own native runner, plus a `manifest.json`
+listing the size and SHA-256 of the APKs and the Linux tarball. The version
+lives in one place, `vpnchain.version` in `gradle.properties`; the Android
+version code is derived from it.
 
 ```
-# bump vpnchain.version (and versionCode for Android updates), then:
+# bump vpnchain.version, then:
 git tag v0.1.0 && git push origin v0.1.0
 ```
+
+The manifest is what the apps read to update themselves, so the tag must match
+`vpnchain.version`: the publish step fails when the built APKs carry another
+version or a build is missing.
+
+### Updating
+
+The Android app and the Linux desktop app check the latest release's
+`manifest.json` at start and every 24 hours, and offer **Update x.y.z** in a
+banner (**Settings → about → check now** looks again). Requests take whatever
+path the app's traffic normally takes, the tunnel included. Downloads are
+checked against the manifest's size and SHA-256 before anything is installed.
+
+- **Android** installs through the system installer, so the first update asks
+  you to allow installs from the app. Releases must be signed with the same key
+  for Android to accept them over each other (see below). If the chain was up,
+  the app brings it back up after the update.
+- **Linux desktop** updates a managed install; a build from source or a `.deb`
+  is never offered updates. Set one up with `cli/install-desktop.sh` (installs
+  under `~/.local/share/vpn-chain`, a launcher `vpn-chain-gui` in
+  `~/.local/bin`, and the menu entry). An update swaps the `current` symlink and
+  relaunches; the relay is a separate process and keeps running. sing-box, the
+  kill-switch helper and the systemd/polkit setup (`cli/setup-desktop.sh`) are
+  outside the managed install and untouched.
 
 Without signing secrets the APKs are debug-signed. For stable signing across
 releases, create a keystore and add repo secrets `ANDROID_KEYSTORE_B64`

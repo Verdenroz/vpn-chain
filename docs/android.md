@@ -136,6 +136,13 @@ times out because the phone was asleep reads as a dead chain. Backoff waits are
 deliberately left outside it: what ends them early is a network callback, which
 wakes the device on its own.
 
+**5. An update brings the chain back.** Installing an update replaces the
+process and drops the tunnel. `PackageReplacedReceiver` (`MY_PACKAGE_REPLACED`)
+restarts it when the persisted connection intent is on. Android's background
+start restrictions list that broadcast as an exemption, and `specialUse` is not
+among the foreground service types barred from boot-time receivers, so the start
+is allowed.
+
 **Security to harden:** the `ChainProfile` persists in app-private DataStore
 (`core/datastore`). Move the credential fields behind the Android Keystore / an
 encrypted DataStore before any real distribution — never ship them in the APK.
