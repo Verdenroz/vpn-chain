@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
+import com.verdenroz.vpnchain.core.config.RuleSetKind
 import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.BlockReason
@@ -31,7 +32,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
-private val PROBE = ProbeProxy(relayPort = 1, warpPort = 2, username = "u", password = "p")
+private val PROBE = ProbeProxy(relayPort = 1, warpPort = 2, fallbackPort = 3, username = "u", password = "p")
 private val OPEN = ProbeResponse(200, emptyMap(), "ok", complete = true)
 private val REFUSED = ProbeResponse(403, emptyMap(), "", complete = true)
 
@@ -50,8 +51,8 @@ private class SharedFeed : DestinationFeed {
 }
 
 private class NoopStore : LearnedRuleSetStore {
-    override fun path(route: LearnedRoute) = "/learned"
-    override fun write(route: LearnedRoute, domains: List<String>) = Unit
+    override fun path(kind: RuleSetKind) = "/learned"
+    override fun write(kind: RuleSetKind, domains: List<String>) = Unit
 }
 
 private class LearnerPreferences : DataStore<Preferences> {
@@ -107,14 +108,27 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `a site both exits refuse is recorded as such`() = runTest {
-        val world = LearnerWorld(backgroundScope) { _, _ -> REFUSED }
+    fun `a site both exits refuse but the fallback reaches is recorded as such`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
         runCurrent()
 
         world.feed.hosts.emit("example.com")
         runCurrent()
 
         assertEquals(LearnedRoute.RefusedByBoth, world.learned.sites.first().single().route)
+    }
+
+    @Test
+    fun `an api host refused everywhere is never learned for warp`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, _ -> REFUSED }
+        runCurrent()
+
+        world.feed.hosts.emit("api.example.com")
+        runCurrent()
+
+        val site = world.learned.sites.first().single()
+        assertEquals(LearnedRoute.RefusedEverywhere, site.route)
+        assertEquals(listOf(1, 2, 3), world.fetcher.calls.map { it.second })
     }
 
     @Test

@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
+import com.verdenroz.vpnchain.core.config.RuleSetKind
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.logging.Logger
 import com.verdenroz.vpnchain.core.model.ChainProfile
@@ -187,13 +188,13 @@ private class RepositoryWorld(scope: CoroutineScope, store: LearnedRuleSetStore 
 }
 
 private class StubRuleSetStore : LearnedRuleSetStore {
-    override fun path(route: LearnedRoute) = "/dev/null"
-    override fun write(route: LearnedRoute, domains: List<String>) = Unit
+    override fun path(kind: RuleSetKind) = "/dev/null"
+    override fun write(kind: RuleSetKind, domains: List<String>) = Unit
 }
 
 private class ThrowingRuleSetStore : LearnedRuleSetStore {
-    override fun path(route: LearnedRoute) = "/learned"
-    override fun write(route: LearnedRoute, domains: List<String>) = error("disk full")
+    override fun path(kind: RuleSetKind) = "/learned"
+    override fun write(kind: RuleSetKind, domains: List<String>) = error("disk full")
 }
 
 private class InMemoryPreferences : DataStore<Preferences> {
@@ -260,6 +261,7 @@ private class StubSettingsRepository : SettingsRepository {
     override suspend fun setWarpMode(mode: WarpMode) = Unit
     override suspend fun setWarpDomains(domains: List<String>) = Unit
     override suspend fun setLearnBlockedSites(enabled: Boolean) = Unit
+    override suspend fun setFailOpen(enabled: Boolean) = Unit
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
     override suspend fun setCloseToTray(enabled: Boolean) = Unit

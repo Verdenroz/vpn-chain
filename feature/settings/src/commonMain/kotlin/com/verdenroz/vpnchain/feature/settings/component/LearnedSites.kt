@@ -25,6 +25,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_lear
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_age_minutes
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_age_now
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_both
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_everywhere
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_remove
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_warp
@@ -85,6 +86,7 @@ private fun learnedDetail(site: LearnedSite): String {
     return when (site.route) {
         LearnedRoute.Warp -> stringResource(Res.string.settings_learned_warp, reason, age)
         LearnedRoute.RefusedByBoth -> stringResource(Res.string.settings_learned_both, reason, age)
+        LearnedRoute.RefusedEverywhere -> stringResource(Res.string.settings_learned_everywhere, reason, age)
     }
 }
 

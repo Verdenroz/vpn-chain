@@ -127,6 +127,8 @@ internal class SiteLearner(
         when (outcome) {
             is ProbeOutcome.WarpOnly -> learned.learn(domain, LearnedRoute.Warp, outcome.reason)
             is ProbeOutcome.RefusedByBoth -> learned.learn(domain, LearnedRoute.RefusedByBoth, outcome.reason)
+            is ProbeOutcome.FallbackOpen -> learned.learn(domain, LearnedRoute.RefusedByBoth, outcome.reason)
+            is ProbeOutcome.RefusedEverywhere -> learned.learn(domain, LearnedRoute.RefusedEverywhere, outcome.reason)
             ProbeOutcome.Reachable, ProbeOutcome.Unknown -> Unit
         }
     }

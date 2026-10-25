@@ -48,6 +48,7 @@
     <string name="settings_learned_remove">remove</string>
     <string name="settings_learned_warp">%1$s · via WARP · %2$s</string>
     <string name="settings_learned_both">%1$s · relay and WARP refused · %2$s</string>
+    <string name="settings_learned_everywhere">%1$s · every path refused · %2$s</string>
     <string name="settings_learned_age_now">now</string>
     <string name="settings_learned_age_minutes">%1$dm ago</string>
     <string name="settings_learned_age_hours">%1$dh ago</string>

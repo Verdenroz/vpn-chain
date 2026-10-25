@@ -9,6 +9,9 @@ enum class LearnedRoute {
 
     /** Both refuse it, so it stays on the relay. */
     RefusedByBoth,
+
+    /** Every path refuses it, so the refusal is about the client, not the address. */
+    RefusedEverywhere,
 }
 
 /**

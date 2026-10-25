@@ -1,6 +1,5 @@
 package com.verdenroz.vpnchain.core.config
 
-import com.verdenroz.vpnchain.core.model.LearnedRoute
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -20,11 +19,11 @@ class DesktopLearnedRuleSetStore : LearnedRuleSetStore {
             File(System.getProperty("user.home"), ".config/vpn-chain").apply { mkdirs() }
         }
 
-    override fun path(route: LearnedRoute): String =
-        File(dir, LearnedRuleSet.fileName(route)).absolutePath
+    override fun path(kind: RuleSetKind): String =
+        File(dir, LearnedRuleSet.fileName(kind)).absolutePath
 
-    override fun write(route: LearnedRoute, domains: List<String>) {
-        val target = File(path(route)).toPath()
+    override fun write(kind: RuleSetKind, domains: List<String>) {
+        val target = File(path(kind)).toPath()
         val staged = target.resolveSibling("${target.fileName}.tmp")
         Files.deleteIfExists(staged)
         Files.createFile(staged, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-r-----")))

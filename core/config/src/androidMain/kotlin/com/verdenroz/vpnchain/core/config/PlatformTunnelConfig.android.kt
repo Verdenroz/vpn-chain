@@ -1,6 +1,5 @@
 package com.verdenroz.vpnchain.core.config
 
-import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpExit
@@ -27,6 +26,7 @@ actual fun renderPlatformTunnelConfig(
         warpMode = settings.warpMode,
         warpDomains = settings.warpDomains,
         probe = if (settings.learningActive) newProbeProxy() else null,
-        learnedWarpPath = learned?.path(LearnedRoute.Warp),
+        learnedWarpPath = learned?.path(RuleSetKind.Warp),
+        failOpen = settings.failOpen,
     )
 }

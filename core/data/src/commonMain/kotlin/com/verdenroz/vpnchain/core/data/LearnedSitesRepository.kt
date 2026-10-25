@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.data
 
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
+import com.verdenroz.vpnchain.core.config.RuleSetKind
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
@@ -58,7 +59,7 @@ internal class DefaultLearnedSitesRepository(
 
     override suspend fun syncRuleSets() {
         val learned = preferences.learnedSites.first()
-        store.write(LearnedRoute.Warp, learned.filter { it.route == LearnedRoute.Warp }.map { it.domain })
+        store.write(RuleSetKind.Warp, learned.filter { it.route == LearnedRoute.Warp }.map { it.domain })
     }
 
     private companion object {

@@ -9,6 +9,7 @@ actual fun newProbeProxy(): ProbeProxy {
     return ProbeProxy(
         relayPort = ServerSocket(0).use { it.localPort },
         warpPort = ServerSocket(0).use { it.localPort },
+        fallbackPort = ServerSocket(0).use { it.localPort },
         username = token(),
         password = token(),
     )

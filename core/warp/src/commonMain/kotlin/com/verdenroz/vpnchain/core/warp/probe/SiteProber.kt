@@ -17,8 +17,17 @@ sealed interface ProbeOutcome {
     /** Refused from the relay, answered from WARP. */
     data class WarpOnly(val reason: BlockReason) : ProbeOutcome
 
-    /** Refused from the relay and from WARP. */
+    /** Refused from the relay and from WARP, with no fail-open path asked. */
     data class RefusedByBoth(val reason: BlockReason) : ProbeOutcome
+
+    /** Refused from the relay and WARP, answered from the fail-open path. */
+    data class FallbackOpen(val reason: BlockReason) : ProbeOutcome
+
+    /**
+     * Refused from every exit. The refusal is of the client, not the address,
+     * so moving the site would change nothing but who sees it.
+     */
+    data class RefusedEverywhere(val reason: BlockReason) : ProbeOutcome
 
     /** A probe failed or said nothing either way, so there is nothing to act on. */
     data object Unknown : ProbeOutcome
@@ -26,7 +35,9 @@ sealed interface ProbeOutcome {
 
 /**
  * The relay is probed first, because the relay already sees every destination:
- * that probe tells it nothing new. WARP is only asked once the relay refuses.
+ * that probe tells it nothing new. WARP is only asked once the relay refuses,
+ * and the fail-open path only once both have, since failing open would expose
+ * the site to that path anyway. A site that every path refuses stays put.
  */
 class SiteProber(private val fetcher: SiteFetcher) {
 
@@ -39,7 +50,16 @@ class SiteProber(private val fetcher: SiteFetcher) {
         if (proxy.warpPort == 0) return ProbeOutcome.Unknown
         return when (verdict(host, proxy.warpPort, proxy)) {
             ExitVerdict.Open -> ProbeOutcome.WarpOnly(relayReason)
-            is ExitVerdict.Blocked -> ProbeOutcome.RefusedByBoth(relayReason)
+            is ExitVerdict.Blocked -> viaFallback(host, proxy, relayReason)
+            ExitVerdict.Inconclusive -> ProbeOutcome.Unknown
+        }
+    }
+
+    private suspend fun viaFallback(host: String, proxy: ProbeProxy, reason: BlockReason): ProbeOutcome {
+        if (proxy.fallbackPort == 0) return ProbeOutcome.RefusedByBoth(reason)
+        return when (verdict(host, proxy.fallbackPort, proxy)) {
+            ExitVerdict.Open -> ProbeOutcome.FallbackOpen(reason)
+            is ExitVerdict.Blocked -> ProbeOutcome.RefusedEverywhere(reason)
             ExitVerdict.Inconclusive -> ProbeOutcome.Unknown
         }
     }

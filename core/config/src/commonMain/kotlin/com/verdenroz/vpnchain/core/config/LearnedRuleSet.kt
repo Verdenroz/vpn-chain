@@ -1,11 +1,13 @@
 package com.verdenroz.vpnchain.core.config
 
-import com.verdenroz.vpnchain.core.model.LearnedRoute
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+
+/** Which list a rule-set file carries: sites sent to WARP, or sites that fail open. */
+enum class RuleSetKind { Warp, Open }
 
 /**
  * The local rule-set files sing-box reads learned domains from. sing-box
@@ -13,10 +15,10 @@ import kotlinx.serialization.json.putJsonArray
  * takes effect without restarting the tunnel.
  */
 interface LearnedRuleSetStore {
-    fun path(route: LearnedRoute): String
+    fun path(kind: RuleSetKind): String
 
     /** Replaces the file in one step, so sing-box never reads a half-written list. */
-    fun write(route: LearnedRoute, domains: List<String>)
+    fun write(kind: RuleSetKind, domains: List<String>)
 }
 
 object LearnedRuleSet {
@@ -28,8 +30,8 @@ object LearnedRuleSet {
         }
     }.toString()
 
-    fun fileName(route: LearnedRoute): String = when (route) {
-        LearnedRoute.Warp -> "learned-warp.json"
-        LearnedRoute.RefusedByBoth -> "learned-open.json"
+    fun fileName(kind: RuleSetKind): String = when (kind) {
+        RuleSetKind.Warp -> "learned-warp.json"
+        RuleSetKind.Open -> "learned-open.json"
     }
 }

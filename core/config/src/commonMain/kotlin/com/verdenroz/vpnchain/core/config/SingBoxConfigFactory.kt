@@ -36,6 +36,7 @@ object SingBoxConfigFactory {
         warpDomains: List<String> = emptyList(),
         probe: ProbeProxy? = null,
         learnedWarpPath: String? = null,
+        failOpen: Boolean = false,
     ): String {
         val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
         val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null || learnedWarpPath != null) }
@@ -50,7 +51,7 @@ object SingBoxConfigFactory {
                     put("listen", "127.0.0.1")
                     put("listen_port", profile.localProxyPort)
                 }
-                probe?.let { addProbeInbounds(it, withWarp = tail != null) }
+                probe?.let { addProbeInbounds(it, withWarp = tail != null, withFallback = failOpen) }
             }
             if (tail != null) {
                 putJsonArray("endpoints") { addWarpEndpoint(tail, detour = "proxy") }
@@ -64,7 +65,7 @@ object SingBoxConfigFactory {
                 putRuleSets(DnsFilter.Off, learnedPath)
                 putJsonArray("rules") {
                     addJsonObject { put("action", "sniff") }
-                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy") }
+                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy", fallbackTag = if (failOpen) "direct" else null) }
                     if (tail != null && warpMode == WarpMode.BlockedSites && tailDomains.isNotEmpty()) {
                         addWarpDomainRule(tailDomains)
                     }
@@ -93,6 +94,7 @@ object SingBoxConfigFactory {
         logPath: String? = null,
         probe: ProbeProxy? = null,
         learnedWarpPath: String? = null,
+        failOpen: Boolean = false,
     ): String {
         val filtering = dnsFilter != DnsFilter.Off
         val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
@@ -117,7 +119,7 @@ object SingBoxConfigFactory {
                     mtu = if (entry != null || tail != null) (entry?.mtu?.coerceAtMost(1280) ?: 1280) else 1400,
                     allowLocalNetworks = allowLocalNetworks,
                 )
-                probe?.let { addProbeInbounds(it, withWarp = tail != null) }
+                probe?.let { addProbeInbounds(it, withWarp = tail != null, withFallback = failOpen) }
             }
             if (entry != null || tail != null) {
                 putJsonArray("endpoints") {
@@ -143,7 +145,13 @@ object SingBoxConfigFactory {
                 putRuleSets(dnsFilter, learnedPath)
                 putJsonArray("rules") {
                     addTunBaseRules()
-                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = VLESS_TAG) }
+                    probe?.let {
+                        addProbeRules(
+                            withWarp = tail != null,
+                            relayTag = VLESS_TAG,
+                            fallbackTag = if (!failOpen) null else if (entry != null) ENTRY_HOP_TAG else "direct",
+                        )
+                    }
                     if (tail != null && warpMode == WarpMode.BlockedSites && tailDomains.isNotEmpty()) {
                         addWarpDomainRule(tailDomains)
                     }
@@ -440,9 +448,10 @@ object SingBoxConfigFactory {
     }
 
     /** Loopback only: these accept any destination, so they must never face the network. */
-    private fun JsonArrayBuilder.addProbeInbounds(probe: ProbeProxy, withWarp: Boolean) {
+    private fun JsonArrayBuilder.addProbeInbounds(probe: ProbeProxy, withWarp: Boolean, withFallback: Boolean) {
         addProbeInbound(ProbeProxy.RELAY_TAG, probe.relayPort, probe)
         if (withWarp) addProbeInbound(ProbeProxy.WARP_TAG, probe.warpPort, probe)
+        if (withFallback) addProbeInbound(ProbeProxy.FALLBACK_TAG, probe.fallbackPort, probe)
     }
 
     private fun JsonArrayBuilder.addProbeInbound(tag: String, port: Int, probe: ProbeProxy) =
@@ -460,7 +469,7 @@ object SingBoxConfigFactory {
         }
 
     /** Ahead of the domain rules, so a probe exits where it asked to whatever the list says. */
-    private fun JsonArrayBuilder.addProbeRules(withWarp: Boolean, relayTag: String) {
+    private fun JsonArrayBuilder.addProbeRules(withWarp: Boolean, relayTag: String, fallbackTag: String?) {
         addJsonObject {
             put("inbound", ProbeProxy.RELAY_TAG)
             put("action", "route")
@@ -471,6 +480,13 @@ object SingBoxConfigFactory {
                 put("inbound", ProbeProxy.WARP_TAG)
                 put("action", "route")
                 put("outbound", WARP_TAG)
+            }
+        }
+        if (fallbackTag != null) {
+            addJsonObject {
+                put("inbound", ProbeProxy.FALLBACK_TAG)
+                put("action", "route")
+                put("outbound", fallbackTag)
             }
         }
     }

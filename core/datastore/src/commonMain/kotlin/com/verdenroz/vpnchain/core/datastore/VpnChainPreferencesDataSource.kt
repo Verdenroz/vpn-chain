@@ -117,6 +117,7 @@ class VpnChainPreferencesDataSource(
                 ?.takeUnless { it == LEGACY_WARP_SEED }
                 ?: emptyList(),
             learnBlockedSites = prefs[LEARN_BLOCKED_SITES_KEY] ?: true,
+            failOpen = prefs[FAIL_OPEN_KEY] ?: true,
             autoConnectOnLaunch = prefs[AUTO_CONNECT_ON_LAUNCH_KEY] ?: false,
             autoReconnect = prefs[AUTO_RECONNECT_KEY] ?: true,
             autoStartOnLogin = prefs[AUTO_START_ON_LOGIN_KEY] ?: false,
@@ -202,6 +203,10 @@ class VpnChainPreferencesDataSource(
 
     suspend fun setLearnBlockedSites(enabled: Boolean) {
         dataStore.edit { it[LEARN_BLOCKED_SITES_KEY] = enabled }
+    }
+
+    suspend fun setFailOpen(enabled: Boolean) {
+        dataStore.edit { it[FAIL_OPEN_KEY] = enabled }
     }
 
     val learnedSites: Flow<List<LearnedSite>> = dataStore.data.map(::readLearned)
@@ -299,6 +304,7 @@ class VpnChainPreferencesDataSource(
         val WARP_MODE_KEY = stringPreferencesKey("warp_mode")
         val WARP_DOMAINS_KEY = stringPreferencesKey("warp_domains_json")
         val LEARN_BLOCKED_SITES_KEY = booleanPreferencesKey("learn_blocked_sites")
+        val FAIL_OPEN_KEY = booleanPreferencesKey("fail_open")
         val LEARNED_SITES_KEY = stringPreferencesKey("learned_sites_json")
         val REACHABLE_DOMAINS_KEY = stringPreferencesKey("reachable_domains_json")
         val LEARNED_SUPPRESSED_KEY = stringPreferencesKey("learned_suppressed_json")

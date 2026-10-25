@@ -42,7 +42,7 @@ private fun warp() = WarpExit(
     peerPublicKey = "warp-peer",
 )
 
-private fun probe() = ProbeProxy(relayPort = 41001, warpPort = 41002, username = "u", password = "p")
+private fun probe() = ProbeProxy(relayPort = 41001, warpPort = 41002, fallbackPort = 41003, username = "u", password = "p")
 
 private fun parse(raw: String): JsonObject = Json.parseToJsonElement(raw).jsonObject
 
@@ -659,7 +659,7 @@ class SingBoxConfigFactoryTest {
             probe = probe(),
         )
 
-        assertEquals(probe(), ProbeProxy.fromConfig(raw))
+        assertEquals(probe().copy(fallbackPort = 0), ProbeProxy.fromConfig(raw))
         assertEquals(null, ProbeProxy.fromConfig(SingBoxConfigFactory.androidChainConfig(profile())))
     }
 
@@ -730,4 +730,67 @@ class SingBoxConfigFactoryTest {
         assertEquals(ClashApi(port = 9191, secret = "s3"), ClashApi.fromConfig(raw))
         assertEquals(null, ClashApi.fromConfig(SingBoxConfigFactory.androidChainConfig(profile())))
     }
+
+    @Test
+    fun `the fallback probe leaves by the entry hop when there is one`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(entry()),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                probe = probe(),
+                failOpen = true,
+            ),
+        )
+
+        val inbound = config.array("inbounds").taggedWith("probe-fallback")
+        assertEquals(41003, inbound?.getValue("listen_port")?.jsonPrimitive?.int)
+        assertEquals("127.0.0.1", inbound?.getValue("listen")?.jsonPrimitive?.content)
+        assertEquals("entry-hop", fallbackRule(config).getValue("outbound").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `the fallback probe leaves directly when there is no entry hop`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                probe = probe(),
+                failOpen = true,
+            ),
+        )
+
+        assertEquals("direct", fallbackRule(config).getValue("outbound").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `no fallback probe exists unless failing open is on`() {
+        val raw = SingBoxConfigFactory.androidChainConfig(
+            profile(entry()),
+            warp = warp(),
+            warpMode = WarpMode.BlockedSites,
+            probe = probe(),
+        )
+
+        assertFalse("probe-fallback" in raw)
+    }
+
+    @Test
+    fun `the fallback port is recovered from the rendered config`() {
+        val raw = SingBoxConfigFactory.androidChainConfig(
+            profile(),
+            warp = warp(),
+            warpMode = WarpMode.BlockedSites,
+            probe = probe(),
+            failOpen = true,
+        )
+
+        assertEquals(probe(), ProbeProxy.fromConfig(raw))
+        assertEquals(0, ProbeProxy.fromConfig(SingBoxConfigFactory.androidChainConfig(profile(), warp = warp(), warpMode = WarpMode.BlockedSites, probe = probe()))?.fallbackPort)
+    }
 }
+
+private fun fallbackRule(config: JsonObject): JsonObject =
+    config.getValue("route").jsonObject.array("rules").map { it.jsonObject }
+        .single { it["inbound"]?.jsonPrimitive?.content == "probe-fallback" }
