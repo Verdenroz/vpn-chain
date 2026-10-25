@@ -4,10 +4,14 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
+import com.verdenroz.vpnchain.core.config.LearnedRules
 import com.verdenroz.vpnchain.core.config.RuleSetKind
 import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.BlockReason
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
+import com.verdenroz.vpnchain.core.model.SavedProfile
+import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.TunnelState
@@ -33,6 +37,9 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 private val PROBE = ProbeProxy(relayPort = 1, warpPort = 2, fallbackPort = 3, username = "u", password = "p")
+private val RELAY = ChainProfile(vpsIp = "203.0.113.10", vlessUuid = "uuid", realityPublicKey = "pubkey", shortId = "ab12")
+private val CHAIN = SavedProfile("c", "c", relay = RELAY, wireGuard = WireGuardEntry("k", "10.2.0.2/32", "p", "198.51.100.20"))
+private val RELAY_ONLY = SavedProfile("r", "r", relay = RELAY)
 private val OPEN = ProbeResponse(200, emptyMap(), "ok", complete = true)
 private val REFUSED = ProbeResponse(403, emptyMap(), "", complete = true)
 
@@ -52,7 +59,7 @@ private class SharedFeed : DestinationFeed {
 
 private class NoopStore : LearnedRuleSetStore {
     override fun path(kind: RuleSetKind) = "/learned"
-    override fun write(kind: RuleSetKind, domains: List<String>) = Unit
+    override fun write(kind: RuleSetKind, rules: LearnedRules) = Unit
 }
 
 private class LearnerPreferences : DataStore<Preferences> {
@@ -73,6 +80,7 @@ private class LearnerWorld(
     val gate = MutableStateFlow(true)
     val status = MutableStateFlow(ChainStatus(state = TunnelState.Connected))
     val settings = MutableStateFlow(UserSettings(warpMode = WarpMode.Automatic))
+    val profile = MutableStateFlow<SavedProfile?>(CHAIN)
     val sessions = MutableStateFlow<LearningSession?>(LearningSession(PROBE, clashApi = null))
     val learned = DefaultLearnedSitesRepository(preferences, NoopStore(), now = { 1L })
 
@@ -82,6 +90,7 @@ private class LearnerWorld(
             prober = SiteProber(fetcher),
             learned = learned,
             settings = settings,
+            profile = profile,
             gate = gate,
             sessions = sessions,
             status = status,
@@ -142,6 +151,7 @@ class SiteLearnerTest {
     @Test
     fun `with no entry hop a double refusal is offered for the bare link and never probed there`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, _ -> REFUSED }
+        world.profile.value = RELAY_ONLY
         world.sessions.value = LearningSession(PROBE.copy(fallbackPort = 0), clashApi = null)
         runCurrent()
 
@@ -152,6 +162,79 @@ class SiteLearnerTest {
         assertEquals("www.bank.example", site.domain)
         assertEquals(LearnedRoute.DirectAvailable, site.route)
         assertEquals(listOf(1, 2), world.fetcher.calls.map { it.second })
+    }
+
+    @Test
+    fun `a running fallback probe is never used without an entry hop in the connection`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
+        world.profile.value = RELAY_ONLY
+        runCurrent()
+
+        world.feed.hosts.emit("www.bank.example")
+        runCurrent()
+
+        assertEquals(listOf(1, 2), world.fetcher.calls.map { it.second })
+        assertEquals(LearnedRoute.DirectAvailable, world.learned.sites.first().single().route)
+    }
+
+    @Test
+    fun `an adopted config whose fallback goes out direct never fails a site open`() = runTest {
+        val legacy = """
+            {"inbounds":[
+              {"type":"mixed","tag":"probe-relay","listen":"127.0.0.1","listen_port":1,"users":[{"username":"u","password":"p"}]},
+              {"type":"mixed","tag":"probe-warp","listen":"127.0.0.1","listen_port":2,"users":[{"username":"u","password":"p"}]},
+              {"type":"mixed","tag":"probe-fallback","listen":"127.0.0.1","listen_port":3,"users":[{"username":"u","password":"p"}]}],
+             "route":{"rules":[{"inbound":"probe-fallback","action":"route","outbound":"direct"}]}}
+        """
+        val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
+        world.sessions.value = learningSessionOf(legacy)
+        runCurrent()
+
+        world.feed.hosts.emit("www.bank.example")
+        runCurrent()
+
+        assertEquals(listOf(1, 2), world.fetcher.calls.map { it.second })
+        assertTrue(world.learned.sites.first().none { it.route == LearnedRoute.FailOpen })
+    }
+
+    @Test
+    fun `a host the user sent direct is never probed again`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, _ -> REFUSED }
+        world.profile.value = RELAY_ONLY
+        world.sessions.value = LearningSession(PROBE.copy(fallbackPort = 0), clashApi = null)
+        world.learned.learn("shop.example", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
+        world.learned.learn("www.shop.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+        world.learned.allowDirect("www.shop.example")
+        runCurrent()
+
+        world.feed.hosts.emit("www.shop.example")
+        runCurrent()
+
+        assertTrue(world.fetcher.calls.isEmpty())
+        assertEquals(LearnedRoute.Direct, world.learned.sites.first().single { it.domain == "www.shop.example" }.route)
+    }
+
+    @Test
+    fun `a reachable host does not vouch for its siblings`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, _ -> OPEN }
+        runCurrent()
+
+        world.feed.hosts.emit("www.example.com")
+        world.feed.hosts.emit("api.example.com")
+        runCurrent()
+
+        assertEquals(listOf("www.example.com", "api.example.com"), world.fetcher.calls.map { it.first })
+    }
+
+    @Test
+    fun `a host that is itself a public suffix is learned for WARP alone`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, port -> if (port == 1) REFUSED else OPEN }
+        runCurrent()
+
+        world.feed.hosts.emit("s3.amazonaws.com")
+        runCurrent()
+
+        assertEquals("s3.amazonaws.com", world.learned.sites.first().single().domain)
     }
 
     @Test
@@ -198,7 +281,6 @@ class SiteLearnerTest {
         runCurrent()
 
         repeat(3) { world.feed.hosts.emit("a.example.com") }
-        world.feed.hosts.emit("b.example.com")
         runCurrent()
 
         assertEquals(listOf("a.example.com" to 1), world.fetcher.calls)

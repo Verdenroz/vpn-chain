@@ -21,15 +21,23 @@ interface LearnedRuleSetStore {
     fun path(kind: RuleSetKind): String
 
     /** Replaces the file in one step, so sing-box never reads a half-written list. */
-    fun write(kind: RuleSetKind, domains: List<String>)
+    fun write(kind: RuleSetKind, rules: LearnedRules)
 }
+
+/**
+ * What one rule-set file matches: [exact] hosts only as themselves, and
+ * [suffixes] with every name under them. Only WARP takes suffixes, at a
+ * registrable domain; anything leaving the relay is matched exactly.
+ */
+data class LearnedRules(val exact: List<String> = emptyList(), val suffixes: List<String> = emptyList())
 
 object LearnedRuleSet {
     /** Source format, version 1: the oldest, so every sing-box that loads rule-sets reads it. */
-    fun render(domains: List<String>): String = buildJsonObject {
+    fun render(rules: LearnedRules): String = buildJsonObject {
         put("version", 1)
         putJsonArray("rules") {
-            addJsonObject { putJsonArray("domain_suffix") { domains.forEach { add(it) } } }
+            if (rules.exact.isNotEmpty()) addJsonObject { putJsonArray("domain") { rules.exact.forEach { add(it) } } }
+            if (rules.suffixes.isNotEmpty()) addJsonObject { putJsonArray("domain_suffix") { rules.suffixes.forEach { add(it) } } }
         }
     }.toString()
 

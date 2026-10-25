@@ -10,9 +10,9 @@ class AndroidLearnedRuleSetStore(private val dir: File) : LearnedRuleSetStore {
     override fun path(kind: RuleSetKind): String =
         File(dir, LearnedRuleSet.fileName(kind)).absolutePath
 
-    override fun write(kind: RuleSetKind, domains: List<String>) {
+    override fun write(kind: RuleSetKind, rules: LearnedRules) {
         val target = File(path(kind))
-        val staged = File(dir, "${target.name}.tmp").apply { writeText(LearnedRuleSet.render(domains)) }
+        val staged = File(dir, "${target.name}.tmp").apply { writeText(LearnedRuleSet.render(rules)) }
         Files.move(staged.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
     }
 }

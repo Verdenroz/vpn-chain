@@ -1,11 +1,13 @@
 package com.verdenroz.vpnchain.core.data
 
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
+import com.verdenroz.vpnchain.core.config.LearnedRules
 import com.verdenroz.vpnchain.core.config.RuleSetKind
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
+import com.verdenroz.vpnchain.core.warp.probe.PublicSuffixList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -15,6 +17,7 @@ interface LearnedSitesRepository {
 
     suspend fun isSuppressed(domain: String): Boolean
 
+    /** Records a probe verdict; a [LearnedRoute.FailOpen] or [LearnedRoute.Direct] entry is never replaced by another. */
     suspend fun learn(domain: String, route: LearnedRoute, reason: BlockReason)
 
     /** Drops the entry and keeps it from being learned again for a week. */
@@ -52,6 +55,8 @@ internal class DefaultLearnedSitesRepository(
     override suspend fun learn(domain: String, route: LearnedRoute, reason: BlockReason) {
         if (isSuppressed(domain)) return
         val before = preferences.learnedSites.first().find { it.domain == domain }?.route
+        // A host on its way out of the relay stays there until the user changes it.
+        if (before in KEPT && route != before) return
         preferences.putLearnedSite(LearnedSite(domain, reason, now(), route))
         // Each write reloads the rule-set in sing-box; a refusal routes nothing.
         if (before in ROUTED || route in ROUTED) syncRuleSets()
@@ -77,16 +82,24 @@ internal class DefaultLearnedSitesRepository(
     override suspend fun saveReachable(domains: Map<String, Long>) =
         preferences.setReachableDomains(domains)
 
+    /**
+     * WARP entries at a registrable domain match it and every name under it; an
+     * entry that is a public suffix or a single host matches only itself.
+     * Anything leaving the relay matches the exact host it was learned or sent for.
+     */
     override suspend fun syncRuleSets() {
         val learned = preferences.learnedSites.first()
-        store.write(RuleSetKind.Warp, learned.filter { it.route == LearnedRoute.Warp }.map { it.domain })
-        val direct = learned.filter { it.route == LearnedRoute.Direct }.map { it.domain }
-        store.write(RuleSetKind.Open, learned.filter { it.route == LearnedRoute.FailOpen }.map { it.domain } + direct)
-        store.write(RuleSetKind.Direct, direct)
+        fun hosts(route: LearnedRoute) = learned.filter { it.route == route }.map { it.domain }
+        val (suffixes, exact) = hosts(LearnedRoute.Warp).partition { PublicSuffixList.bundled.registrableDomain(it) == it }
+        store.write(RuleSetKind.Warp, LearnedRules(exact = exact, suffixes = suffixes))
+        val direct = hosts(LearnedRoute.Direct)
+        store.write(RuleSetKind.Open, LearnedRules(exact = hosts(LearnedRoute.FailOpen) + direct))
+        store.write(RuleSetKind.Direct, LearnedRules(exact = direct))
     }
 
     private companion object {
         const val SUPPRESS_MILLIS = 7L * 24 * 60 * 60 * 1000
         val ROUTED = setOf(LearnedRoute.Warp, LearnedRoute.FailOpen, LearnedRoute.Direct)
+        val KEPT = setOf(LearnedRoute.FailOpen, LearnedRoute.Direct)
     }
 }

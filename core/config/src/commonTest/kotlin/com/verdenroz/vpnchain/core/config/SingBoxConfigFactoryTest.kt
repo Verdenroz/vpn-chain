@@ -631,12 +631,24 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `the rule-set file lists the domains as suffixes`() {
-        val parsed = parse(LearnedRuleSet.render(listOf("a.com", "b.org")))
+    fun `a rule-set file matches exact hosts and suffixes apart`() {
+        assertEquals(
+            """{"version":1,"rules":[{"domain":["login.bank.example","github.io"]},{"domain_suffix":["reddit.com"]}]}""",
+            LearnedRuleSet.render(LearnedRules(exact = listOf("login.bank.example", "github.io"), suffixes = listOf("reddit.com"))),
+        )
+    }
 
-        assertEquals(1, parsed.getValue("version").jsonPrimitive.int)
-        val suffixes = parsed.array("rules").single().jsonObject.array("domain_suffix").map { it.jsonPrimitive.content }
-        assertEquals(listOf("a.com", "b.org"), suffixes)
+    @Test
+    fun `a rule-set file of exact hosts carries no suffix rule`() {
+        assertEquals(
+            """{"version":1,"rules":[{"domain":["www.bank.example"]}]}""",
+            LearnedRuleSet.render(LearnedRules(exact = listOf("www.bank.example"))),
+        )
+    }
+
+    @Test
+    fun `an empty rule-set file has no rules`() {
+        assertEquals("""{"version":1,"rules":[]}""", LearnedRuleSet.render(LearnedRules()))
     }
 
     @Test
@@ -710,6 +722,20 @@ class SingBoxConfigFactoryTest {
 
         assertEquals(probe(), ProbeProxy.fromConfig(raw))
         assertEquals(0, ProbeProxy.fromConfig(SingBoxConfigFactory.androidChainConfig(profile(), warp = warp(), warpMode = WarpMode.Automatic, probe = probe()))?.fallbackPort)
+    }
+
+    @Test
+    fun `a fallback probe that goes out direct is not reported`() {
+        val legacy = """
+            {"inbounds":[
+              {"type":"mixed","tag":"probe-relay","listen":"127.0.0.1","listen_port":41001,"users":[{"username":"u","password":"p"}]},
+              {"type":"mixed","tag":"probe-fallback","listen":"127.0.0.1","listen_port":41003,"users":[{"username":"u","password":"p"}]}],
+             "route":{"rules":[
+              {"inbound":"probe-relay","action":"route","outbound":"vless-proxy"},
+              {"inbound":"probe-fallback","action":"route","outbound":"direct"}]}}
+        """
+
+        assertEquals(0, ProbeProxy.fromConfig(legacy)?.fallbackPort)
     }
 
     @Test

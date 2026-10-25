@@ -61,6 +61,7 @@ val dataModule = module {
             prober = get(),
             learned = get(),
             settings = get<SettingsRepository>().settings,
+            profile = get<ProfileRepository>().profile,
             gate = get<ProbeGate>().open,
             sessions = get<TunnelController>().runningConfig.map(::learningSessionOf),
             status = get<TunnelController>().status,

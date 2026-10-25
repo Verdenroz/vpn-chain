@@ -4,6 +4,9 @@ import com.verdenroz.vpnchain.core.config.ClashApi
 import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.LearnedRoute
+import com.verdenroz.vpnchain.core.model.OutsideExit
+import com.verdenroz.vpnchain.core.model.SavedProfile
+import com.verdenroz.vpnchain.core.model.outsideExitFor
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.tunnel.DestinationFeed
@@ -30,7 +33,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** What the running engine exposes for detection: the probes, and the API to watch. */
-internal data class LearningSession(val probe: ProbeProxy, val clashApi: ClashApi?)
+internal data class LearningSession(val probe: ProbeProxy, val clashApi: ClashApi?) {
+    override fun toString() = "LearningSession(probe=$probe, clashApi=$clashApi)"
+}
 
 /** Null for a config without probe inbounds, or none at all. */
 internal fun learningSessionOf(config: String?): LearningSession? = config
@@ -51,6 +56,7 @@ internal class SiteLearner(
     private val prober: SiteProber,
     private val learned: LearnedSitesRepository,
     private val settings: Flow<UserSettings>,
+    private val profile: Flow<SavedProfile?>,
     private val gate: Flow<Boolean>,
     private val sessions: Flow<LearningSession?>,
     private val status: Flow<ChainStatus>,
@@ -124,17 +130,21 @@ internal class SiteLearner(
      * entry hop only the bare link is left, and that is never probed or routed
      * on its own: the site is offered, and waits for the user to allow it.
      */
-    private suspend fun examine(raw: String, probe: ProbeProxy) {
+    private suspend fun examine(raw: String, running: ProbeProxy) {
         val host = hostName(raw) ?: return
         val domain = PublicSuffixList.bundled.registrableDomain(host) ?: host
-        val viaEntryHop = probe.fallbackPort != 0
-        val directOffered = !viaEntryHop && settings.first().failOpenActive
+        // Both ends have to agree: the running config routes its fallback probe to the
+        // entry hop, and the connection the user chose dials one.
+        val exit = profile.first().outsideExitFor(settings.first())
+        val viaEntryHop = running.fallbackPort != 0 && exit == OutsideExit.EntryHop
+        val directOffered = exit == OutsideExit.Direct
+        val probe = if (viaEntryHop) running else running.copy(fallbackPort = 0)
         if (!claim(host, domain, viaEntryHop, directOffered)) return
         val outcome = prober.probe(host, probe)
         if (outcome == ProbeOutcome.Reachable) {
             lock.withLock {
                 reachable.makeRoom()
-                reachable[domain] = now() + CHECKED_MILLIS
+                reachable[host] = now() + CHECKED_MILLIS
                 dirty = true
             }
         }
@@ -152,10 +162,18 @@ internal class SiteLearner(
         }
     }
 
-    /** False for a site checked recently, already learned, or paused by the user. */
+    /**
+     * False for a host checked recently, already learned, or paused by the user.
+     * Checks are per host, since a route leaving the relay is per host; only a
+     * WARP entry covers the names under its domain.
+     */
     private suspend fun claim(host: String, domain: String, viaEntryHop: Boolean, directOffered: Boolean): Boolean {
-        if (lock.withLock { checkedRecently(domain) }) return false
-        val known = learned.sites.first().filter { it.domain == domain || it.domain == host }
+        if (lock.withLock { checkedRecently(host) }) return false
+        val sites = learned.sites.first()
+        val own = sites.filter { it.domain == host }
+        if (own.any { it.route in LEFT_RELAY }) return false
+        if (sites.any { it.domain == domain && it.route == LearnedRoute.Warp }) return false
+        val known = own + sites.filter { it.domain == domain && it.domain != host }
         // A refusal recorded when this session's way out did not exist gets one more look.
         val recheck = known.any {
             (it.route == LearnedRoute.RefusedByBoth && (viaEntryHop || directOffered)) ||
@@ -164,9 +182,9 @@ internal class SiteLearner(
         if (!recheck && known.isNotEmpty()) return false
         if (learned.isSuppressed(domain) || learned.isSuppressed(host)) return false
         return lock.withLock {
-            if (checkedRecently(domain)) return@withLock false
+            if (checkedRecently(host)) return@withLock false
             retryUntil.makeRoom()
-            retryUntil[domain] = now() + if (recheck) CHECKED_MILLIS else RETRY_MILLIS
+            retryUntil[host] = now() + if (recheck) CHECKED_MILLIS else RETRY_MILLIS
             true
         }
     }
@@ -179,8 +197,8 @@ internal class SiteLearner(
         entries.sortedBy { it.value }.take(size - KEPT * 9 / 10).forEach { remove(it.key) }
     }
 
-    private fun checkedRecently(domain: String): Boolean =
-        (reachable[domain] ?: 0L) > now() || (retryUntil[domain] ?: 0L) > now()
+    private fun checkedRecently(host: String): Boolean =
+        (reachable[host] ?: 0L) > now() || (retryUntil[host] ?: 0L) > now()
 
     private companion object {
         const val WORKERS = 2
@@ -189,6 +207,7 @@ internal class SiteLearner(
         const val SAVE_MILLIS = 5L * 60 * 1000
         const val CHECKED_MILLIS = 12L * 60 * 60 * 1000
         const val RETRY_MILLIS = 5L * 60 * 1000
+        val LEFT_RELAY = setOf(LearnedRoute.FailOpen, LearnedRoute.Direct)
     }
 }
 

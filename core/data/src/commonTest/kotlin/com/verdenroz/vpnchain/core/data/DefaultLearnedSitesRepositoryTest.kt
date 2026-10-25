@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
+import com.verdenroz.vpnchain.core.config.LearnedRules
 import com.verdenroz.vpnchain.core.config.RuleSetKind
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.BlockReason
@@ -19,14 +20,14 @@ import kotlinx.coroutines.test.runTest
 private const val WEEK = 7L * 24 * 60 * 60 * 1000
 
 private class RecordingStore : LearnedRuleSetStore {
-    val files = mutableMapOf<RuleSetKind, List<String>>()
-    val written get() = files[RuleSetKind.Warp]
-    val writtenOpen get() = files[RuleSetKind.Open]
-    val writtenDirect get() = files[RuleSetKind.Direct]
+    val files = mutableMapOf<RuleSetKind, LearnedRules>()
+    val written get() = files[RuleSetKind.Warp]?.let { it.exact + it.suffixes }
+    val writtenOpen get() = files[RuleSetKind.Open]?.let { it.exact + it.suffixes }
+    val writtenDirect get() = files[RuleSetKind.Direct]?.let { it.exact + it.suffixes }
 
     override fun path(kind: RuleSetKind) = "/learned"
-    override fun write(kind: RuleSetKind, domains: List<String>) {
-        files[kind] = domains
+    override fun write(kind: RuleSetKind, rules: LearnedRules) {
+        files[kind] = rules
     }
 }
 
@@ -118,6 +119,31 @@ class DefaultLearnedSitesRepositoryTest {
 
         assertEquals(listOf("b.com"), store.writtenOpen)
         assertEquals(emptyList(), store.writtenDirect)
+    }
+
+    @Test
+    fun `only warp entries at a registrable domain match the names under them`() = runTest {
+        repository.learn("reddit.com", LearnedRoute.Warp, BlockReason.Forbidden)
+        repository.learn("github.io", LearnedRoute.Warp, BlockReason.Forbidden)
+        repository.learn("s3.amazonaws.com", LearnedRoute.Warp, BlockReason.Forbidden)
+        repository.learn("login.bank.example", LearnedRoute.FailOpen, BlockReason.Forbidden)
+        repository.learn("www.shop.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+        repository.allowDirect("www.shop.example")
+
+        assertEquals(LearnedRules(exact = listOf("github.io", "s3.amazonaws.com"), suffixes = listOf("reddit.com")), store.files[RuleSetKind.Warp])
+        assertEquals(LearnedRules(exact = listOf("login.bank.example", "www.shop.example")), store.files[RuleSetKind.Open])
+        assertEquals(LearnedRules(exact = listOf("www.shop.example")), store.files[RuleSetKind.Direct])
+    }
+
+    @Test
+    fun `a probe never downgrades a site the user sent direct`() = runTest {
+        repository.learn("www.shop.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+        repository.allowDirect("www.shop.example")
+
+        repository.learn("www.shop.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+        repository.learn("www.shop.example", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
+
+        assertEquals(LearnedRoute.Direct, repository.sites.first().single().route)
     }
 
     @Test

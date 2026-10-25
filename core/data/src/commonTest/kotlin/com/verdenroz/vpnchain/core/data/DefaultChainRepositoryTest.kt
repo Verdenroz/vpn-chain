@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
+import com.verdenroz.vpnchain.core.config.LearnedRules
 import com.verdenroz.vpnchain.core.config.RuleSetKind
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.logging.Logger
@@ -223,20 +224,20 @@ private class RepositoryWorld(scope: CoroutineScope, store: LearnedRuleSetStore 
 
 private class StubRuleSetStore : LearnedRuleSetStore {
     override fun path(kind: RuleSetKind) = "/dev/null"
-    override fun write(kind: RuleSetKind, domains: List<String>) = Unit
+    override fun write(kind: RuleSetKind, rules: LearnedRules) = Unit
 }
 
 private class CountingRuleSetStore : LearnedRuleSetStore {
     var writes = 0
     override fun path(kind: RuleSetKind) = "/learned"
-    override fun write(kind: RuleSetKind, domains: List<String>) {
+    override fun write(kind: RuleSetKind, rules: LearnedRules) {
         writes++
     }
 }
 
 private class ThrowingRuleSetStore : LearnedRuleSetStore {
     override fun path(kind: RuleSetKind) = "/learned"
-    override fun write(kind: RuleSetKind, domains: List<String>) = error("disk full")
+    override fun write(kind: RuleSetKind, rules: LearnedRules) = error("disk full")
 }
 
 private class InMemoryPreferences : DataStore<Preferences> {

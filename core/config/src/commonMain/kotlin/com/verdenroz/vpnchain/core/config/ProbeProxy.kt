@@ -32,7 +32,20 @@ data class ProbeProxy(
         /** The app's own probe traffic, which detection must not feed back to itself. */
         fun isProbeInbound(tag: String): Boolean = tag.startsWith(TAG_PREFIX)
 
-        /** Recovers the probes from a rendered config; null when it has none. */
+        private const val ENTRY_HOP_OUTBOUND = "entry-hop"
+
+        /** The outbound the route rule for [inbound] sends it to, if any. */
+        private fun routesTo(configJson: String, inbound: String): String? =
+            Json.parseToJsonElement(configJson).jsonObject["route"]?.jsonObject?.get("rules")?.jsonArray
+                ?.map { it.jsonObject }
+                ?.firstOrNull { it["inbound"]?.jsonPrimitive?.contentOrNull == inbound }
+                ?.get("outbound")?.jsonPrimitive?.contentOrNull
+
+        /**
+         * Recovers the probes from a rendered config; null when it has none. A
+         * fallback probe counts only when it leaves by the entry hop: one rendered
+         * to go out `direct`, as earlier builds did, is reported as absent.
+         */
         fun fromConfig(configJson: String): ProbeProxy? = runCatching {
             val inbounds = Json.parseToJsonElement(configJson).jsonObject
                 .getValue("inbounds").jsonArray.map { it.jsonObject }
@@ -42,7 +55,8 @@ data class ProbeProxy(
             ProbeProxy(
                 relayPort = relay.getValue("listen_port").jsonPrimitive.int,
                 warpPort = inbounds[WARP_TAG]?.getValue("listen_port")?.jsonPrimitive?.int ?: 0,
-                fallbackPort = inbounds[FALLBACK_TAG]?.getValue("listen_port")?.jsonPrimitive?.int ?: 0,
+                fallbackPort = inbounds[FALLBACK_TAG]?.getValue("listen_port")?.jsonPrimitive?.int
+                    ?.takeIf { routesTo(configJson, FALLBACK_TAG) == ENTRY_HOP_OUTBOUND } ?: 0,
                 username = user.getValue("username").jsonPrimitive.content,
                 password = user.getValue("password").jsonPrimitive.content,
             )
