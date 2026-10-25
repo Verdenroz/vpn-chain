@@ -132,17 +132,6 @@ class DefaultChainRepositoryTest {
     }
 
     @Test
-    fun `a chain with no entry hop marks its direct outbound for the kill switch`() = runTest {
-        val world = RepositoryWorld(backgroundScope)
-        world.profiles.stored.value = REPOSITORY_PROFILE
-        runCurrent()
-
-        val config = world.controller.configProvider?.invoke()
-
-        assertTrue("\"routing_mark\"" in config.orEmpty())
-    }
-
-    @Test
     fun `a rule-set that cannot be written costs the learned sites, not the config`() = runTest {
         val world = RepositoryWorld(backgroundScope, store = ThrowingRuleSetStore())
         world.profiles.stored.value = REPOSITORY_PROFILE
@@ -181,7 +170,7 @@ class DefaultChainRepositoryTest {
     }
 }
 
-private val REPOSITORY_PROFILE = SavedProfile(
+internal val REPOSITORY_PROFILE = SavedProfile(
     id = "a",
     name = "a",
     relay = ChainProfile(
@@ -205,14 +194,18 @@ private val WIREGUARD_PROFILE = SavedProfile(
     ),
 )
 
-private class RepositoryWorld(scope: CoroutineScope, store: LearnedRuleSetStore = StubRuleSetStore()) {
+internal class RepositoryWorld(
+    scope: CoroutineScope,
+    store: LearnedRuleSetStore = StubRuleSetStore(),
+    settings: UserSettings = UserSettings(themeConfig = ThemeConfig.FOLLOW_SYSTEM),
+) {
     val controller = FakeTunnelController()
     val profiles = StubProfileRepository()
     val preferences = VpnChainPreferencesDataSource(InMemoryPreferences())
     val repository: ChainRepository = DefaultChainRepository(
         controller = controller,
         profileRepository = profiles,
-        settingsRepository = StubSettingsRepository(),
+        settingsRepository = StubSettingsRepository(settings),
         warpRepository = StubWarpRepository(),
         learnedSites = DefaultLearnedSitesRepository(preferences, store = store, now = { 0L }),
         learnedStore = store,
@@ -247,7 +240,7 @@ private class InMemoryPreferences : DataStore<Preferences> {
         transform(state.value).also { state.value = it }
 }
 
-private class FakeTunnelController : TunnelController {
+internal class FakeTunnelController : TunnelController {
     override val status = MutableStateFlow(ChainStatus())
     override val logs = MutableSharedFlow<String>()
     override val userStops = MutableSharedFlow<Unit>()
@@ -274,7 +267,7 @@ private class FakeTunnelController : TunnelController {
     }
 }
 
-private class StubProfileRepository : ProfileRepository {
+internal class StubProfileRepository : ProfileRepository {
     val stored = MutableStateFlow<SavedProfile?>(null)
     override val profile: Flow<SavedProfile?> = stored
     override val profiles: Flow<List<SavedProfile>> = MutableStateFlow(emptyList())
@@ -291,10 +284,8 @@ private class StubProfileRepository : ProfileRepository {
         Result.failure<WireGuardEntry>(IllegalStateException("not used"))
 }
 
-private class StubSettingsRepository : SettingsRepository {
-    override val settings: Flow<UserSettings> = MutableStateFlow(
-        UserSettings(themeConfig = ThemeConfig.FOLLOW_SYSTEM),
-    )
+private class StubSettingsRepository(initial: UserSettings) : SettingsRepository {
+    override val settings: Flow<UserSettings> = MutableStateFlow(initial)
     override suspend fun setThemeConfig(themeConfig: ThemeConfig) = Unit
     override suspend fun setSystemWideTun(enabled: Boolean) = Unit
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
