@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="install_unprompted">Android stopped the install without asking you. A setting that only allows apps from an app store is probably on, such as Auto Blocker on Samsung phones or Advanced Protection.</string>
+    <string name="install_aborted">The update was not installed. If you did not cancel it, a setting that only allows apps from an app store may be on, such as Auto Blocker on Samsung phones or Advanced Protection.</string>
+</resources>

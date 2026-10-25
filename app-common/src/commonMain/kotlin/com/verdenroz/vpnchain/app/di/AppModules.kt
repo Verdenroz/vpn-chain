@@ -2,6 +2,7 @@ package com.verdenroz.vpnchain.app.di
 
 import com.verdenroz.vpnchain.app.AppViewModel
 import com.verdenroz.vpnchain.core.domain.di.domainModule
+import com.verdenroz.vpnchain.core.update.di.updateModule
 import com.verdenroz.vpnchain.feature.chain.di.chainFeatureModule
 import com.verdenroz.vpnchain.feature.logs.di.logsFeatureModule
 import com.verdenroz.vpnchain.feature.settings.di.settingsFeatureModule
@@ -20,6 +21,7 @@ private val appModule = module {
  */
 val appModules: List<Module> = listOf(
     domainModule,
+    updateModule,
     chainFeatureModule,
     settingsFeatureModule,
     logsFeatureModule,

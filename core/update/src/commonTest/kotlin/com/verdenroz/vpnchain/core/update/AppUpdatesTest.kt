@@ -86,6 +86,17 @@ class AppUpdatesTest {
     }
 
     @Test
+    fun `offers nothing for a manifest version it cannot order`() = runTest {
+        for (name in listOf("0.2.0-rc1", "")) {
+            val (updates) = updates(mapOf(MANIFEST_URL to manifest(name)))
+            runCurrent()
+
+            assertEquals(AppUpdateState.UpToDate, updates.state.value)
+            assertEquals(CheckStatus.Done, updates.check.value)
+        }
+    }
+
+    @Test
     fun `offers nothing when the release has no build for this device`() = runTest {
         val (updates) = updates(mapOf(MANIFEST_URL to manifest("0.1.7", keys = listOf("android-x86_64"))))
         runCurrent()

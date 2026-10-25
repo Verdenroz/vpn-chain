@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
+import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
@@ -28,6 +29,7 @@ open class BootReceiver : BroadcastReceiver(), KoinComponent {
 
     private val settingsRepository: SettingsRepository by inject()
     private val profileRepository: ProfileRepository by inject()
+    private val chainRepository: ChainRepository by inject()
     private val connectChain: ConnectChainUseCase by inject()
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -38,7 +40,7 @@ open class BootReceiver : BroadcastReceiver(), KoinComponent {
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
-                if (!settingsRepository.settings.first().autoStartOnLogin) return@launch
+                if (!wantsChain(intent.action)) return@launch
                 if (profileRepository.profile.first() == null) return@launch
                 // Without prior consent the controller would only report a
                 // permission error, so don't start a service to produce one.
@@ -49,6 +51,14 @@ open class BootReceiver : BroadcastReceiver(), KoinComponent {
             }
         }
     }
+
+    // An update drops a tunnel the user had up, whatever the login setting says.
+    private suspend fun wantsChain(action: String?): Boolean =
+        if (action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            chainRepository.connectionIntent.first()
+        } else {
+            settingsRepository.settings.first().autoStartOnLogin
+        }
 
     private companion object {
         val HANDLED_ACTIONS = setOf(

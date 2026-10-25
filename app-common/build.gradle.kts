@@ -16,6 +16,7 @@ kotlin {
             api(projects.core.ui)
             api(projects.core.data)
             api(projects.core.domain)
+            api(projects.core.update)
             api(projects.feature.chain)
             api(projects.feature.settings)
             api(projects.feature.logs)

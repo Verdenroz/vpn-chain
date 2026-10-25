@@ -29,5 +29,6 @@ class AppVersionTest {
         assertFalse(isNewer("0.2.0-rc1", "0.1.6"))
         assertFalse(isNewer("0.2", "0.1.6"))
         assertFalse(isNewer("0.2.0", "dev"))
+        assertFalse(isNewer("", "0.1.6"))
     }
 }
