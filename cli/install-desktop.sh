@@ -4,14 +4,27 @@
 #   $XDG_DATA_HOME/vpn-chain/versions/<version>/   unpacked release
 #   $XDG_DATA_HOME/vpn-chain/current               symlink to the live version
 #   ~/.local/bin/vpn-chain-gui                      launcher
-#   ~/.local/bin/vpn-chain                          command line
+#   ~/.local/bin/vpn-chain                          command line (vpn-chain-next
+#                                                   while the bash vpn-chain holds that name)
 #   $XDG_DATA_HOME/applications/vpn-chain.desktop   menu entry
 #
 # Touches nothing outside those: sing-box, the kill-switch helper and the
 # systemd/polkit setup (cli/setup-desktop.sh) are separate and survive updates.
 # Safe to re-run: it installs the latest release, or only refreshes the
 # launcher and menu entry when that release is already the live one.
+#
+# Usage: install-desktop.sh [--replace-cli]
+#   --replace-cli  install the command line as vpn-chain even over a file this
+#                  script did not write, such as the bash CLI's symlink
 set -euo pipefail
+
+replace_cli=0
+for arg in "$@"; do
+  case "$arg" in
+    --replace-cli) replace_cli=1 ;;
+    *) echo "usage: ${0##*/} [--replace-cli]" >&2; exit 2 ;;
+  esac
+done
 
 releases="${VPN_CHAIN_RELEASES_URL:-https://github.com/Verdenroz/vpn-chain/releases}"
 data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
@@ -21,6 +34,23 @@ root="$data_home/vpn-chain"
 for tool in curl tar sha256sum; do
   command -v "$tool" >/dev/null || { echo "$tool not found" >&2; exit 1; }
 done
+
+# cli/vpn-chain looks for this line too; change both together.
+cli_marker='# vpn-chain app command line, written by install-desktop.sh'
+cli="$bin_dir/vpn-chain"
+cli_next="$bin_dir/vpn-chain-next"
+is_app_cli() { [ -f "$1" ] && [ ! -L "$1" ] && grep -qxF "$cli_marker" "$1"; }
+is_bash_cli() { [ -L "$1" ] && [[ "$(readlink -f "$1")" == */cli/vpn-chain ]]; }
+# Decided before anything is installed, so a refusal changes nothing.
+cli_target="$cli"
+if [ "$replace_cli" = 0 ] && { [ -e "$cli" ] || [ -L "$cli" ]; } && ! is_app_cli "$cli"; then
+  if is_bash_cli "$cli"; then
+    cli_target="$cli_next"
+  else
+    echo "$cli is not this app's command line; re-run with --replace-cli to replace it" >&2
+    exit 1
+  fi
+fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -85,17 +115,19 @@ else
 fi
 
 ln -sfn "$root/current/vpn-chain/bin/vpn-chain" "$bin_dir/vpn-chain-gui"
-cli="$bin_dir/vpn-chain"
 # The launcher opens the window when given no arguments, so a bare vpn-chain asks for help instead.
-wrapper="$(printf '#!/usr/bin/env bash\n[ $# -gt 0 ] || set -- --help\nexec %q "$@"\n' "$root/current/vpn-chain/bin/vpn-chain")"
-if [ -L "$cli" ]; then
-  echo "replacing $cli -> $(readlink "$cli") with the app's own command line" >&2
-elif [ -e "$cli" ] && [ "$(cat "$cli")" != "$wrapper" ]; then
-  echo "replacing $cli with the app's own command line" >&2
+wrapper="$(printf '#!/usr/bin/env bash\n%s\n[ $# -gt 0 ] || set -- --help\nexec %q "$@"\n' "$cli_marker" "$root/current/vpn-chain/bin/vpn-chain")"
+if [ "$cli_target" = "$cli" ]; then
+  if { [ -e "$cli" ] || [ -L "$cli" ]; } && ! is_app_cli "$cli"; then
+    echo "replacing $cli with the app's own command line" >&2
+  fi
+  if is_app_cli "$cli_next"; then rm -f "$cli_next"; fi
+else
+  echo "kept the bash vpn-chain at $cli; the app's command line is vpn-chain-next (re-run with --replace-cli to switch)"
 fi
-rm -f "$cli"
-printf '%s\n' "$wrapper" >"$cli"
-chmod +x "$cli"
+rm -f "$cli_target"
+printf '%s\n' "$wrapper" >"$cli_target"
+chmod +x "$cli_target"
 cat >"$data_home/applications/vpn-chain.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -109,5 +141,5 @@ Categories=Network;Security;
 Keywords=vpn;wireguard;vless;proxy;tunnel;
 EOF
 
-echo "vpn-chain $version is installed; run vpn-chain-gui or vpn-chain (make sure $bin_dir is on PATH)"
+echo "vpn-chain $version is installed; run vpn-chain-gui or ${cli_target##*/} (make sure $bin_dir is on PATH)"
 echo "menu entry: $data_home/applications/vpn-chain.desktop (replaces one from installDesktopEntry)"

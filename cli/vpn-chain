@@ -203,8 +203,16 @@ cmd_status() {
 
 # Symlink this script into a PATH dir so `vpn-chain` works from anywhere.
 # readlink -f resolves the symlink back to the repo, so config paths still work.
+# install-desktop.sh writes this line into the app's own command line; change both together.
+APP_CLI_MARKER='# vpn-chain app command line, written by install-desktop.sh'
+
 cmd_install() {
     mkdir -p "$INSTALL_DIR"
+    if [ -f "$INSTALL_DIR/vpn-chain" ] && [ ! -L "$INSTALL_DIR/vpn-chain" ] \
+        && grep -qxF "$APP_CLI_MARKER" "$INSTALL_DIR/vpn-chain"; then
+        warn "$INSTALL_DIR/vpn-chain is the desktop app's command line; leaving it"
+        return 0
+    fi
     ln -sf "$SELF" "$INSTALL_DIR/vpn-chain"
     log "Installed: $INSTALL_DIR/vpn-chain -> $SELF"
     case ":$PATH:" in
@@ -219,7 +227,11 @@ cmd_install() {
 
 cmd_uninstall() {
     local link="$INSTALL_DIR/vpn-chain"
-    if [ -L "$link" ]; then rm -f "$link"; log "Removed $link"; else log "Not installed at $link"; fi
+    if [ -L "$link" ] && [ "$(readlink -f "$link")" = "$SELF" ]; then
+        rm -f "$link"; log "Removed $link"
+    else
+        log "Not installed at $link"
+    fi
 }
 
 case "${1:-}" in
