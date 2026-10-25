@@ -10,6 +10,9 @@ import com.verdenroz.vpnchain.core.tunnel.DestinationFeed
 import com.verdenroz.vpnchain.core.warp.probe.ProbeOutcome
 import com.verdenroz.vpnchain.core.warp.probe.SiteProber
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -36,20 +39,27 @@ internal class LearningSessionStore {
  * Probes each new destination domain once and learns the ones only WARP can
  * reach. The relay is probed first, so nothing is sent anywhere the relay does
  * not already see; WARP hears about a domain only after the relay refuses it.
- * Runs only while the chain is up, with at most [WORKERS] probes in flight.
+ * Runs only while the chain is up, with at most [WORKERS] probes in flight,
+ * and probes only while [gate] is open; names seen meanwhile wait in the queue.
+ * Reachable verdicts are kept across restarts, so a relaunch does not re-probe
+ * everything the device already visited.
  */
 internal class SiteLearner(
     private val feed: DestinationFeed,
     private val prober: SiteProber,
     private val learned: LearnedSitesRepository,
     private val settings: Flow<UserSettings>,
+    private val gate: Flow<Boolean>,
     private val sessions: LearningSessionStore,
     private val status: Flow<ChainStatus>,
     private val now: () -> Long,
     scope: CoroutineScope,
 ) {
-    private val checkedUntil = mutableMapOf<String, Long>()
+    private val reachable = mutableMapOf<String, Long>()
+    private val retryUntil = mutableMapOf<String, Long>()
     private val lock = Mutex()
+    private var loaded = false
+    private var dirty = false
 
     init {
         scope.launch {
@@ -64,17 +74,56 @@ internal class SiteLearner(
     }
 
     private suspend fun watch(session: LearningSession) = coroutineScope {
+        load()
         val hosts = Channel<String>(QUEUE, BufferOverflow.DROP_OLDEST)
-        repeat(WORKERS) { launch { for (host in hosts) examine(host, session.probe) } }
-        feed.hosts(session.clashApi).collect { hosts.trySend(it) }
+        repeat(WORKERS) {
+            launch {
+                for (host in hosts) {
+                    gate.first { it }
+                    examine(host, session.probe)
+                }
+            }
+        }
+        launch { saveWhileDirty() }
+        try {
+            feed.hosts(session.clashApi).collect { hosts.trySend(it) }
+        } finally {
+            withContext(NonCancellable) { save() }
+        }
+    }
+
+    private suspend fun load() = lock.withLock {
+        if (loaded) return@withLock
+        reachable += learned.reachable()
+        loaded = true
+    }
+
+    private suspend fun saveWhileDirty() {
+        while (true) {
+            delay(SAVE_MILLIS)
+            save()
+        }
+    }
+
+    private suspend fun save() {
+        val snapshot = lock.withLock {
+            if (!dirty) return
+            dirty = false
+            reachable.entries.sortedByDescending { it.value }.take(KEPT).associate { it.key to it.value }
+        }
+        learned.saveReachable(snapshot)
     }
 
     private suspend fun examine(host: String, probe: ProbeProxy) {
         val domain = registrableDomain(host) ?: return
         if (!claim(domain)) return
         val outcome = prober.probe(host, probe)
-        val ttl = if (outcome == ProbeOutcome.Unknown) RETRY_MILLIS else CHECKED_MILLIS
-        lock.withLock { checkedUntil[domain] = now() + ttl }
+        if (outcome == ProbeOutcome.Reachable) {
+            lock.withLock {
+                reachable[domain] = now() + CHECKED_MILLIS
+                dirty = true
+            }
+        }
         when (outcome) {
             is ProbeOutcome.WarpOnly -> learned.learn(domain, LearnedRoute.Warp, outcome.reason)
             is ProbeOutcome.RefusedByBoth -> learned.learn(domain, LearnedRoute.RefusedByBoth, outcome.reason)
@@ -88,8 +137,8 @@ internal class SiteLearner(
         if (manual.any { domain == it || domain.endsWith(".$it") }) return false
         if (learned.sites.first().any { it.domain == domain } || learned.isSuppressed(domain)) return false
         return lock.withLock {
-            if ((checkedUntil[domain] ?: 0L) > now()) return@withLock false
-            checkedUntil[domain] = now() + RETRY_MILLIS
+            if ((reachable[domain] ?: 0L) > now() || (retryUntil[domain] ?: 0L) > now()) return@withLock false
+            retryUntil[domain] = now() + RETRY_MILLIS
             true
         }
     }
@@ -97,6 +146,8 @@ internal class SiteLearner(
     private companion object {
         const val WORKERS = 2
         const val QUEUE = 256
+        const val KEPT = 2_000
+        const val SAVE_MILLIS = 30_000L
         const val CHECKED_MILLIS = 12L * 60 * 60 * 1000
         const val RETRY_MILLIS = 5L * 60 * 1000
     }

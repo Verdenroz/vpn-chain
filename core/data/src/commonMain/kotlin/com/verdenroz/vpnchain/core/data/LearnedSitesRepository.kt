@@ -20,6 +20,11 @@ interface LearnedSitesRepository {
     /** Drops the entry and keeps it from being learned again for a week. */
     suspend fun remove(domain: String)
 
+    /** Domains found reachable on the relay and when that verdict lapses, so a restart does not re-probe them. */
+    suspend fun reachable(): Map<String, Long>
+
+    suspend fun saveReachable(domains: Map<String, Long>)
+
     /** Rewrites the rule-set files from storage; a running sing-box reloads them. */
     suspend fun syncRuleSets()
 }
@@ -45,6 +50,11 @@ internal class DefaultLearnedSitesRepository(
         preferences.removeLearnedSite(domain, suppressUntilMillis = now() + SUPPRESS_MILLIS)
         syncRuleSets()
     }
+
+    override suspend fun reachable(): Map<String, Long> = preferences.reachableDomains.first()
+
+    override suspend fun saveReachable(domains: Map<String, Long>) =
+        preferences.setReachableDomains(domains)
 
     override suspend fun syncRuleSets() {
         val learned = preferences.learnedSites.first()

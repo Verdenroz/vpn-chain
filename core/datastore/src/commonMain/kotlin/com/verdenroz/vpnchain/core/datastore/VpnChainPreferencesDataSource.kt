@@ -230,6 +230,17 @@ class VpnChainPreferencesDataSource(
         ?.let { raw -> runCatching { json.decodeFromString<List<LearnedSite>>(raw) }.getOrNull() }
         .orEmpty()
 
+    /** Domains found reachable on the relay, with the time that verdict lapses. */
+    val reachableDomains: Flow<Map<String, Long>> = dataStore.data.map { prefs ->
+        prefs[REACHABLE_DOMAINS_KEY]
+            ?.let { raw -> runCatching { json.decodeFromString<Map<String, Long>>(raw) }.getOrNull() }
+            .orEmpty()
+    }
+
+    suspend fun setReachableDomains(domains: Map<String, Long>) {
+        dataStore.edit { it[REACHABLE_DOMAINS_KEY] = json.encodeToString(domains) }
+    }
+
     private fun readSuppressed(prefs: Preferences): Map<String, Long> = prefs[LEARNED_SUPPRESSED_KEY]
         ?.let { raw -> runCatching { json.decodeFromString<Map<String, Long>>(raw) }.getOrNull() }
         .orEmpty()
@@ -289,6 +300,7 @@ class VpnChainPreferencesDataSource(
         val WARP_DOMAINS_KEY = stringPreferencesKey("warp_domains_json")
         val LEARN_BLOCKED_SITES_KEY = booleanPreferencesKey("learn_blocked_sites")
         val LEARNED_SITES_KEY = stringPreferencesKey("learned_sites_json")
+        val REACHABLE_DOMAINS_KEY = stringPreferencesKey("reachable_domains_json")
         val LEARNED_SUPPRESSED_KEY = stringPreferencesKey("learned_suppressed_json")
         val WARP_EXIT_KEY = stringPreferencesKey("warp_exit_json")
         val LAST_ORIGIN_IP_KEY = stringPreferencesKey("last_origin_ip")

@@ -8,6 +8,8 @@ import com.verdenroz.vpnchain.core.tunnel.DesktopNetworkMonitor
 import com.verdenroz.vpnchain.core.tunnel.DesktopTunnelController
 import com.verdenroz.vpnchain.core.tunnel.DestinationFeed
 import com.verdenroz.vpnchain.core.tunnel.NetworkMonitor
+import com.verdenroz.vpnchain.core.tunnel.OpenProbeGate
+import com.verdenroz.vpnchain.core.tunnel.ProbeGate
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
 import kotlinx.coroutines.CoroutineScope
 import org.koin.core.module.Module
@@ -18,6 +20,7 @@ actual val tunnelModule: Module = module {
         DesktopTunnelController(scope = get<CoroutineScope>(applicationScopeQualifier))
     }
     single<NetworkMonitor> { DesktopNetworkMonitor() }
+    single<ProbeGate> { OpenProbeGate() }
     single<DestinationFeed> { ClashDestinationFeed() }
     single<LearnedRuleSetStore> { DesktopLearnedRuleSetStore() }
 }

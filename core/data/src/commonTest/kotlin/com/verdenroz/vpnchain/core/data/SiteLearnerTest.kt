@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
@@ -61,13 +62,18 @@ private class LearnerPreferences : DataStore<Preferences> {
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-private class LearnerWorld(scope: CoroutineScope, script: (String, Int) -> ProbeResponse?) {
+private class LearnerWorld(
+    scope: CoroutineScope,
+    preferences: VpnChainPreferencesDataSource = VpnChainPreferencesDataSource(LearnerPreferences()),
+    script: (String, Int) -> ProbeResponse?,
+) {
     val feed = SharedFeed()
     val fetcher = ScriptedFetcher(script)
+    val gate = MutableStateFlow(true)
     val status = MutableStateFlow(ChainStatus(state = TunnelState.Connected))
     val settings = MutableStateFlow(UserSettings(warpMode = WarpMode.BlockedSites))
     val sessions = LearningSessionStore().apply { current.value = LearningSession(PROBE, clashApi = null) }
-    val learned = DefaultLearnedSitesRepository(VpnChainPreferencesDataSource(LearnerPreferences()), NoopStore(), now = { 1L })
+    val learned = DefaultLearnedSitesRepository(preferences, NoopStore(), now = { 1L })
 
     init {
         SiteLearner(
@@ -75,6 +81,7 @@ private class LearnerWorld(scope: CoroutineScope, script: (String, Int) -> Probe
             prober = SiteProber(fetcher),
             learned = learned,
             settings = settings,
+            gate = gate,
             sessions = sessions,
             status = status,
             now = { 1L },
@@ -170,6 +177,41 @@ class SiteLearnerTest {
         runCurrent()
 
         assertTrue(world.fetcher.calls.isEmpty())
+    }
+
+    @Test
+    fun `names seen while the gate is shut are probed once it opens`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, _ -> OPEN }
+        world.gate.value = false
+        runCurrent()
+
+        world.feed.hosts.emit("example.com")
+        runCurrent()
+        assertTrue(world.fetcher.calls.isEmpty())
+
+        world.gate.value = true
+        runCurrent()
+
+        assertEquals(listOf("example.com" to 1), world.fetcher.calls)
+    }
+
+    @Test
+    fun `reachable verdicts survive a restart`() = runTest {
+        val preferences = VpnChainPreferencesDataSource(LearnerPreferences())
+        val first = LearnerWorld(backgroundScope, preferences) { _, _ -> OPEN }
+        runCurrent()
+        first.feed.hosts.emit("example.com")
+        runCurrent()
+        advanceTimeBy(31_000)
+        runCurrent()
+
+        val second = LearnerWorld(backgroundScope, preferences) { _, _ -> OPEN }
+        runCurrent()
+        second.feed.hosts.emit("example.com")
+        runCurrent()
+
+        assertEquals(1, first.fetcher.calls.size)
+        assertTrue(second.fetcher.calls.isEmpty())
     }
 
     @Test

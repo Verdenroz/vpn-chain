@@ -23,6 +23,7 @@ import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.datastore.di.dataStoreModule
 import com.verdenroz.vpnchain.core.logging.di.loggingModule
+import com.verdenroz.vpnchain.core.tunnel.ProbeGate
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
 import com.verdenroz.vpnchain.core.tunnel.di.tunnelModule
 import com.verdenroz.vpnchain.core.warp.di.warpModule
@@ -60,6 +61,7 @@ val dataModule = module {
             prober = get(),
             learned = get(),
             settings = get<SettingsRepository>().settings,
+            gate = get<ProbeGate>().open,
             sessions = get(),
             status = get<TunnelController>().status,
             now = ::currentTimeMillis,
