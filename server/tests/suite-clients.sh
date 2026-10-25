@@ -79,6 +79,33 @@ check "rekey left other devices alone" test "$(uuid_of laptop)" = 22222222-2222-
 check "rekey keeps three short IDs" test "$(jq '.inbounds[0].streamSettings.realitySettings.shortIds | length' "$CFG")" -eq 3
 check "rekey updates the sidecar" test "$(jq -r .phone.shortId "$SIDECAR")" = "$(printf '%s\n' "$OUT" | sed -n 's/^SHORT_ID=//p')"
 
+# ---- adopt ---------------------------------------------------------------
+fresh today.json
+cp "$CFG" "$W/before"
+run adopt laptop
+check "adopt exits 0" test "$RC" -eq 0
+check "adopt changes only the email" test "$(jq -c '.inbounds[0].settings.clients[0].email = "client1"' "$CFG")" = "$(jq -c . "$W/before")"
+check "adopt renamed the client" test "$(clients)" = laptop
+check "adopt recorded the existing short ID" test "$(jq -r .laptop.shortId "$SIDECAR")" = 0123456789abcdef
+check "adopt keeps the uuid" test "$(uuid_of laptop)" = 11111111-1111-4111-8111-111111111111
+cp "$CFG" "$W/after"
+run adopt laptop
+check "second adopt is a no-op" test "$RC" -eq 0
+check "second adopt leaves the config alone" cmp "$CFG" "$W/after"
+run adopt other
+check "adopt refused once devices exist" test "$RC" -ne 0
+
+fresh today.json
+jq '.inbounds[0].streamSettings.realitySettings.shortIds += ["dddddddddddddddd"]' "$FIX/today.json" > "$CFG"
+cp "$CFG" "$W/before"
+run adopt laptop
+check "adopt refused with two short IDs and no sidecar" test "$RC" -ne 0
+check "refused adopt leaves the config alone" cmp "$CFG" "$W/before"
+fresh_multi
+rm "$SIDECAR"
+run adopt laptop
+check "adopt refused with several clients and no sidecar" test "$RC" -ne 0
+
 # ---- refusals ------------------------------------------------------------
 fresh today.json
 jq '.inbounds[0].streamSettings.realitySettings.shortIds += [""]' "$FIX/today.json" > "$CFG"
