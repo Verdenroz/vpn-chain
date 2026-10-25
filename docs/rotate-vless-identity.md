@@ -20,10 +20,13 @@ run even where an assistant can see your terminal.
 ## Steps
 
 ```
-# UUID + short_id only:
+# UUID + short_id of a relay with one device:
 server/rotate-vless-identity.sh
 
-# also regenerate the REALITY keypair (updates REALITY_PUBKEY):
+# one device of several: see server/devices.sh
+server/devices.sh rekey NAME
+
+# REALITY keypair only (updates REALITY_PUBKEY; UUID and short_id stay):
 server/rotate-vless-identity.sh --reality
 
 # then re-render the client config and reconnect:
@@ -37,7 +40,11 @@ and the server backup `/usr/local/etc/xray/config.json.bak.*`.
 
 ## Notes
 
+- With several devices the script refuses and points at `devices.sh rekey NAME`,
+  which rotates that device's UUID and short_id and leaves the others connected.
+- `--reality` swaps the shared keypair, so **every** device needs the new
+  `REALITY_PUBKEY` (the script updates only this machine's `secrets.env`).
 - The server's exit chain is untouched — only the inbound identity changes.
 - Requires `jq` + `xray` + `openssl` on the VPS.
 - Any other client (a future Android profile) must also be updated with the new
-  UUID/short_id (+ REALITY public key if you used `--reality`).
+  UUID/short_id, or with the new REALITY public key after `--reality`.

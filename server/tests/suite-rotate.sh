@@ -48,9 +48,27 @@ check "refusal leaves the config byte-identical" cmp "$CFG" "$W/before"
 check "refusal leaves secrets.env byte-identical" cmp "$VPN_CHAIN_SECRETS" "$W/secrets-before"
 
 setup single
-echo '{}' > "$SIDECAR"
+jq -n '{client1: {shortId: "0123456789abcdef", added: "2026-01-01T00:00:00Z"}}' > "$SIDECAR"
 rot
-check "rotate refuses once a sidecar exists" test "$RC" -ne 0
+check "single-device relay with a sidecar still rotates" test "$RC" -eq 0
+check "rotate keeps the sidecar short ID in step" test "$(jq -r .client1.shortId "$SIDECAR")" = "$(sids)"
+check "rotate keeps the sidecar added date" test "$(jq -r .client1.added "$SIDECAR")" = 2026-01-01T00:00:00Z
+
+setup single
+jq -n '{other: {shortId: "dddddddddddddddd"}}' > "$SIDECAR"
+cp "$CFG" "$W/before"
+rot
+check "rotate refuses when the one client is not in the sidecar" test "$RC" -ne 0
+check "that refusal points at adopt" bash -c 'grep -q "devices.sh adopt" <<<"$1"' _ "$ALL"
+check "that refusal leaves the config alone" cmp "$CFG" "$W/before"
+
+setup single
+cat > "$W/stats.json" <<'JSON'
+{"stat":[{"name":"user>>>client1>>>traffic>>>uplink","value":"4096"}]}
+JSON
+jq -n '{client1: {shortId: "0123456789abcdef"}}' > "$SIDECAR"
+STATS_CMD="cat $W/stats.json" rot
+check "rotate folds the counters into the sidecar first" test "$(jq -r .client1.up "$SIDECAR")" = 4096
 
 # ---- --reality -----------------------------------------------------------
 setup fresh_multi
@@ -83,6 +101,12 @@ link phone --stdout
 check "--stdout prints the link" bash -c 'grep -q "^vless://33333333" <<<"$1"' _ "$OUT_TXT"
 link nobody
 check "unknown device fails" test "$RC" -ne 0
+jq 'del(.phone)' "$SIDECAR" > "$W/sc" && mv "$W/sc" "$SIDECAR"
+link phone --stdout
+check "untracked name with a sidecar fails" test "$RC" -ne 0
+rm "$SIDECAR"
+link phone --stdout
+check "several clients and no sidecar fails" test "$RC" -ne 0
 fresh today.json
 link client1 --stdout
 check "single client without a sidecar falls back to shortIds[0]" bash -c 'grep -q "sid=0123456789abcdef" <<<"$1"' _ "$OUT_TXT"

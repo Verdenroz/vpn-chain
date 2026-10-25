@@ -39,13 +39,15 @@ reality = inbound["streamSettings"]["realitySettings"]
 sni = reality["serverNames"][0]
 private_key = reality["privateKey"]
 
-devices = json.load(open(SIDECAR)) if os.path.exists(SIDECAR) else {}
-if name in devices:
+if os.path.exists(SIDECAR):
+    devices = json.load(open(SIDECAR))
+    if name not in devices:
+        raise SystemExit(f"{name} is not in {SIDECAR}; run devices.sh adopt {name}")
     short_id = devices[name]["shortId"]
-elif len(reality["shortIds"]) == 1:
+elif len(reality["shortIds"]) == 1 and len(inbound["settings"]["clients"]) == 1:
     short_id = reality["shortIds"][0]
 else:
-    raise SystemExit(f"no short ID recorded for {name}; see devices.sh list")
+    raise SystemExit("several devices and no devices.json; cannot tell whose short ID is whose")
 
 result = subprocess.run(
     [XRAY, "x25519", "-i", private_key],
