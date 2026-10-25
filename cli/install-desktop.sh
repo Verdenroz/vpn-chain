@@ -4,6 +4,7 @@
 #   $XDG_DATA_HOME/vpn-chain/versions/<version>/   unpacked release
 #   $XDG_DATA_HOME/vpn-chain/current               symlink to the live version
 #   ~/.local/bin/vpn-chain-gui                      launcher
+#   ~/.local/bin/vpn-chain                          command line
 #   $XDG_DATA_HOME/applications/vpn-chain.desktop   menu entry
 #
 # Touches nothing outside those: sing-box, the kill-switch helper and the
@@ -84,6 +85,18 @@ else
 fi
 
 ln -sfn "$root/current/vpn-chain/bin/vpn-chain" "$bin_dir/vpn-chain-gui"
+cli="$bin_dir/vpn-chain"
+if [ -L "$cli" ]; then
+  echo "replacing $cli -> $(readlink "$cli") with the app's own command line" >&2
+fi
+rm -f "$cli"
+# The launcher opens the window when given no arguments, so a bare vpn-chain asks for help instead.
+cat >"$cli" <<EOF
+#!/bin/sh
+[ \$# -gt 0 ] || set -- --help
+exec "$root/current/vpn-chain/bin/vpn-chain" "\$@"
+EOF
+chmod +x "$cli"
 cat >"$data_home/applications/vpn-chain.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -97,5 +110,5 @@ Categories=Network;Security;
 Keywords=vpn;wireguard;vless;proxy;tunnel;
 EOF
 
-echo "vpn-chain $version is installed; run vpn-chain-gui (make sure $bin_dir is on PATH)"
+echo "vpn-chain $version is installed; run vpn-chain-gui or vpn-chain (make sure $bin_dir is on PATH)"
 echo "menu entry: $data_home/applications/vpn-chain.desktop (replaces one from installDesktopEntry)"
