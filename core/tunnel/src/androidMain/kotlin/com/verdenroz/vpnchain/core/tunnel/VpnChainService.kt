@@ -208,7 +208,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 true
             }
         }.getOrElse { t ->
-            TunnelBridge.log("start failed: ${t.message}")
+            TunnelBridge.logFailure("start failed", t.message)
             dropEngineLocked(
                 gen,
                 t.message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.tunnel_error_start_failed),
@@ -372,7 +372,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         )
         runCatching { client.connect() }
             .onSuccess { logClient = client }
-            .onFailure { TunnelBridge.log("log stream unavailable: ${it.message}") }
+            .onFailure { TunnelBridge.logFailure("log stream unavailable", it.message) }
     }
 
     private fun startStatusClient() {
@@ -385,7 +385,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         )
         runCatching { client.connect() }
             .onSuccess { statusClient = client }
-            .onFailure { TunnelBridge.log("status stream unavailable: ${it.message}") }
+            .onFailure { TunnelBridge.logFailure("status stream unavailable", it.message) }
     }
 
     override fun onDestroy() {
@@ -515,7 +515,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
          */
         override fun disconnected(message: String?) {
             if (tearingDown || TunnelBridge.status.value.state != TunnelState.Connected) return
-            TunnelBridge.log("sing-box status stream ended: ${message ?: "no reason given"}")
+            TunnelBridge.logFailure("sing-box status stream ended", message ?: "no reason given")
             // Hopped to the main thread because this runs on a libbox callback,
             // and cleanup() disconnects the very client calling us.
             lockdownPoller.post { onEngineDied() }

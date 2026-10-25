@@ -102,6 +102,12 @@ internal object TunnelBridge {
         logs.tryEmit(line)
     }
 
+    /** Engine error text can name the server and ports, so only [summary] reaches logcat. */
+    fun logFailure(summary: String, detail: String?) {
+        Log.i(TAG, "$summary, see Logs")
+        logs.tryEmit("$summary: $detail")
+    }
+
     /**
      * The relay's own stream. Kept out of logcat: it names every destination the
      * chain dials, and logcat is a shared buffer that `adb bugreport` captures
