@@ -42,7 +42,7 @@ fun VpnChainApp(appViewModel: AppViewModel = koinViewModel()) {
         }
         val onSelect = { destination: TopLevelDestination -> navController.switchTo(destination) }
 
-        AppShell(tunnelState, isSelected, onSelect) {
+        AppShell(tunnelState, isSelected, onSelect, banner = { UpdateBanner(horizontalPadding = it) }) {
             NavHost(
                 navController = navController,
                 startDestination = CHAIN_ROUTE,
