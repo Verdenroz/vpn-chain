@@ -106,6 +106,64 @@ rm "$SIDECAR"
 run adopt laptop
 check "adopt refused with several clients and no sidecar" test "$RC" -ne 0
 
+# ---- untracked clients ---------------------------------------------------
+fresh today.json
+cp "$CFG" "$W/before"
+for c in "add watch" "rekey client1" "rename client1 laptop"; do
+    # shellcheck disable=SC2086
+    run $c
+    check "'$c' refused while client1 is untracked" test "$RC" -ne 0
+    check "'$c' says to adopt first" bash -c 'grep -q "devices.sh adopt" <<<"$1"' _ "$ERR"
+done
+check "refusals leave the config alone" cmp "$CFG" "$W/before"
+run adopt laptop
+run add watch
+check "add works once the original client is adopted" test "$(clients)" = "laptop,watch"
+
+fresh_multi
+jq 'del(.tablet)' "$SIDECAR" > "$W/sc" && mv "$W/sc" "$SIDECAR"
+run adopt slate
+check "adopt takes the one untracked client beside a sidecar" test "$RC" -eq 0
+check "adopt renamed the untracked client" test "$(clients)" = "laptop,phone,slate"
+check "adopt recorded its short ID" test "$(jq -r .slate.shortId "$SIDECAR")" = cccccccccccccccc
+check "adopt kept the other sidecar entries" test "$(jq -r 'keys | join(",")' "$SIDECAR")" = "laptop,phone,slate"
+run add watch
+check "add works after that adopt" test "$RC" -eq 0
+
+fresh_multi
+jq 'del(.tablet, .phone)' "$SIDECAR" > "$W/sc" && mv "$W/sc" "$SIDECAR"
+run adopt slate
+check "adopt refused with two untracked clients" test "$RC" -ne 0
+
+fresh_multi
+jq '.ghost = {shortId: "eeeeeeeeeeeeeeee"}' "$SIDECAR" > "$W/sc" && mv "$W/sc" "$SIDECAR"
+run rename laptop ghost
+check "rename onto a sidecar-only name refused" test "$RC" -ne 0
+fresh_multi
+jq 'del(.laptop)' "$SIDECAR" > "$W/sc" && mv "$W/sc" "$SIDECAR"
+run rename phone pixel
+check "rename refused while a client is untracked" test "$RC" -ne 0
+
+# ---- folded counters survive failures ------------------------------------
+ST="$(mktemp -d)"
+fresh_multi
+cat > "$ST/stats.json" <<'JSON'
+{"stat":[{"name":"user>>>phone>>>traffic>>>uplink","value":"2048"}]}
+JSON
+cat > "$W/xray-wrap" <<'WRAP'
+#!/usr/bin/env bash
+[ "$1" = "-test" ] && exit 1
+exec /opt/xray/xray "$@"
+WRAP
+chmod +x "$W/xray-wrap"
+STATS_CMD="cat $ST/stats.json" XRAY="$W/xray-wrap" run add watch
+check "failed -test still persists the folded counters" test "$(jq -r .phone.up "$SIDECAR")" = 2048
+check "failed -test does not add the device to the sidecar" test "$(jq -r 'has("watch")' "$SIDECAR")" = false
+fresh_multi
+STATS_CMD="cat $ST/stats.json" ACTIVE_CMD=false run add watch
+check "failed restart still persists the folded counters" test "$(jq -r .phone.up "$SIDECAR")" = 2048
+check "failed restart does not add the device to the sidecar" test "$(jq -r 'has("watch")' "$SIDECAR")" = false
+
 # ---- refusals ------------------------------------------------------------
 fresh today.json
 jq '.inbounds[0].streamSettings.realitySettings.shortIds += [""]' "$FIX/today.json" > "$CFG"

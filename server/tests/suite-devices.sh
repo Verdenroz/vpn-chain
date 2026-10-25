@@ -106,4 +106,41 @@ check "rename goes through" test "$(clients)" = "laptop,pixel,tablet"
 dev list
 check "list goes through" bash -c 'grep -q "^laptop " <<<"$1"' _ "$ALL"
 
+# ---- secrets handling ----------------------------------------------------
+setup
+mkdir "$W/bin"
+cat > "$W/bin/mv" <<'WRAP'
+#!/usr/bin/env bash
+stat -c %a "$1" >> "$MVLOG"
+exec /usr/bin/mv "$@"
+WRAP
+chmod +x "$W/bin/mv"
+export MVLOG="$W/mvlog"
+umask 022
+PATH="$W/bin:$PATH" dev add watch --self
+umask 077
+check "--self exits 0 under a lax umask" test "$RC" -eq 0
+check "every file moved into place was 0600" bash -c 'test "$(wc -l < "$1")" -ge 3 && ! grep -qv "^600$" "$1"' _ "$MVLOG"
+check "secrets.env backup is 0600" test "$(stat -c %a "$VPN_CHAIN_SECRETS.bak")" = 600
+
+setup
+cp "$CFG" "$W/before"
+dev add watch --out "$W/no-such-dir/x.env"
+check "unwritable destination refused" test "$RC" -ne 0
+check "unwritable destination refused before the server changed" cmp "$CFG" "$W/before"
+
+setup
+mkdir "$W/bin"
+cat > "$W/bin/mv" <<'WRAP'
+#!/usr/bin/env bash
+case "${@: -1}" in *.env) exit 1 ;; esac
+exec /usr/bin/mv "$@"
+WRAP
+chmod +x "$W/bin/mv"
+PATH="$W/bin:$PATH" dev add watch --out "$W/late.env"
+check "late local failure exits non-zero" test "$RC" -ne 0
+check "late failure prints the recovery command" bash -c 'grep -q "devices.sh rekey watch --out $2" <<<"$1"' _ "$ALL" "$W/late.env"
+check "late failure never prints the identity" bash -c '! grep -q "$2" <<<"$1"' _ "$ALL" "$(uuid_of watch)"
+check "late failure leaves no temp file" bash -c '! compgen -G "$1/late.env.*"' _ "$W"
+
 finish

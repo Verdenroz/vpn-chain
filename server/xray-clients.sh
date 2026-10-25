@@ -11,93 +11,40 @@
 # `xray -test` it, swap it in, restart, and roll back if xray does not come up.
 set -euo pipefail
 
-CFG="${CFG:-/usr/local/etc/xray/config.json}"
-SIDECAR="${SIDECAR:-/usr/local/etc/xray/devices.json}"
-LOCK="${LOCK:-/run/lock/vpn-chain-devices.lock}"
-XRAY="${XRAY:-$(command -v xray || echo /usr/local/bin/xray)}"
-RELOAD_CMD="${RELOAD_CMD:-systemctl restart xray}"
-ACTIVE_CMD="${ACTIVE_CMD:-systemctl is-active --quiet xray}"
-STATS_CMD="${STATS_CMD:-}"
-SETTLE="${SETTLE:-2}"
-TAG="vless-reality-443"
+# shellcheck source=server/lib/xray-common.sh
+[ -n "${XRAY_COMMON:-}" ] || . "$(dirname "${BASH_SOURCE[0]}")/lib/xray-common.sh"
+
 NAME_RE='^[a-z0-9][a-z0-9._-]{0,31}$'
 
-say() { printf '[remote] %s\n' "$*" >&2; }
-die() { say "$*"; exit 1; }
-
-SC='{}'
-
-now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
-
 check_name() { [[ "$1" =~ $NAME_RE ]] || die "invalid device name: $1"; }
-
-check_config() {
-    jq -e . "$CFG" >/dev/null 2>&1 || die "$CFG is not valid JSON"
-    jq -e --arg tag "$TAG" '
-        .inbounds[] | select(.tag == $tag) | .streamSettings.realitySettings.shortIds
-        | type == "array"' "$CFG" >/dev/null 2>&1 || die "no $TAG inbound with shortIds"
-    jq -e --arg tag "$TAG" '
-        .inbounds[] | select(.tag == $tag) | .streamSettings.realitySettings.shortIds
-        | all(.[]; . != "")' "$CFG" >/dev/null || die "empty short ID in config; refusing to edit"
-}
-
-load() {
-    [ -f "$SIDECAR" ] && SC="$(jq -c . "$SIDECAR")" || SC='{}'
-}
 
 has_client() { jq -e --arg tag "$TAG" --arg n "$1" '
     .inbounds[] | select(.tag == $tag) | .settings.clients | any(.[]; .email == $n)' "$CFG" >/dev/null; }
 
-stats_json() {
-    local port
-    if [ -n "$STATS_CMD" ]; then bash -c "$STATS_CMD"; return; fi
-    port="$(jq -er '.inbounds[] | select(.tag == "api") | .port' "$CFG")" || return 1
-    "$XRAY" api statsquery --server="127.0.0.1:$port" -pattern 'user>>>' -reset
+in_sidecar() { jq -e --arg n "$1" 'has($n)' <<<"$SC" >/dev/null; }
+
+untracked_clients() {
+    jq -r --arg tag "$TAG" --argjson sc "$SC" '
+        .inbounds[] | select(.tag == $tag) | .settings.clients[].email | select(in($sc) | not)' "$CFG"
 }
 
-# Counters reset on every xray restart, so fold them in before one.
-fold_stats() {
-    local st
-    st="$(stats_json 2>/dev/null)" || return 0
-    SC="$(jq -c --argjson st "$st" --arg now "$(now)" '
-        def total($n; $dir): [($st.stat // [])[]
-            | select(.name == "user>>>" + $n + ">>>traffic>>>" + $dir) | (.value // 0 | tonumber)] | add // 0;
-        with_entries(.key as $n | .value |= (
-            total($n; "uplink") as $u | total($n; "downlink") as $d
-            | .up = ((.up // 0) + $u) | .down = ((.down // 0) + $d)
-            | if $u + $d > 0 then .seen = $now else . end))' <<<"$SC")"
+untracked_sids() {
+    jq -r --arg tag "$TAG" --argjson sc "$SC" '
+        ($sc | map(.shortId)) as $known
+        | .inbounds[] | select(.tag == $tag) | .streamSettings.realitySettings.shortIds[]
+        | select(. as $s | $known | index($s) == null)' "$CFG"
 }
 
-write_sidecar() {
-    local tmp
-    tmp="$(mktemp "$SIDECAR.XXXXXX")"
-    jq . <<<"$SC" > "$tmp"
-    chmod 600 "$tmp"; mv "$tmp" "$SIDECAR"
+refuse_untracked() {
+    local u
+    u="$(untracked_clients | paste -sd' ')"
+    [ -z "$u" ] || die "clients not in devices.json ($u); run: devices.sh adopt NAME"
 }
 
-# commit NEWCFG_JSON: swap in a validated config, restart, roll back on failure.
-commit() {
-    local tmp bak err
-    tmp="$(mktemp --suffix=.json "$(dirname "$CFG")/config.XXXXXX")"
-    printf '%s\n' "$1" > "$tmp"
-    if ! err="$("$XRAY" -test -config "$tmp" 2>&1)"; then
-        say "new config failed validation; not applying:"; printf '%s\n' "$err" | tail -5 >&2
-        rm -f "$tmp"; exit 1
-    fi
-    bak="$CFG.bak.$(date +%s)"
-    cp -p "$CFG" "$bak"
-    mv "$tmp" "$CFG"; chmod 644 "$CFG"
-    if ! { bash -c "$RELOAD_CMD" 9>&- && sleep "$SETTLE" && bash -c "$ACTIVE_CMD"; }; then
-        cp -p "$bak" "$CFG"; bash -c "$RELOAD_CMD" 9>&- || true
-        die "xray did not come up; restored $bak"
-    fi
-    write_sidecar
-}
-
-# edit JQ_FILTER [jq args]: filter applied to the live config, result committed.
+# edit JQ_FILTER [jq args]: filter applied to the live config, result swapped in.
 edit() {
     local filter="$1"; shift
-    commit "$(jq --arg tag "$TAG" "$@" "$filter" "$CFG")"
+    swap_config "$(jq --arg tag "$TAG" "$@" "$filter" "$CFG")"
 }
 
 new_identity() {
@@ -113,7 +60,8 @@ emit_identity() {
 cmd_add() {
     check_name "$1"
     has_client "$1" && die "device exists: $1"
-    jq -e --arg n "$1" 'has($n)' <<<"$SC" >/dev/null && die "device exists in sidecar: $1"
+    in_sidecar "$1" && die "device exists in sidecar: $1"
+    refuse_untracked
     new_identity
     fold_stats
     SC="$(jq -c --arg n "$1" --arg sid "$SHORT_ID" --arg now "$(now)" \
@@ -129,6 +77,7 @@ cmd_add() {
 cmd_rekey() {
     local old
     has_client "$1" || die "no such device: $1"
+    refuse_untracked
     old="$(jq -er --arg n "$1" '.[$n].shortId' <<<"$SC")" || die "no short ID recorded for $1"
     new_identity
     fold_stats
@@ -143,7 +92,7 @@ cmd_rekey() {
 
 cmd_revoke() {
     local name="$1" force="${2:-}" count sid
-    if ! has_client "$name" && ! jq -e --arg n "$name" 'has($n)' <<<"$SC" >/dev/null; then
+    if ! has_client "$name" && ! in_sidecar "$name"; then
         say "already revoked: $name"; return 0
     fi
     count="$(jq --arg tag "$TAG" '.inbounds[] | select(.tag == $tag) | .settings.clients | length' "$CFG")"
@@ -162,7 +111,8 @@ cmd_revoke() {
 cmd_rename() {
     check_name "$2"
     has_client "$1" || die "no such device: $1"
-    has_client "$2" && die "device exists: $2"
+    refuse_untracked
+    has_client "$2" || in_sidecar "$2" && die "device exists: $2"
     fold_stats
     SC="$(jq -c --arg o "$1" --arg n "$2" '.[$n] = .[$o] | del(.[$o])' <<<"$SC")"
     edit '(.inbounds[] | select(.tag == $tag) | .settings.clients[] | select(.email == $o) | .email) = $n' \
@@ -171,20 +121,21 @@ cmd_rename() {
 }
 
 cmd_adopt() {
-    local sid
+    local old sid
     check_name "$1"
-    if jq -e --arg n "$1" 'has($n)' <<<"$SC" >/dev/null && has_client "$1"; then
+    if in_sidecar "$1" && has_client "$1"; then
         say "already adopted: $1"; return 0
     fi
-    [ "$SC" = '{}' ] || die "sidecar already has devices; use add"
-    [ "$(jq --arg tag "$TAG" '.inbounds[] | select(.tag == $tag) | .settings.clients | length' "$CFG")" -eq 1 ] \
-        || die "more than one client and no sidecar; cannot tell which short ID is whose"
-    [ "$(jq --arg tag "$TAG" '.inbounds[] | select(.tag == $tag) | .streamSettings.realitySettings.shortIds | length' "$CFG")" -eq 1 ] \
-        || die "more than one short ID and no sidecar; cannot tell which is the client's"
-    sid="$(jq -r --arg tag "$TAG" '.inbounds[] | select(.tag == $tag) | .streamSettings.realitySettings.shortIds[0]' "$CFG")"
-    SC="$(jq -nc --arg n "$1" --arg sid "$sid" --arg now "$(now)" '{($n): {shortId: $sid, added: $now}}')"
-    edit '(.inbounds[] | select(.tag == $tag) | .settings.clients[0].email) = $n' --arg n "$1"
-    say "adopted existing client as $1"
+    in_sidecar "$1" && die "device exists in sidecar: $1"
+    has_client "$1" && ! untracked_clients | grep -qx "$1" && die "device exists: $1"
+    [ "$(untracked_clients | wc -l)" -eq 1 ] || die "adopt needs exactly one client missing from devices.json"
+    [ "$(untracked_sids | wc -l)" -eq 1 ] || die "adopt needs exactly one short ID missing from devices.json"
+    old="$(untracked_clients)"
+    sid="$(untracked_sids)"
+    SC="$(jq -c --arg n "$1" --arg sid "$sid" --arg now "$(now)" '.[$n] = {shortId: $sid, added: $now}' <<<"$SC")"
+    edit '(.inbounds[] | select(.tag == $tag) | .settings.clients[] | select(.email == $o) | .email) = $n' \
+        --arg o "$old" --arg n "$1"
+    say "adopted $old as $1"
 }
 
 human() {
@@ -194,7 +145,6 @@ human() {
 cmd_list() {
     local n added up down seen
     fold_stats
-    [ "$SC" = '{}' ] || write_sidecar
     jq -r --arg tag "$TAG" --argjson sc "$SC" '
         (.inbounds[] | select(.tag == $tag).settings.clients | map(.email)) as $emails
         | ($emails + ($sc | keys) | unique)[] as $n
@@ -217,9 +167,7 @@ cmd_list() {
 main() {
     local cmd="${1:-}"
     [ $# -gt 0 ] && shift
-    mkdir -p "$(dirname "$LOCK")"
-    exec 9>"$LOCK"
-    flock -w 30 9 || die "could not take $LOCK"
+    lock
     check_config
     load
     case "$cmd" in

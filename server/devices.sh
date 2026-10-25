@@ -18,11 +18,10 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SECRETS_FILE="${VPN_CHAIN_SECRETS:-$HOME/.config/vpn-chain/secrets.env}"
+LOG_TAG=devices
+# shellcheck source=server/lib/local.sh
+. "$HERE/lib/local.sh"
 DEVICES_DIR="${VPN_CHAIN_DEVICES_DIR:-$HOME/.config/vpn-chain/devices}"
-SSH_KEY="${VPN_CHAIN_SSH_KEY:-$HOME/.ssh/id_1984_relay}"
-log() { printf '\033[1;36m[devices]\033[0m %s\n' "$*" >&2; }
-die() { printf '\033[1;31m[devices]\033[0m %s\n' "$*" >&2; exit 1; }
 
 CMD="${1:-}"
 [ $# -gt 0 ] && shift
@@ -41,65 +40,55 @@ done
 [ "$SELF" = 0 ] || [ -z "$OUT" ] || die "--self and --out are exclusive"
 
 remote() {
-    local -a t
-    if [ -n "${VPN_CHAIN_REMOTE:-}" ]; then
-        read -ra t <<<"$VPN_CHAIN_REMOTE"
+    resolve_remote "$TARGET"
+    { cat "$HERE/lib/xray-common.sh"; cat "$HERE/xray-clients.sh"; } | "${REMOTE[@]}" bash -s -- "$@"
+}
+
+TMP=""
+trap 'rm -f "$TMP"' EXIT
+
+# prepare_local NAME: prove the destination is writable before the server changes.
+prepare_local() {
+    if [ "$SELF" = 1 ]; then
+        [ -w "$SECRETS_FILE" ] || die "cannot write $SECRETS_FILE"
+        cp "$SECRETS_FILE" "${SECRETS_FILE}.bak"
+        TMP="${SECRETS_FILE}.tmp"
+        : > "$TMP"
+        DEST="$SECRETS_FILE"
     else
-        # shellcheck source=/dev/null
-        [ -f "$SECRETS_FILE" ] && . "$SECRETS_FILE"
-        TARGET="${TARGET:-root@${VPS_IP:-}}"
-        [ -n "${TARGET#root@}" ] || die "no VPS_IP in secrets and no target given"
-        t=(ssh -i "$SSH_KEY" -o ConnectTimeout=12 "$TARGET")
+        DEST="${OUT:-$DEVICES_DIR/$1.env}"
+        [ -n "$OUT" ] || install -d -m 700 "$DEVICES_DIR"
+        TMP="$(mktemp "$DEST.XXXXXX")"
     fi
-    "${t[@]}" bash -s -- "$@" < "$HERE/xray-clients.sh"
 }
 
-upd() {
-    local k="$1" v="$2"
-    awk -v k="$k" -v v="$v" '
-        $0 ~ "^" k "=" { print k "=" v; found=1; next }
-        { print }
-        END { if (!found) print k "=" v }
-    ' "$SECRETS_FILE" > "${SECRETS_FILE}.tmp" && mv "${SECRETS_FILE}.tmp" "$SECRETS_FILE"
+# deliver NAME UUID SID: every step chains with && because the caller tests the result.
+deliver() {
+    if [ "$SELF" = 1 ]; then
+        upd "$SECRETS_FILE" VLESS_UUID "$2" && upd "$SECRETS_FILE" SHORT_ID "$3" \
+            && upd "$SECRETS_FILE" DEVICE_NAME "$1" && chmod 600 "$SECRETS_FILE"
+    else
+        { grep -E '^(VPS_IP|REALITY_PUBKEY|SNI|SERVER_PORT)=' "$SECRETS_FILE" || true
+          printf 'VLESS_UUID=%s\nSHORT_ID=%s\nDEVICE_NAME=%s\n' "$2" "$3" "$1"; } > "$TMP" \
+            && chmod 600 "$TMP" && mv "$TMP" "$DEST"
+    fi
 }
 
-write_self() {
-    cp "$SECRETS_FILE" "${SECRETS_FILE}.bak"
-    upd VLESS_UUID "$1"
-    upd SHORT_ID "$2"
-    upd DEVICE_NAME "$3"
-    chmod 600 "$SECRETS_FILE"
-    log "Updated $SECRETS_FILE (backup: ${SECRETS_FILE}.bak)."
-}
-
-write_device_file() {
-    local dest="$1" tmp
-    if [ -z "$OUT" ]; then install -d -m 700 "$DEVICES_DIR"; fi
-    tmp="$(mktemp "$dest.XXXXXX")"
-    {
-        grep -E '^(VPS_IP|REALITY_PUBKEY|SNI|SERVER_PORT)=' "$SECRETS_FILE" || true
-        printf 'VLESS_UUID=%s\nSHORT_ID=%s\nDEVICE_NAME=%s\n' "$2" "$3" "$4"
-    } > "$tmp"
-    chmod 600 "$tmp"; mv "$tmp" "$dest"
-    log "Wrote $dest."
-}
-
-# issue CMD NAME: run add/rekey remotely and deliver the identity locally.
+# issue NAME: run add/rekey remotely and deliver the identity locally.
 issue() {
     local name="$1" new uuid sid k
     [ -f "$SECRETS_FILE" ] || die "secrets file not found: $SECRETS_FILE"
     for k in VPS_IP REALITY_PUBKEY SNI; do
         grep -q "^$k=." "$SECRETS_FILE" || die "$k missing from $SECRETS_FILE"
     done
+    prepare_local "$name"
     new="$(remote "$CMD" "$name")"
     uuid="$(printf '%s\n' "$new" | sed -n 's/^UUID=//p')"
     sid="$(printf '%s\n' "$new" | sed -n 's/^SHORT_ID=//p')"
     [ -n "$uuid" ] && [ -n "$sid" ] || die "server did not return a complete identity"
-    if [ "$SELF" = 1 ]; then
-        write_self "$uuid" "$sid" "$name"
-    else
-        write_device_file "${OUT:-$DEVICES_DIR/$name.env}" "$uuid" "$sid" "$name"
-    fi
+    deliver "$name" "$uuid" "$sid" \
+        || die "server updated but the local write failed; reissue with: devices.sh rekey $name$([ "$SELF" = 1 ] && echo ' --self')${OUT:+ --out $OUT}"
+    log "Wrote $DEST."
 }
 
 [ "${#ARGS[@]}" -ge 1 ] || [ "$CMD" = list ] || die "usage: devices.sh add|rekey|revoke|rename|adopt|list ..."
