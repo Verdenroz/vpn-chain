@@ -77,6 +77,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
     private var commandServer: CommandServer? = null
     private var logClient: CommandClient? = null
     private var statusClient: CommandClient? = null
+    private var connectionsClient: CommandClient? = null
     private var tunDescriptor: ParcelFileDescriptor? = null
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -262,6 +263,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 server.startOrReloadService(config, OverrideOptions())
                 startLogClient()
                 startStatusClient()
+                startConnectionsClient()
             }
             // A stop that landed while the engine was booting cannot reach in and
             // close a server that did not exist yet, so the boot has to check.
@@ -416,6 +418,8 @@ class VpnChainService : VpnService(), CommandServerHandler {
         logClient = null
         runCatching { statusClient?.disconnect() }
         statusClient = null
+        runCatching { connectionsClient?.disconnect() }
+        connectionsClient = null
         runCatching { commandServer?.closeService() }
         runCatching { commandServer?.close() }
         commandServer = null
@@ -458,6 +462,16 @@ class VpnChainService : VpnService(), CommandServerHandler {
         runCatching { client.connect() }
             .onSuccess { statusClient = client }
             .onFailure { TunnelBridge.logFailure("status stream unavailable", it.message) }
+    }
+
+    private fun startConnectionsClient() {
+        val client = CommandClient(
+            ConnectionsHandler(),
+            CommandClientOptions().apply { addCommand(Libbox.CommandConnections) },
+        )
+        runCatching { client.connect() }
+            .onSuccess { connectionsClient = client }
+            .onFailure { TunnelBridge.log("connection stream unavailable: ${it.message}") }
     }
 
     override fun onDestroy() {
@@ -618,6 +632,29 @@ class VpnChainService : VpnService(), CommandServerHandler {
         override fun initializeClashMode(modeList: StringIterator, currentMode: String) = Unit
         override fun updateClashMode(newMode: String) = Unit
         override fun writeConnectionEvents(message: ConnectionEvents) = Unit
+        override fun writeGroups(message: OutboundGroupIterator) = Unit
+        override fun writeStatus(message: StatusMessage) = Unit
+    }
+
+    /** Hands the names of newly dialled destinations to site detection. */
+    private inner class ConnectionsHandler : CommandClientHandler {
+        override fun writeConnectionEvents(message: ConnectionEvents) {
+            val events = message.iterator()
+            while (events.hasNext()) {
+                val event = events.next()
+                if (event.type != Libbox.ConnectionEventNew.toInt()) continue
+                val connection = event.connection
+                if (connection.inbound.startsWith("probe-")) continue
+                TunnelBridge.destinations.tryEmit(connection.domain)
+            }
+        }
+        override fun connected() = Unit
+        override fun disconnected(message: String?) = Unit
+        override fun writeLogs(messageList: LogIterator) = Unit
+        override fun clearLogs() = Unit
+        override fun setDefaultLogLevel(level: Int) = Unit
+        override fun initializeClashMode(modeList: StringIterator, currentMode: String) = Unit
+        override fun updateClashMode(newMode: String) = Unit
         override fun writeGroups(message: OutboundGroupIterator) = Unit
         override fun writeStatus(message: StatusMessage) = Unit
     }

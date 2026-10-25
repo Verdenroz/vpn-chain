@@ -9,6 +9,8 @@ import com.verdenroz.vpnchain.core.data.DefaultChainRepository
 import com.verdenroz.vpnchain.core.data.DefaultConnectivityRepository
 import com.verdenroz.vpnchain.core.data.DefaultLearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.DefaultLogRepository
+import com.verdenroz.vpnchain.core.data.LearningSessionStore
+import com.verdenroz.vpnchain.core.data.SiteLearner
 import com.verdenroz.vpnchain.core.data.DefaultOriginRepository
 import com.verdenroz.vpnchain.core.data.DefaultProfileRepository
 import com.verdenroz.vpnchain.core.data.DefaultSettingsRepository
@@ -21,6 +23,7 @@ import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.datastore.di.dataStoreModule
 import com.verdenroz.vpnchain.core.logging.di.loggingModule
+import com.verdenroz.vpnchain.core.tunnel.TunnelController
 import com.verdenroz.vpnchain.core.tunnel.di.tunnelModule
 import com.verdenroz.vpnchain.core.warp.di.warpModule
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +51,21 @@ val dataModule = module {
             now = ::currentTimeMillis,
         )
     }
+    single { LearningSessionStore() }
+    // Eager, like the repositories it watches: detection has to be listening
+    // before the first connection, not from first UI resolution.
+    single(createdAtStart = true) {
+        SiteLearner(
+            feed = get(),
+            prober = get(),
+            learned = get(),
+            settings = get<SettingsRepository>().settings,
+            sessions = get(),
+            status = get<TunnelController>().status,
+            now = ::currentTimeMillis,
+            scope = get<CoroutineScope>(applicationScopeQualifier),
+        )
+    }
     // Named rather than positional: every collaborator here is resolved by a
     // bare get(), so a reordered parameter would bind silently and wrongly.
     // Eager: it has to be watching for out-of-app stops (Android's notification
@@ -60,6 +78,7 @@ val dataModule = module {
             warpRepository = get(),
             learnedSites = get(),
             learnedStore = get(),
+            sessions = get(),
             preferences = get(),
             logger = get(),
             scope = get<CoroutineScope>(applicationScopeQualifier),

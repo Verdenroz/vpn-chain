@@ -12,8 +12,8 @@ enum class LearnedRoute {
 }
 
 /**
- * A site the chain found out for itself, by probing. [reason] is what the
- * relay answered with, as a short label.
+ * A site the chain found out for itself, by probing. [reason] is the name of what the
+ * relay answered with (a block reason), left for the UI to word.
  */
 @Serializable
 data class LearnedSite(

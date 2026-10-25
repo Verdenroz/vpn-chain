@@ -722,4 +722,12 @@ class SingBoxConfigFactoryTest {
         val suffixes = parsed.array("rules").single().jsonObject.array("domain_suffix").map { it.jsonPrimitive.content }
         assertEquals(listOf("a.com", "b.org"), suffixes)
     }
+
+    @Test
+    fun `the clash api is recovered from the rendered config`() {
+        val raw = SingBoxConfigFactory.androidChainConfig(profile(), clashApi = ClashApi(port = 9191, secret = "s3"))
+
+        assertEquals(ClashApi(port = 9191, secret = "s3"), ClashApi.fromConfig(raw))
+        assertEquals(null, ClashApi.fromConfig(SingBoxConfigFactory.androidChainConfig(profile())))
+    }
 }

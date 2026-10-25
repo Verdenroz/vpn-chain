@@ -1,13 +1,7 @@
 package com.verdenroz.vpnchain.core.warp.probe
 
-/** Why an exit was refused; [label] is what the settings list shows. */
-enum class BlockReason(val label: String) {
-    Forbidden("403"),
-    RateLimited("429"),
-    LegalBlock("451"),
-    NetworkSecurity("network security"),
-    Challenge("challenge"),
-}
+/** Why an exit was refused. */
+enum class BlockReason { Forbidden, RateLimited, LegalBlock, NetworkSecurity, Challenge }
 
 sealed interface ExitVerdict {
     data object Open : ExitVerdict

@@ -179,6 +179,7 @@ private class RepositoryWorld(scope: CoroutineScope, store: LearnedRuleSetStore 
         warpRepository = StubWarpRepository(),
         learnedSites = DefaultLearnedSitesRepository(preferences, store = store, now = { 0L }),
         learnedStore = store,
+        sessions = LearningSessionStore(),
         preferences = preferences,
         logger = SilentLogger(),
         scope = scope,

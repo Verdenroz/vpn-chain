@@ -9,6 +9,7 @@ import com.verdenroz.vpnchain.core.model.KillSwitchState
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -54,6 +55,12 @@ internal object TunnelBridge {
         alwaysOnDetected.value = enabled
         status.update { it.copy(killSwitch = if (enabled) KillSwitchState.Active else KillSwitchState.Disabled) }
     }
+
+    /** Destinations the engine has dialled, by name; empty when it saw only an address. */
+    val destinations = MutableSharedFlow<String>(
+        extraBufferCapacity = 256,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
 
     /** Session traffic/uptime, reset on every connect (see [SessionStats]). */
     val stats = MutableStateFlow(SessionStats())
