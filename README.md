@@ -189,14 +189,21 @@ and the Linux install refuses a tarball with entries or links outside its folder
   kill-switch helper and the systemd/polkit setup (`cli/setup-desktop.sh`) are
   outside the managed install and untouched.
 
-Without signing secrets the APKs are debug-signed. For stable signing across
-releases, create a keystore and add repo secrets `ANDROID_KEYSTORE_B64`
-(`base64 -w0 release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
-and `ANDROID_KEY_PASSWORD`:
+The release fails without signing secrets, since an APK signed with another
+key cannot update an installed one. Create a keystore once and add repo
+secrets `ANDROID_KEYSTORE_B64` (`base64 -w0 release.jks`),
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`:
 ```
 keytool -genkeypair -v -keystore release.jks -alias vpn-chain \
   -keyalg RSA -keysize 4096 -validity 10000
 ```
+
+Whoever can push a `v*` tag can ship an update to every installed copy, so
+two repo settings are worth turning on: a tag protection rule (ruleset) for
+`v*`, and a protected `release` environment with a required reviewer that the
+publish job runs in. The workflow itself runs with read-only `contents`
+except in the publish job, keeps no git credentials after checkout, and pins
+every action to a commit.
 
 ## Third-party data
 

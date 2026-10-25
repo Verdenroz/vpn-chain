@@ -1,13 +1,14 @@
 # Builds and publishes a GitHub Release when a v* tag is pushed:
 #   - Android: release APKs (arm64-v8a + x86_64 splits), signed with the
-#     keystore from secrets if configured, debug-signed otherwise.
+#     keystore from secrets. The job fails when they are missing: an APK
+#     signed with another key cannot update an installed one.
 #   - Desktop: jpackage can't cross-compile, so each package builds on its
 #     native runner — Linux .deb + portable .tar.gz, Windows .msi,
 #     macOS .dmg (arm64; unsigned — right-click → Open past Gatekeeper).
 #   - manifest.json: sizes + SHA-256 of the APKs and the Linux tarball, which
 #     the apps' in-app updater reads from the latest release.
 #
-# Optional secrets for stable Android signing across releases:
+# Required secrets for stable Android signing across releases:
 #   ANDROID_KEYSTORE_B64       base64 of the .jks  (base64 -w0 release.jks)
 #   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
 name: release
@@ -17,16 +18,16 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   android:
     runs-on: ubuntu-latest
-    env:
-      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: "21"
@@ -36,15 +37,26 @@ jobs:
         run: |
           mkdir -p ~/.gradle
           echo "org.gradle.java.home=$JAVA_HOME" >> ~/.gradle/gradle.properties
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
 
       - name: Decode signing keystore
-        if: env.KEYSTORE_B64 != ''
-        run: printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for name in KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::ANDROID_$name is not set; refusing to publish APKs signed with another key"
+              exit 1
+            fi
+          done
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
 
       - name: Build release APKs
         env:
-          VPNCHAIN_KEYSTORE: ${{ env.KEYSTORE_B64 != '' && format('{0}/release.jks', runner.temp) || '' }}
+          VPNCHAIN_KEYSTORE: ${{ runner.temp }}/release.jks
           VPNCHAIN_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           VPNCHAIN_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           VPNCHAIN_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -59,7 +71,7 @@ jobs:
             cp "$apk" "dist/vpn-chain-$VERSION-android-$abi.apk"
           done
           ls -la dist/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android
           path: dist/*
@@ -80,8 +92,10 @@ jobs:
             tasks: ":desktopApp:packageReleaseDmg"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: "21"
@@ -97,7 +111,7 @@ jobs:
             JDK_HOME="$(cygpath -m "$JAVA_HOME")"
           fi
           echo "org.gradle.java.home=$JDK_HOME" >> ~/.gradle/gradle.properties
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
 
       - name: Build desktop packages
         shell: bash
@@ -118,7 +132,7 @@ jobs:
             tar -C "$OUT/app" -czf "dist/vpn-chain-$VERSION-${{ matrix.label }}.tar.gz" vpn-chain
           fi
           ls -la dist/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-${{ matrix.label }}
           path: dist/*
@@ -126,15 +140,19 @@ jobs:
   publish:
     needs: [android, desktop]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
           merge-multiple: true
       - name: Write update manifest
         run: .github/scripts/release-manifest.sh "${GITHUB_REF_NAME#v}" dist
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: dist/*
           generate_release_notes: true
