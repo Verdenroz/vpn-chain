@@ -91,10 +91,11 @@ exemptions, and (by default) local networks.
   helper raises `CAP_NET_ADMIN` into its own ambient set, so `nft` itself
   never needs any capability grant.
 
-- **Known state after a failed `up`.** When `up` fails or the app's timeout
-  fires, the app kills the helper's `nft` child with it and runs `down`, so
-  the table is either installed and recorded as engaged or absent and
-  recorded as not engaged.
+- **Known state after a failed `up`.** The load is atomic, so a failed `up`
+  or an app timeout (which also kills the helper's `nft` child) leaves the
+  previous table untouched. The app asks the helper's `status` whether a table
+  exists and records that, and never tears one down on failure, since that
+  would fail open on a re-arm.
 
 If the helper isn't built/setcapped yet, the app warns and connects anyway
 without the safety net.

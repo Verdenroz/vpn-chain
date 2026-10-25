@@ -17,6 +17,9 @@
  * Usage:
  *   vpn-chain-killswitch up [--allow-local] <exempt_ip> [<exempt_ip> ...]
  *   vpn-chain-killswitch down
+ *   vpn-chain-killswitch status
+ *
+ * status exits 0 when the table is installed and 1 when it is not.
  *
  * --allow-local additionally accepts RFC1918 and link-local destinations, so
  * Docker bridges and LAN hosts stay reachable while the chain is up.
@@ -40,6 +43,7 @@
  */
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -157,7 +161,7 @@ static int build_script(char *buf, const struct options *opts) {
 }
 
 /* Runs nft with a fixed environment, feeding `input` on stdin when given. */
-static int run_nft(const char *nft_bin, char *const argv[], const char *input, size_t input_len) {
+static int run_nft(const char *nft_bin, char *const argv[], const char *input, size_t input_len, int quiet) {
     int fds[2];
     if (input && pipe(fds) < 0) {
         perror("pipe");
@@ -173,6 +177,10 @@ static int run_nft(const char *nft_bin, char *const argv[], const char *input, s
             close(fds[1]);
             if (dup2(fds[0], STDIN_FILENO) < 0) _exit(127);
             close(fds[0]);
+        }
+        if (quiet) {
+            int devnull = open("/dev/null", O_WRONLY);
+            if (devnull < 0 || dup2(devnull, STDOUT_FILENO) < 0 || dup2(devnull, STDERR_FILENO) < 0) _exit(127);
         }
         execve(nft_bin, argv, NFT_ENV);
         perror("execve");
@@ -200,7 +208,12 @@ static int run_nft(const char *nft_bin, char *const argv[], const char *input, s
 /* Best-effort: failure (e.g. no table to delete) is fine. */
 static void delete_table(const char *nft_bin) {
     char *argv[] = {(char *)"nft", (char *)"delete", (char *)"table", (char *)"inet", (char *)TABLE_NAME, NULL};
-    run_nft(nft_bin, argv, NULL, 0);
+    run_nft(nft_bin, argv, NULL, 0, 0);
+}
+
+static int table_exists(const char *nft_bin) {
+    char *argv[] = {(char *)"nft", (char *)"list", (char *)"table", (char *)"inet", (char *)TABLE_NAME, NULL};
+    return run_nft(nft_bin, argv, NULL, 0, 1) == 0;
 }
 
 static int parse_up_args(int argc, char *argv[], struct options *opts) {
@@ -235,12 +248,14 @@ static int parse_up_args(int argc, char *argv[], struct options *opts) {
 int main(int argc, char *argv[]) {
     const char *prog = argc > 0 ? argv[0] : "vpn-chain-killswitch";
 
-    if (argc < 2 || (strcmp(argv[1], "up") != 0 && strcmp(argv[1], "down") != 0)) {
+    if (argc < 2 || (strcmp(argv[1], "up") != 0 && strcmp(argv[1], "down") != 0 &&
+                  strcmp(argv[1], "status") != 0)) {
         fprintf(
             stderr,
             "usage: %s up [--allow-local] <exempt_ip> [<exempt_ip> ...]\n"
-            "       %s down\n",
-            prog, prog
+            "       %s down\n"
+            "       %s status\n",
+            prog, prog, prog
         );
         return 2;
     }
@@ -280,6 +295,8 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    if (strcmp(argv[1], "status") == 0) return table_exists(nft_bin) ? 0 : 1;
+
     if (!up) {
         delete_table(nft_bin);
         return 0;
@@ -287,5 +304,5 @@ int main(int argc, char *argv[]) {
 
     signal(SIGPIPE, SIG_IGN);
     char *load_argv[] = {(char *)"nft", (char *)"-f", (char *)"-", NULL};
-    return run_nft(nft_bin, load_argv, script, script_len) == 0 ? 0 : 1;
+    return run_nft(nft_bin, load_argv, script, script_len, 0) == 0 ? 0 : 1;
 }

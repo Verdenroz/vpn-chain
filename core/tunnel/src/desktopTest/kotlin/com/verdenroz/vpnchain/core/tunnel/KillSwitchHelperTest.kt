@@ -18,7 +18,7 @@ class KillSwitchHelperTest {
         exemptIps: List<String> = ips,
         allowLocal: Boolean = true,
         run: HelperRunner,
-    ) = runBlocking { engageKillSwitchFault(exemptIps, allowLocal, run) }
+    ) = runBlocking { engageKillSwitch(exemptIps, allowLocal, run) }.fault
 
     @Test
     fun `exit zero engages`() {
@@ -106,43 +106,49 @@ class KillSwitchHelperTest {
         assertEquals(listOf("up") + ips, args)
     }
 
-    @Test
-    fun `failed up is followed by down`() {
-        val calls = mutableListOf<List<String>>()
-        fault {
-            calls += it
-            HelperOutcome.Exited(1, "")
+    private fun engagement(up: HelperOutcome, statusExit: Int, calls: MutableList<List<String>> = mutableListOf()) =
+        runBlocking {
+            engageKillSwitch(ips, allowLocal = true) {
+                calls += it
+                if (it.first() == "status") HelperOutcome.Exited(statusExit, "") else up
+            }
         }
-        assertEquals(listOf("down"), calls.last())
+
+    @Test
+    fun `failed up with a table present is engaged and tears nothing down`() {
+        val calls = mutableListOf<List<String>>()
+        val result = engagement(HelperOutcome.Exited(1, ""), statusExit = 0, calls)
+        assertEquals(KillSwitchEngagement(KillSwitchState.HelperFailed, engaged = true), result)
+        assertTrue(calls.none { it.first() == "down" })
     }
 
     @Test
-    fun `timed out up is followed by down`() {
-        val calls = mutableListOf<List<String>>()
-        fault {
-            calls += it
-            HelperOutcome.TimedOut
-        }
-        assertEquals(listOf("down"), calls.last())
+    fun `failed up with no table is not engaged`() {
+        val result = engagement(HelperOutcome.Exited(1, ""), statusExit = 1)
+        assertEquals(KillSwitchEngagement(KillSwitchState.HelperFailed, engaged = false), result)
     }
 
     @Test
-    fun `successful up is not followed by down`() {
+    fun `timed out up reports the table that is in place`() {
+        assertEquals(
+            KillSwitchEngagement(KillSwitchState.HelperTimedOut, engaged = true),
+            engagement(HelperOutcome.TimedOut, statusExit = 0),
+        )
+    }
+
+    @Test
+    fun `successful up is engaged without asking status`() {
         val calls = mutableListOf<List<String>>()
-        fault {
-            calls += it
-            HelperOutcome.Exited(0, "")
-        }
+        val result = engagement(HelperOutcome.Exited(0, ""), statusExit = 1, calls)
+        assertEquals(KillSwitchEngagement(null, engaged = true), result)
         assertEquals(1, calls.size)
     }
 
     @Test
-    fun `missing binary is not retried with down`() {
-        var calls = 0
-        fault {
-            calls++
-            HelperOutcome.NotFound
-        }
-        assertEquals(1, calls)
+    fun `missing binary is not asked for status`() {
+        val calls = mutableListOf<List<String>>()
+        val result = engagement(HelperOutcome.NotFound, statusExit = 0, calls)
+        assertEquals(KillSwitchEngagement(KillSwitchState.HelperNotFound, engaged = false), result)
+        assertEquals(1, calls.size)
     }
 }

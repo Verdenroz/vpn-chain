@@ -27,17 +27,20 @@ fun processHelperRunner(bin: String, timeoutSeconds: Long = 5): HelperRunner = {
 
 private val DENIED = listOf("could not acquire CAP_NET_ADMIN", "Operation not permitted", "Permission denied")
 
+/** [fault] is why the chain is left unprotected; [engaged] is whether a table is in place regardless. */
+internal data class KillSwitchEngagement(val fault: KillSwitchState?, val engaged: Boolean)
+
 /**
- * Null when the table was installed, otherwise why the chain is left unprotected.
- * A failed or timed-out `up` is followed by `down`, so a table the helper may
- * have left behind never contradicts the "not engaged" the app then records.
+ * The load is atomic, so a failed or timed-out `up` leaves whatever table was
+ * there before. [engaged] asks the helper rather than assuming, and nothing is
+ * torn down: removing a live table on a failed re-arm would fail open.
  */
-internal suspend fun engageKillSwitchFault(
+internal suspend fun engageKillSwitch(
     exemptIps: List<String>,
     allowLocal: Boolean,
     run: HelperRunner,
-): KillSwitchState? {
-    if (exemptIps.isEmpty()) return KillSwitchState.NoExemptAddresses
+): KillSwitchEngagement {
+    if (exemptIps.isEmpty()) return KillSwitchEngagement(KillSwitchState.NoExemptAddresses, engaged = false)
     val localArgs = if (allowLocal) listOf("--allow-local") else emptyList()
     val outcome = run(listOf("up") + localArgs + exemptIps)
     val fault = when (outcome) {
@@ -49,6 +52,10 @@ internal suspend fun engageKillSwitchFault(
         HelperOutcome.NotFound -> KillSwitchState.HelperNotFound
         HelperOutcome.TimedOut -> KillSwitchState.HelperTimedOut
     }
-    if (fault != null && outcome != HelperOutcome.NotFound) run(listOf("down"))
-    return fault
+    val engaged = when {
+        fault == null -> true
+        outcome == HelperOutcome.NotFound -> false
+        else -> (run(listOf("status")) as? HelperOutcome.Exited)?.code == 0
+    }
+    return KillSwitchEngagement(fault, engaged)
 }
