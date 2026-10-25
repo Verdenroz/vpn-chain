@@ -7,8 +7,11 @@ enum class LearnedRoute {
     /** The relay refuses it and WARP answers, so it takes the tail. */
     Warp,
 
-    /** Both refuse it, so it stays on the relay. */
+    /** Both refuse it and no path outside the chain was available to try. */
     RefusedByBoth,
+
+    /** Both refuse it, and the path outside the chain reaches it. */
+    FailOpen,
 
     /** Every path refuses it, so the refusal is about the client, not the address. */
     RefusedEverywhere,

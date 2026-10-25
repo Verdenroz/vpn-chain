@@ -51,6 +51,7 @@ actual fun renderPlatformTunnelConfig(
             logPath = logPath,
             probe = probe,
             learnedWarpPath = learned?.path(RuleSetKind.Warp),
+            learnedOpenPath = learned?.path(RuleSetKind.Open),
             failOpen = settings.failOpen,
         )
     } else {
@@ -62,6 +63,7 @@ actual fun renderPlatformTunnelConfig(
             warpDomains = settings.warpDomains,
             probe = probe,
             learnedWarpPath = learned?.path(RuleSetKind.Warp),
+            learnedOpenPath = learned?.path(RuleSetKind.Open),
             failOpen = settings.failOpen,
         )
     }

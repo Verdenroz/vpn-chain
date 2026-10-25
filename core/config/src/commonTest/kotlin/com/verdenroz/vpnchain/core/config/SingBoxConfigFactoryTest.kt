@@ -789,6 +789,71 @@ class SingBoxConfigFactoryTest {
         assertEquals(probe(), ProbeProxy.fromConfig(raw))
         assertEquals(0, ProbeProxy.fromConfig(SingBoxConfigFactory.androidChainConfig(profile(), warp = warp(), warpMode = WarpMode.BlockedSites, probe = probe()))?.fallbackPort)
     }
+
+    @Test
+    fun `sites that fail open leave by the entry hop beside the relay's learned list`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(entry()),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                learnedWarpPath = "/run/learned-warp.json",
+                learnedOpenPath = "/run/learned-open.json",
+                failOpen = true,
+            ),
+        )
+
+        val route = config.getValue("route").jsonObject
+        assertEquals("/run/learned-open.json", route.array("rule_set").taggedWith("learned-open")?.getValue("path")?.jsonPrimitive?.content)
+        val rule = route.array("rules").map { it.jsonObject }.single { "learned-open" in it.toString() }
+        assertEquals("entry-hop", rule.getValue("outbound").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `sites that fail open leave directly when there is no entry hop`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                learnedOpenPath = "/run/learned-open.json",
+                failOpen = true,
+            ),
+        )
+
+        val rule = config.getValue("route").jsonObject.array("rules").map { it.jsonObject }
+            .single { "learned-open" in it.toString() }
+        assertEquals("direct", rule.getValue("outbound").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `nothing fails open unless the setting is on`() {
+        val raw = SingBoxConfigFactory.androidChainConfig(
+            profile(entry()),
+            warp = warp(),
+            warpMode = WarpMode.BlockedSites,
+            learnedOpenPath = "/run/learned-open.json",
+        )
+
+        assertFalse("learned-open" in raw)
+    }
+
+    @Test
+    fun `failing open never touches the tail or the entry hop's own detour`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(entry()),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                learnedWarpPath = "/run/learned-warp.json",
+                learnedOpenPath = "/run/learned-open.json",
+                failOpen = true,
+            ),
+        )
+
+        assertEquals("vless-proxy", config.array("endpoints").taggedWith("warp-exit")?.getValue("detour")?.jsonPrimitive?.content)
+        assertEquals("entry-hop", config.array("outbounds").taggedWith("vless-proxy")?.getValue("detour")?.jsonPrimitive?.content)
+    }
 }
 
 private fun fallbackRule(config: JsonObject): JsonObject =

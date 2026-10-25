@@ -20,10 +20,11 @@ private const val WEEK = 7L * 24 * 60 * 60 * 1000
 
 private class RecordingStore : LearnedRuleSetStore {
     var written: List<String>? = null
+    var writtenOpen: List<String>? = null
 
     override fun path(kind: RuleSetKind) = "/learned"
     override fun write(kind: RuleSetKind, domains: List<String>) {
-        if (kind == RuleSetKind.Warp) written = domains
+        if (kind == RuleSetKind.Warp) written = domains else writtenOpen = domains
     }
 }
 
@@ -60,6 +61,15 @@ class DefaultLearnedSitesRepositoryTest {
         repository.learn("b.com", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
 
         assertEquals(listOf("a.com"), store.written)
+    }
+
+    @Test
+    fun `sites that fail open go in their own rule-set`() = runTest {
+        repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
+        repository.learn("b.com", LearnedRoute.FailOpen, BlockReason.Forbidden)
+
+        assertEquals(listOf("a.com"), store.written)
+        assertEquals(listOf("b.com"), store.writtenOpen)
     }
 
     @Test

@@ -102,6 +102,16 @@ class WarpSettingsTest {
     }
 
     @Test
+    fun `failing open is on by default and the switch persists`() = runTest {
+        val source = VpnChainPreferencesDataSource(newStore())
+        assertTrue(source.settings.first().failOpen)
+
+        source.setFailOpen(false)
+
+        assertEquals(false, source.settings.first().failOpen)
+    }
+
+    @Test
     fun `a learned site survives a reread and is replaced by domain`() = runTest {
         val source = VpnChainPreferencesDataSource(newStore())
         val site = LearnedSite("example.com", BlockReason.Forbidden, 5L, LearnedRoute.Warp)

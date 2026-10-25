@@ -60,6 +60,7 @@ internal class DefaultLearnedSitesRepository(
     override suspend fun syncRuleSets() {
         val learned = preferences.learnedSites.first()
         store.write(RuleSetKind.Warp, learned.filter { it.route == LearnedRoute.Warp }.map { it.domain })
+        store.write(RuleSetKind.Open, learned.filter { it.route == LearnedRoute.FailOpen }.map { it.domain })
     }
 
     private companion object {

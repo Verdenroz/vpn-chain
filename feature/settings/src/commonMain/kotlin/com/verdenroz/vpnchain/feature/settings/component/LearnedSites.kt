@@ -19,12 +19,15 @@ import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
 import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
+import com.verdenroz.vpnchain.core.model.OutsideExit
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_age_days
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_age_hours
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_age_minutes
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_age_now
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_both
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_direct
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_entry
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_everywhere
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_remove
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_title
@@ -41,6 +44,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun LearnedSites(
     sites: List<LearnedSite>,
+    exits: Map<String, OutsideExit>,
     onRemove: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -65,7 +69,7 @@ internal fun LearnedSites(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        learnedDetail(site),
+                        learnedDetail(site, exits[site.domain]),
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.muted,
                     )
@@ -80,12 +84,17 @@ internal fun LearnedSites(
 }
 
 @Composable
-private fun learnedDetail(site: LearnedSite): String {
+private fun learnedDetail(site: LearnedSite, exit: OutsideExit?): String {
     val reason = stringResource(site.reason.label())
     val age = ageText(currentTimeMillis() - site.learnedAtMillis)
     return when (site.route) {
         LearnedRoute.Warp -> stringResource(Res.string.settings_learned_warp, reason, age)
         LearnedRoute.RefusedByBoth -> stringResource(Res.string.settings_learned_both, reason, age)
+        LearnedRoute.FailOpen -> when (exit) {
+            OutsideExit.EntryHop -> stringResource(Res.string.settings_learned_entry, reason, age)
+            OutsideExit.Direct -> stringResource(Res.string.settings_learned_direct, reason, age)
+            null -> stringResource(Res.string.settings_learned_both, reason, age)
+        }
         LearnedRoute.RefusedEverywhere -> stringResource(Res.string.settings_learned_everywhere, reason, age)
     }
 }

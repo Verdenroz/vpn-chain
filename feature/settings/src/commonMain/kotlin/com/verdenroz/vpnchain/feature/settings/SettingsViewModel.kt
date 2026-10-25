@@ -18,6 +18,8 @@ import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.LearnedSite
+import com.verdenroz.vpnchain.core.model.OutsideExit
+import com.verdenroz.vpnchain.core.model.outsideExit
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
@@ -52,6 +54,7 @@ data class SettingsUiState(
     val profiles: List<SavedProfile> = emptyList(),
     val activeProfileId: String? = null,
     val learned: List<LearnedSite> = emptyList(),
+    val exits: Map<String, OutsideExit> = emptyMap(),
 )
 
 /**
@@ -109,6 +112,7 @@ class SettingsViewModel(
                 profiles = profiles,
                 activeProfileId = activeProfileId,
                 learned = learned.sortedByDescending { it.learnedAtMillis },
+                exits = learned.mapNotNull { site -> site.outsideExit(settings, profile)?.let { site.domain to it } }.toMap(),
             )
         }.stateIn(
             scope = viewModelScope,
@@ -165,6 +169,10 @@ class SettingsViewModel(
 
     fun setLearnBlockedSites(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setLearnBlockedSites(enabled)
+    }
+
+    fun setFailOpen(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setFailOpen(enabled)
     }
 
     fun removeLearned(domain: String) = viewModelScope.launch {

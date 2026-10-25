@@ -108,14 +108,33 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `a site both exits refuse but the fallback reaches is recorded as such`() = runTest {
+    fun `a site both exits refuse but the fallback reaches is learned to fail open`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
         runCurrent()
 
         world.feed.hosts.emit("example.com")
         runCurrent()
 
-        assertEquals(LearnedRoute.RefusedByBoth, world.learned.sites.first().single().route)
+        assertEquals(LearnedRoute.FailOpen, world.learned.sites.first().single().route)
+    }
+
+    @Test
+    fun `a double refusal recorded before failing open was on is probed again`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
+        world.settings.value = world.settings.value.copy(failOpen = false)
+        world.learned.learn("example.com", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
+        runCurrent()
+
+        world.feed.hosts.emit("example.com")
+        runCurrent()
+        assertTrue(world.fetcher.calls.isEmpty())
+
+        world.settings.value = world.settings.value.copy(failOpen = true)
+        runCurrent()
+        world.feed.hosts.emit("example.com")
+        runCurrent()
+
+        assertEquals(LearnedRoute.FailOpen, world.learned.sites.first().single().route)
     }
 
     @Test

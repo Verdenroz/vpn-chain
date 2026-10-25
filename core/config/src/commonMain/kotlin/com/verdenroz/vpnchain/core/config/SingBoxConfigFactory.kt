@@ -36,11 +36,13 @@ object SingBoxConfigFactory {
         warpDomains: List<String> = emptyList(),
         probe: ProbeProxy? = null,
         learnedWarpPath: String? = null,
+        learnedOpenPath: String? = null,
         failOpen: Boolean = false,
     ): String {
         val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
         val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null || learnedWarpPath != null) }
         val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.BlockedSites }
+        val openPath = learnedOpenPath.takeIf { failOpen && warpMode == WarpMode.BlockedSites }
         return render {
             putInfoLog()
             putExperimental(clashApi, cacheFile = false, cachePath = null)
@@ -62,14 +64,15 @@ object SingBoxConfigFactory {
             }
             putJsonObject("route") {
                 put("auto_detect_interface", false)
-                putRuleSets(DnsFilter.Off, learnedPath)
+                putRuleSets(DnsFilter.Off, learnedPath, openPath)
                 putJsonArray("rules") {
                     addJsonObject { put("action", "sniff") }
-                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy", fallbackTag = if (failOpen) "direct" else null) }
+                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy", fallbackTag = DIRECT_TAG.takeIf { failOpen }) }
                     if (tail != null && warpMode == WarpMode.BlockedSites && tailDomains.isNotEmpty()) {
                         addWarpDomainRule(tailDomains)
                     }
-                    learnedPath?.let { addLearnedWarpRule() }
+                    learnedPath?.let { addLearnedRule(LEARNED_WARP_TAG, WARP_TAG) }
+                    openPath?.let { addLearnedRule(LEARNED_OPEN_TAG, DIRECT_TAG) }
                 }
                 put("final", if (tail != null && warpMode == WarpMode.AllTraffic) WARP_TAG else "proxy")
             }
@@ -94,6 +97,7 @@ object SingBoxConfigFactory {
         logPath: String? = null,
         probe: ProbeProxy? = null,
         learnedWarpPath: String? = null,
+        learnedOpenPath: String? = null,
         failOpen: Boolean = false,
     ): String {
         val filtering = dnsFilter != DnsFilter.Off
@@ -103,6 +107,9 @@ object SingBoxConfigFactory {
         // to come up — one hop shorter, not not at all.
         val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null || learnedWarpPath != null) }
         val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.BlockedSites }
+        val openPath = learnedOpenPath.takeIf { failOpen && warpMode == WarpMode.BlockedSites }
+        // Past the relay, not through it: the entry hop alone, or the bare link without one.
+        val openTag = if (entry != null) ENTRY_HOP_TAG else DIRECT_TAG
         return render {
             putInfoLog(logPath)
             // The rule-set is remote, so it needs somewhere to persist between
@@ -142,20 +149,21 @@ object SingBoxConfigFactory {
             }
             putJsonObject("route") {
                 put("auto_detect_interface", true)
-                putRuleSets(dnsFilter, learnedPath)
+                putRuleSets(dnsFilter, learnedPath, openPath)
                 putJsonArray("rules") {
                     addTunBaseRules()
                     probe?.let {
                         addProbeRules(
                             withWarp = tail != null,
                             relayTag = VLESS_TAG,
-                            fallbackTag = if (!failOpen) null else if (entry != null) ENTRY_HOP_TAG else "direct",
+                            fallbackTag = openTag.takeIf { failOpen },
                         )
                     }
                     if (tail != null && warpMode == WarpMode.BlockedSites && tailDomains.isNotEmpty()) {
                         addWarpDomainRule(tailDomains)
                     }
-                    learnedPath?.let { addLearnedWarpRule() }
+                    learnedPath?.let { addLearnedRule(LEARNED_WARP_TAG, WARP_TAG) }
+                    openPath?.let { addLearnedRule(LEARNED_OPEN_TAG, openTag) }
                 }
                 put(
                     "final",
@@ -195,7 +203,7 @@ object SingBoxConfigFactory {
             putJsonArray("outbounds") { addDirectOutbound() }
             putJsonObject("route") {
                 put("auto_detect_interface", true)
-                putRuleSets(dnsFilter, learnedWarpPath = null, detour = ENTRY_HOP_TAG)
+                putRuleSets(dnsFilter, learnedWarpPath = null, learnedOpenPath = null, detour = ENTRY_HOP_TAG)
                 putJsonArray("rules") { addTunBaseRules() }
                 put("final", ENTRY_HOP_TAG)
             }
@@ -256,21 +264,23 @@ object SingBoxConfigFactory {
     private fun JsonObjectBuilder.putRuleSets(
         filter: DnsFilter,
         learnedWarpPath: String?,
+        learnedOpenPath: String?,
         detour: String = VLESS_TAG,
     ) {
         val blocklists = blocklistsFor(filter)
-        if (blocklists.isEmpty() && learnedWarpPath == null) return
+        if (blocklists.isEmpty() && learnedWarpPath == null && learnedOpenPath == null) return
         putJsonArray("rule_set") {
             blocklists.forEach { addBlocklistRuleSet(it, detour) }
-            learnedWarpPath?.let { path ->
-                addJsonObject {
-                    put("type", "local")
-                    put("tag", LEARNED_WARP_TAG)
-                    put("format", "source")
-                    put("path", path)
-                }
-            }
+            learnedWarpPath?.let { addLearnedRuleSet(LEARNED_WARP_TAG, it) }
+            learnedOpenPath?.let { addLearnedRuleSet(LEARNED_OPEN_TAG, it) }
         }
+    }
+
+    private fun JsonArrayBuilder.addLearnedRuleSet(tag: String, path: String) = addJsonObject {
+        put("type", "local")
+        put("tag", tag)
+        put("format", "source")
+        put("path", path)
     }
 
     /**
@@ -369,7 +379,7 @@ object SingBoxConfigFactory {
     private fun WireGuardEntry.addresses(): List<String> = address.split(',').map(String::trim)
 
     private fun JsonArrayBuilder.addDirectOutbound() =
-        addJsonObject { put("type", "direct"); put("tag", "direct") }
+        addJsonObject { put("type", "direct"); put("tag", DIRECT_TAG) }
 
     private fun JsonArrayBuilder.addVlessOutbound(
         profile: ChainProfile,
@@ -499,10 +509,10 @@ object SingBoxConfigFactory {
     }
 
     /** A separate rule from the manual list: fields in one rule are ANDed, not ORed. */
-    private fun JsonArrayBuilder.addLearnedWarpRule() = addJsonObject {
-        putJsonArray("rule_set") { add(LEARNED_WARP_TAG) }
+    private fun JsonArrayBuilder.addLearnedRule(ruleSet: String, outbound: String) = addJsonObject {
+        putJsonArray("rule_set") { add(ruleSet) }
         put("action", "route")
-        put("outbound", WARP_TAG)
+        put("outbound", outbound)
     }
 
     /**
@@ -536,6 +546,8 @@ object SingBoxConfigFactory {
     private const val ENTRY_HOP_TAG = "entry-hop"
     private const val WARP_TAG = "warp-exit"
     private const val LEARNED_WARP_TAG = "learned-warp"
+    private const val LEARNED_OPEN_TAG = "learned-open"
+    private const val DIRECT_TAG = "direct"
 
     private data class Blocklist(val tag: String, val url: String)
 

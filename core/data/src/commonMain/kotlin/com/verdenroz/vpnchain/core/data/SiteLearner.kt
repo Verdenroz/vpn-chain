@@ -127,7 +127,7 @@ internal class SiteLearner(
         when (outcome) {
             is ProbeOutcome.WarpOnly -> learned.learn(domain, LearnedRoute.Warp, outcome.reason)
             is ProbeOutcome.RefusedByBoth -> learned.learn(domain, LearnedRoute.RefusedByBoth, outcome.reason)
-            is ProbeOutcome.FallbackOpen -> learned.learn(domain, LearnedRoute.RefusedByBoth, outcome.reason)
+            is ProbeOutcome.FallbackOpen -> learned.learn(domain, LearnedRoute.FailOpen, outcome.reason)
             is ProbeOutcome.RefusedEverywhere -> learned.learn(domain, LearnedRoute.RefusedEverywhere, outcome.reason)
             ProbeOutcome.Reachable, ProbeOutcome.Unknown -> Unit
         }
@@ -135,12 +135,16 @@ internal class SiteLearner(
 
     /** False for a domain checked recently, already routed, or paused by the user. */
     private suspend fun claim(domain: String): Boolean {
-        val manual = settings.first().warpDomains
-        if (manual.any { domain == it || domain.endsWith(".$it") }) return false
-        if (learned.sites.first().any { it.domain == domain } || learned.isSuppressed(domain)) return false
+        val current = settings.first()
+        if (current.warpDomains.any { domain == it || domain.endsWith(".$it") }) return false
+        // A double refusal recorded before failing open was on gets one more look.
+        val recheck = current.failOpen && learned.sites.first()
+            .any { it.domain == domain && it.route == LearnedRoute.RefusedByBoth }
+        if (!recheck && learned.sites.first().any { it.domain == domain }) return false
+        if (learned.isSuppressed(domain)) return false
         return lock.withLock {
             if ((reachable[domain] ?: 0L) > now() || (retryUntil[domain] ?: 0L) > now()) return@withLock false
-            retryUntil[domain] = now() + RETRY_MILLIS
+            retryUntil[domain] = now() + if (recheck) CHECKED_MILLIS else RETRY_MILLIS
             true
         }
     }

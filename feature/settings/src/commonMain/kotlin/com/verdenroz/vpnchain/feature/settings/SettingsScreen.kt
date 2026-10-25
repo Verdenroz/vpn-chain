@@ -50,6 +50,7 @@ import com.verdenroz.vpnchain.core.model.ConnectionKind
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.LearnedSite
+import com.verdenroz.vpnchain.core.model.OutsideExit
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.ui.ScreenNameplate
@@ -119,6 +120,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_secr
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_show_qr
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_title
 import com.verdenroz.vpnchain.feature.settings.component.LearnedSites
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_fail_open_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learn_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_all
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_detail
@@ -192,6 +194,7 @@ fun SettingsRoute(
         onSetWarpMode = viewModel::setWarpMode,
         onSetWarpDomains = viewModel::setWarpDomains,
         onToggleLearn = viewModel::setLearnBlockedSites,
+        onToggleFailOpen = viewModel::setFailOpen,
         onRemoveLearned = viewModel::removeLearned,
         onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
         onToggleAutoReconnect = viewModel::setAutoReconnect,
@@ -229,6 +232,7 @@ fun SettingsScreen(
     onSetWarpMode: (WarpMode) -> Unit,
     onSetWarpDomains: (String) -> Unit,
     onToggleLearn: (Boolean) -> Unit,
+    onToggleFailOpen: (Boolean) -> Unit,
     onRemoveLearned: (String) -> Unit,
     onToggleAutoConnect: (Boolean) -> Unit,
     onToggleAutoReconnect: (Boolean) -> Unit,
@@ -458,10 +462,13 @@ fun SettingsScreen(
                         mode = uiState.settings.warpMode,
                         domains = uiState.settings.warpDomains,
                         learn = uiState.settings.learnBlockedSites,
+                        failOpen = uiState.settings.failOpen,
                         learned = uiState.learned,
+                        exits = uiState.exits,
                         onSetMode = onSetWarpMode,
                         onSetDomains = onSetWarpDomains,
                         onToggleLearn = onToggleLearn,
+                        onToggleFailOpen = onToggleFailOpen,
                         onRemoveLearned = onRemoveLearned,
                     )
                 }
@@ -537,10 +544,13 @@ private fun WarpSection(
     mode: WarpMode,
     domains: List<String>,
     learn: Boolean,
+    failOpen: Boolean,
     learned: List<LearnedSite>,
+    exits: Map<String, OutsideExit>,
     onSetMode: (WarpMode) -> Unit,
     onSetDomains: (String) -> Unit,
     onToggleLearn: (Boolean) -> Unit,
+    onToggleFailOpen: (Boolean) -> Unit,
     onRemoveLearned: (String) -> Unit,
 ) {
     val colors = PanelTheme.colors
@@ -578,7 +588,14 @@ private fun WarpSection(
                     checked = learn,
                     onCheckedChange = onToggleLearn,
                 )
-                LearnedSites(learned, onRemoveLearned)
+                Spacer(Modifier.height(16.dp))
+                SettingRow(
+                    title = stringResource(Res.string.settings_fail_open_title),
+                    detail = null,
+                    checked = failOpen,
+                    onCheckedChange = onToggleFailOpen,
+                )
+                LearnedSites(learned, exits, onRemoveLearned)
                 Spacer(Modifier.height(14.dp))
                 Text(
                     stringResource(Res.string.settings_warp_domains_hint),
