@@ -6,8 +6,11 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
-/** Which list a rule-set file carries: sites sent to WARP, or sites that fail open. */
-enum class RuleSetKind { Warp, Open }
+/**
+ * Which list a rule-set file carries: sites sent to WARP, sites that fail open
+ * through the entry hop, or the sites the user sent to the bare link.
+ */
+enum class RuleSetKind { Warp, Open, Direct }
 
 /**
  * The local rule-set files sing-box reads learned domains from. sing-box
@@ -33,5 +36,6 @@ object LearnedRuleSet {
     fun fileName(kind: RuleSetKind): String = when (kind) {
         RuleSetKind.Warp -> "learned-warp.json"
         RuleSetKind.Open -> "learned-open.json"
+        RuleSetKind.Direct -> "learned-direct.json"
     }
 }

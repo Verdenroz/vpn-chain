@@ -27,6 +27,7 @@ actual fun renderPlatformTunnelConfig(
         probe = if (settings.learningActive) newProbeProxy() else null,
         learnedWarpPath = learned?.path(RuleSetKind.Warp),
         learnedOpenPath = learned?.path(RuleSetKind.Open),
+        learnedDirectPath = learned?.path(RuleSetKind.Direct),
         failOpen = settings.failOpen,
     )
 }

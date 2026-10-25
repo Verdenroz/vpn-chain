@@ -1,11 +1,15 @@
 package com.verdenroz.vpnchain.feature.settings
 
 import com.verdenroz.vpnchain.core.data.ChainRepository
+import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.DnsFilter
+import com.verdenroz.vpnchain.core.model.LearnedRoute
+import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.ThemeConfig
@@ -72,8 +76,27 @@ internal class FakeSettings : SettingsRepository {
     override suspend fun setDnsFilter(filter: DnsFilter) = Unit
     override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
     override suspend fun setWarpMode(mode: WarpMode) = Unit
-    override suspend fun setWarpDomains(domains: List<String>) = Unit
+    override suspend fun setLearnBlockedSites(enabled: Boolean) = Unit
+    override suspend fun setFailOpen(enabled: Boolean) = Unit
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
     override suspend fun setCloseToTray(enabled: Boolean) = Unit
+}
+
+internal class FakeLearnedSites(private val log: MutableList<String> = mutableListOf()) : LearnedSitesRepository {
+    override val sites = MutableStateFlow<List<LearnedSite>>(emptyList())
+    override suspend fun isSuppressed(domain: String) = false
+    override suspend fun learn(domain: String, route: LearnedRoute, reason: BlockReason) = Unit
+    override suspend fun remove(domain: String) {
+        log += "remove:$domain"
+    }
+    override suspend fun allowDirect(domain: String) {
+        log += "allowDirect:$domain"
+    }
+    override suspend fun forget(domain: String) {
+        log += "forget:$domain"
+    }
+    override suspend fun reachable(): Map<String, Long> = emptyMap()
+    override suspend fun saveReachable(domains: Map<String, Long>) = Unit
+    override suspend fun syncRuleSets() = Unit
 }

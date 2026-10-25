@@ -62,13 +62,14 @@ exemptions, and (by default) local networks.
   sing-box crashes and `tun0` stops existing; leaked traffic then falls back
   to the physical link, where only the VPS/entry IPs still get through and
   everything else is rejected.
-- **Direct traffic is accepted by mark, not by address.** Failing open on a
-  chain with no entry hop sends a site out sing-box's `direct` outbound, onto
+- **Direct traffic is accepted by mark, not by address.** A site the user
+  sent direct on a chain with no entry hop leaves by sing-box's `direct` outbound, onto
   the physical link, which the table would reject like any other packet. So
   that outbound alone carries `routing_mark` `0x760000`, and the helper takes
   `up [--allow-local] [--allow-mark <hex>] <exempt_ip>...`, adding one rule,
   `meta mark <hex> accept`, ahead of the final reject. It is rendered only
-  on desktop, in `automatic` mode with failing open on and no entry hop; with
+  on desktop, in `automatic` mode with failing open on, no entry hop and the
+  sent-direct rule-set present; with
   an entry hop the fallback goes through the entry peer, which is already
   exempt. Android never renders it.
 

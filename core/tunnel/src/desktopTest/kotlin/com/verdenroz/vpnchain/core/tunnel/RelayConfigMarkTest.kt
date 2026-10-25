@@ -21,7 +21,7 @@ class RelayConfigMarkTest {
         val config = SingBoxConfigFactory.androidChainConfig(
             PROFILE,
             warpMode = WarpMode.Automatic,
-            learnedOpenPath = "/run/learned-open.json",
+            learnedDirectPath = "/run/learned-direct.json",
             failOpen = true,
             markDirect = true,
         )

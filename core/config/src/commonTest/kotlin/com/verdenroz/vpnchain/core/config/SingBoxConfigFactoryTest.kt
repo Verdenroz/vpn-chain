@@ -666,18 +666,24 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `the fallback probe leaves directly when there is no entry hop`() {
-        val config = parse(
-            SingBoxConfigFactory.androidChainConfig(
-                profile(),
-                warp = warp(),
-                warpMode = WarpMode.Automatic,
-                probe = probe(),
-                failOpen = true,
-            ),
+    fun `nothing probes the bare link when there is no entry hop`() {
+        val tun = SingBoxConfigFactory.androidChainConfig(
+            profile(),
+            warp = warp(),
+            warpMode = WarpMode.Automatic,
+            probe = probe(),
+            failOpen = true,
+        )
+        val proxy = SingBoxConfigFactory.mixedProxyConfig(
+            profile(),
+            warp = warp(),
+            warpMode = WarpMode.Automatic,
+            probe = probe(),
+            failOpen = true,
         )
 
-        assertEquals("direct", fallbackRule(config).getValue("outbound").jsonPrimitive.content)
+        assertFalse("probe-fallback" in tun)
+        assertFalse("probe-fallback" in proxy)
     }
 
     @Test
@@ -695,7 +701,7 @@ class SingBoxConfigFactoryTest {
     @Test
     fun `the fallback port is recovered from the rendered config`() {
         val raw = SingBoxConfigFactory.androidChainConfig(
-            profile(),
+            profile(), entry(),
             warp = warp(),
             warpMode = WarpMode.Automatic,
             probe = probe(),
@@ -726,19 +732,39 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `sites that fail open leave directly when there is no entry hop`() {
+    fun `without an entry hop only the sites the user sent direct leave by the bare link`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
                 profile(),
                 warp = warp(),
                 warpMode = WarpMode.Automatic,
                 learnedOpenPath = "/run/learned-open.json",
+                learnedDirectPath = "/run/learned-direct.json",
                 failOpen = true,
             ),
         )
 
-        val rule = config.getValue("route").jsonObject.array("rules").map { it.jsonObject }
-            .single { "learned-open" in it.toString() }
+        val route = config.getValue("route").jsonObject
+        assertEquals("/run/learned-direct.json", route.array("rule_set").taggedWith("learned-open")?.getValue("path")?.jsonPrimitive?.content)
+        val rule = route.array("rules").map { it.jsonObject }.single { "learned-open" in it.toString() }
+        assertEquals("direct", rule.getValue("outbound").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `the proxy config sends only the sites the user sent direct to the bare link`() {
+        val config = parse(
+            SingBoxConfigFactory.mixedProxyConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.Automatic,
+                learnedDirectPath = "/run/learned-direct.json",
+                failOpen = true,
+            ),
+        )
+
+        val route = config.getValue("route").jsonObject
+        assertEquals("/run/learned-direct.json", route.array("rule_set").taggedWith("learned-open")?.getValue("path")?.jsonPrimitive?.content)
+        val rule = route.array("rules").map { it.jsonObject }.single { "learned-open" in it.toString() }
         assertEquals("direct", rule.getValue("outbound").jsonPrimitive.content)
     }
 
@@ -778,6 +804,7 @@ class SingBoxConfigFactoryTest {
                 profile(), entry,
                 warpMode = WarpMode.Automatic,
                 learnedOpenPath = "/run/learned-open.json",
+                learnedDirectPath = "/run/learned-direct.json",
                 failOpen = failOpen,
                 markDirect = markDirect,
             ),

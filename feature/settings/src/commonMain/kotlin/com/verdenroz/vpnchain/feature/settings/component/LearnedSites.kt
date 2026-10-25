@@ -29,6 +29,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_lear
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_direct
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_entry
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_everywhere
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_offered
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_remove
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_warp
@@ -89,11 +90,12 @@ private fun learnedDetail(site: LearnedSite, exit: OutsideExit?): String {
     return when (site.route) {
         LearnedRoute.Warp -> stringResource(Res.string.settings_learned_warp, reason, age)
         LearnedRoute.RefusedByBoth -> stringResource(Res.string.settings_learned_both, reason, age)
-        LearnedRoute.FailOpen -> when (exit) {
+        LearnedRoute.FailOpen, LearnedRoute.Direct -> when (exit) {
             OutsideExit.EntryHop -> stringResource(Res.string.settings_learned_entry, reason, age)
             OutsideExit.Direct -> stringResource(Res.string.settings_learned_direct, reason, age)
             null -> stringResource(Res.string.settings_learned_both, reason, age)
         }
+        LearnedRoute.DirectAvailable -> stringResource(Res.string.settings_learned_offered, reason, age)
         LearnedRoute.RefusedEverywhere -> stringResource(Res.string.settings_learned_everywhere, reason, age)
     }
 }

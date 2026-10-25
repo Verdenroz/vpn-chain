@@ -121,6 +121,7 @@ class SiteLearnerTest {
     @Test
     fun `a double refusal is probed again once the session can fail open`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
+        world.settings.value = UserSettings(warpMode = WarpMode.Automatic, failOpen = false)
         world.sessions.value = LearningSession(PROBE.copy(fallbackPort = 0), clashApi = null)
         world.learned.learn("example.com", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
         runCurrent()
@@ -129,9 +130,50 @@ class SiteLearnerTest {
         runCurrent()
         assertTrue(world.fetcher.calls.isEmpty())
 
+        world.settings.value = UserSettings(warpMode = WarpMode.Automatic)
         world.sessions.value = LearningSession(PROBE, clashApi = null)
         runCurrent()
         world.feed.hosts.emit("example.com")
+        runCurrent()
+
+        assertEquals(LearnedRoute.FailOpen, world.learned.sites.first().single().route)
+    }
+
+    @Test
+    fun `with no entry hop a double refusal is offered for the bare link and never probed there`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, _ -> REFUSED }
+        world.sessions.value = LearningSession(PROBE.copy(fallbackPort = 0), clashApi = null)
+        runCurrent()
+
+        world.feed.hosts.emit("www.bank.example")
+        runCurrent()
+
+        val site = world.learned.sites.first().single()
+        assertEquals("www.bank.example", site.domain)
+        assertEquals(LearnedRoute.DirectAvailable, site.route)
+        assertEquals(listOf(1, 2), world.fetcher.calls.map { it.second })
+    }
+
+    @Test
+    fun `failing open through the entry hop is learned for the exact host`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
+        runCurrent()
+
+        world.feed.hosts.emit("login.bank.example")
+        runCurrent()
+
+        val site = world.learned.sites.first().single()
+        assertEquals("login.bank.example", site.domain)
+        assertEquals(LearnedRoute.FailOpen, site.route)
+    }
+
+    @Test
+    fun `a site offered for the bare link is probed again once an entry hop exists`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
+        world.learned.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+        runCurrent()
+
+        world.feed.hosts.emit("www.bank.example")
         runCurrent()
 
         assertEquals(LearnedRoute.FailOpen, world.learned.sites.first().single().route)
@@ -246,25 +288,18 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `registrable domains keep a country second level`() {
-        assertEquals("example.com", registrableDomain("a.b.example.com"))
-        assertEquals("example.co.uk", registrableDomain("www.example.co.uk"))
-        assertEquals("example.de", registrableDomain("www.example.de"))
-        assertNull(registrableDomain("example"))
-        assertNull(registrableDomain("192.168.1.1"))
-    }
-
-    @Test
-    fun `a tenant of a shared host is learned alone`() {
-        assertEquals("d1234.cloudfront.net", registrableDomain("d1234.cloudfront.net"))
-        assertEquals("user.github.io", registrableDomain("User.github.io."))
+    fun `host names are normalised and addresses dropped`() {
+        assertEquals("a.example.com", hostName("A.Example.com."))
+        assertNull(hostName("example"))
+        assertNull(hostName("192.168.1.1"))
+        assertNull(hostName("printer.local"))
     }
 
     @Test
     fun `a name that is not a plain host name is never probed`() {
-        assertNull(registrableDomain("evil.com\r\nX-Injected: 1"))
-        assertNull(registrableDomain("evil.com:443"))
-        assertNull(registrableDomain("ex ample.com"))
-        assertNull(registrableDomain("[2001:db8::1]"))
+        assertNull(hostName("evil.com\r\nX-Injected: 1"))
+        assertNull(hostName("evil.com:443"))
+        assertNull(hostName("ex ample.com"))
+        assertNull(hostName("[2001:db8::1]"))
     }
 }

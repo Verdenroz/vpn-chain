@@ -71,17 +71,21 @@ data: desktop polls sing-box's clash API (`/connections`, every two seconds,
 so a connection shorter than that can be missed), and Android listens to
 libbox's connection events (`CommandConnections`). Only sniffed names count;
 bare addresses, local names and the app's own probe connections are ignored.
-Names are reduced to a registrable domain with a short list of country
-second levels (`example.co.uk`), not the public suffix list, so a rule may
-come out broader or narrower than ideal. Under a shared-hosting suffix
-(`cloudfront.net`, `github.io` and similar) the whole host is kept, so one
-tenant's refusal does not move every site on that platform. Names that are
-not plain host names are never probed.
+A site learned for WARP is reduced to its registrable domain under the
+[Public Suffix List](https://publicsuffix.org/), bundled with the app
+(`core/warp/src/jvmShared/resources/vpnchain/public_suffix_list.dat`, MPL-2.0).
+The list's private section names shared hosts (`cloudfront.net`, `github.io`
+and similar), so one tenant's refusal does not move every site on that
+platform. A site that fails open is learned for its exact host only, since
+that route leaves the relay. Names that are not plain host names are never
+probed.
 
 **How a site is probed.** Each new domain is fetched once, `GET /` with a
 browser User-Agent, through loopback-only `mixed` inbounds that sing-box renders with a random
 port and credentials per config (`probe-relay`, `probe-warp`, and
-`probe-fallback` while failing open is on). Route rules on those inbounds sit
+`probe-fallback` while failing open is on and there is an entry hop). Each
+fetch has an overall 15-second deadline on top of the per-read timeout, so a
+site that drips its answer cannot hold a probe slot. Route rules on those inbounds sit
 ahead of every other rule, so a probe exits where it asked to whatever has
 been learned. At most two probes run at once. Nothing is probed while the
 chain is down, on Android while the screen is off or the device is in Doze
@@ -116,8 +120,9 @@ refusal.
 
 **What leaks to which exit.** A domain name reaches the relay as the probe's
 connect target (it sees the destination anyway), reaches WARP only after the
-relay refused it, and reaches the fail-open path only after both did and only
-while failing open is on. Probe traffic goes nowhere else.
+relay refused it, and reaches the entry hop only after both did and only
+while failing open is on. The bare link is never probed. Probe traffic goes
+nowhere else.
 
 **The cache.** A reachable verdict is kept for 12 hours and saved every five
 minutes and when detection stops (the most recent 2,000 domains), so a restart or Android killing the process does
@@ -141,26 +146,44 @@ failed write costs the learned sites, never the connect.
 ## Failing open
 
 Some sites refuse the relay and WARP both. **Bypass the relay when WARP is
-also refused** (on by default) lets the chain send such a site past the relay, to
-the **entry hop alone**, or to the **bare link** (`direct`) when the profile
-has no entry hop. The site then sees the entry provider's address, or this
-network's own address, instead of the relay's. That is a deliberate step out
-of the chain, so the learned-sites list in settings shows which way each such
-site leaves.
+also refused** (on by default) lets the chain send such a site past the relay.
+That is a deliberate step out of the chain, so the learned-sites list in
+settings shows which way each such site leaves.
 
-Before a site moves, the same probe is run down that path, and the site fails
-open when that path answers or merely challenges it, since a real browser
-passes a challenge from an ordinary address. A site the path blocks outright (a
-`403`, `429`, `451` or a block page) is recorded as refused on every path and stays on
-the relay. That check is what keeps a site refusing every non-browser client,
-whatever its source address, from being moved for nothing. The fail-open probe
-inbound only exists while the setting is on.
+**With an entry hop** the site goes to the entry hop alone, automatically. The
+same probe is run down that path first, and the site fails open when the
+entry hop answers or merely challenges it, since a real browser passes a
+challenge from an ordinary address. A site it blocks outright (a `403`, `429`,
+`451` or a block page) is recorded as refused on every path and stays on the
+relay. The site then sees the entry provider's address instead of the relay's.
+
+**Without an entry hop** the only way left is the bare link (`direct`), where
+the site sees this network's own address. Nothing goes there on its own: the
+site is recorded as refused with the bare link available, is in no rule-set,
+and nothing is probed through `direct`. Only the user's "Send direct" on that
+site (`LearnedSitesRepository.allowDirect`) adds it to the bare link's
+rule-set, and no probe follows even then: the next page load is the test.
+"Undo" (`forget`) takes it back. Desktop's proxy mode never dials an entry
+hop, so it always works this way.
+
+The two lists are separate files: `learned-open.json` holds sites failing open
+through the entry hop plus the sites sent direct, and is rendered only with an
+entry hop; `learned-direct.json` holds only the sites sent direct, and is
+rendered only without one. A site checked through one entry hop therefore
+never reaches the bare link because the entry hop was later turned off.
 
 The relay still sees the DNS lookup for a site that fails open; only the
 connection leaves past it. In proxy mode that holds because the config carries
 its own DNS block over the relay whenever WARP or failing open can carry
 traffic; without it, WARP and `direct` connections would ask the local
 resolver.
+
+**A lost port race.** Probe and clash API ports are picked free just before
+sing-box binds them. sing-box 1.14.3 fails its whole start when any inbound
+cannot bind (checked with a throwaway instance on a busy port: `FATAL start
+service: start inbound: ... bind: address already in use`), so a start that
+fails that way on a loopback port this app picked is rendered once more with
+fresh ports.
 
 **Which session is watched.** Detection reads the probe ports and credentials
 from the config the engine actually runs (`TunnelController.runningConfig`),

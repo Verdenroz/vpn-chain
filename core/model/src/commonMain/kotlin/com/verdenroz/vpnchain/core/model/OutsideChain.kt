@@ -11,12 +11,21 @@ enum class OutsideExit {
 
 /**
  * The way [this] leaves outside the chain under [settings], or null when it
- * still goes through the relay. Reads the topology as dialled, so a disabled
- * entry hop reads as the bare link. A WireGuard-only connection has no relay
- * to bypass, so nothing on it fails open.
+ * still goes through the relay. Reads the topology as dialled: a disabled entry
+ * hop, or desktop's proxy mode, which never dials one, reads as no entry hop.
+ * There a [LearnedRoute.FailOpen] site stays on the relay, and only a site the
+ * user sent [LearnedRoute.Direct] leaves by the bare link. A WireGuard-only
+ * connection has no relay to bypass, so nothing on it fails open.
  */
 fun LearnedSite.outsideExit(settings: UserSettings, profile: SavedProfile?): OutsideExit? {
-    if (route != LearnedRoute.FailOpen || !settings.failOpenActive) return null
+    if (route != LearnedRoute.FailOpen && route != LearnedRoute.Direct) return null
+    if (!settings.failOpenActive) return null
     if (profile != null && !profile.supportsWarpExit) return null
-    return if (profile?.effectiveFor(settings)?.wireGuard != null) OutsideExit.EntryHop else OutsideExit.Direct
+    // Android never changes this desktop-only setting, so it always reads as TUN there.
+    val entryDialled = settings.systemWideTun && profile?.effectiveFor(settings)?.wireGuard != null
+    return when {
+        entryDialled -> OutsideExit.EntryHop
+        route == LearnedRoute.Direct -> OutsideExit.Direct
+        else -> null
+    }
 }

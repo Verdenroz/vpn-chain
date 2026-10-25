@@ -19,12 +19,14 @@ import kotlinx.coroutines.test.runTest
 private const val WEEK = 7L * 24 * 60 * 60 * 1000
 
 private class RecordingStore : LearnedRuleSetStore {
-    var written: List<String>? = null
-    var writtenOpen: List<String>? = null
+    val files = mutableMapOf<RuleSetKind, List<String>>()
+    val written get() = files[RuleSetKind.Warp]
+    val writtenOpen get() = files[RuleSetKind.Open]
+    val writtenDirect get() = files[RuleSetKind.Direct]
 
     override fun path(kind: RuleSetKind) = "/learned"
     override fun write(kind: RuleSetKind, domains: List<String>) {
-        if (kind == RuleSetKind.Warp) written = domains else writtenOpen = domains
+        files[kind] = domains
     }
 }
 
@@ -70,6 +72,52 @@ class DefaultLearnedSitesRepositoryTest {
 
         assertEquals(listOf("a.com"), store.written)
         assertEquals(listOf("b.com"), store.writtenOpen)
+    }
+
+    @Test
+    fun `a site offered for the bare link is in no rule-set`() = runTest {
+        repository.learn("bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+
+        assertEquals(null, store.writtenOpen)
+        assertEquals(null, store.writtenDirect)
+    }
+
+    @Test
+    fun `allowing a site sends it direct and forgetting takes it back`() = runTest {
+        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+
+        repository.allowDirect("www.bank.example")
+
+        assertEquals(LearnedRoute.Direct, repository.sites.first().single().route)
+        assertEquals(listOf("www.bank.example"), store.writtenDirect)
+        assertEquals(listOf("www.bank.example"), store.writtenOpen)
+
+        repository.forget("www.bank.example")
+
+        assertEquals(LearnedRoute.DirectAvailable, repository.sites.first().single().route)
+        assertEquals(emptyList(), store.writtenDirect)
+        assertEquals(emptyList(), store.writtenOpen)
+    }
+
+    @Test
+    fun `only a site offered for the bare link can be sent there`() = runTest {
+        repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
+        repository.learn("b.com", LearnedRoute.RefusedEverywhere, BlockReason.Forbidden)
+
+        repository.allowDirect("a.com")
+        repository.allowDirect("b.com")
+        repository.allowDirect("unknown.com")
+
+        assertEquals(listOf(LearnedRoute.Warp, LearnedRoute.RefusedEverywhere), repository.sites.first().map { it.route })
+        assertEquals(emptyList(), store.writtenDirect.orEmpty())
+    }
+
+    @Test
+    fun `sites failing open through the entry hop never reach the bare link's rule-set`() = runTest {
+        repository.learn("b.com", LearnedRoute.FailOpen, BlockReason.Forbidden)
+
+        assertEquals(listOf("b.com"), store.writtenOpen)
+        assertEquals(emptyList(), store.writtenDirect)
     }
 
     @Test

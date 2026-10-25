@@ -8,6 +8,7 @@ import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.tunnel.DestinationFeed
 import com.verdenroz.vpnchain.core.warp.probe.ProbeOutcome
+import com.verdenroz.vpnchain.core.warp.probe.PublicSuffixList
 import com.verdenroz.vpnchain.core.warp.probe.SiteProber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
@@ -116,9 +117,19 @@ internal class SiteLearner(
         learned.saveReachable(snapshot)
     }
 
-    private suspend fun examine(host: String, probe: ProbeProxy) {
-        val domain = registrableDomain(host) ?: return
-        if (!claim(domain, canFailOpen = probe.fallbackPort != 0)) return
+    /**
+     * WARP learns the registrable domain, since the tail still runs through the
+     * relay. A route that leaves the relay is learned for the exact host alone,
+     * so one host's verdict never moves its siblings off the chain. With no
+     * entry hop only the bare link is left, and that is never probed or routed
+     * on its own: the site is offered, and waits for the user to allow it.
+     */
+    private suspend fun examine(raw: String, probe: ProbeProxy) {
+        val host = hostName(raw) ?: return
+        val domain = PublicSuffixList.bundled.registrableDomain(host) ?: host
+        val viaEntryHop = probe.fallbackPort != 0
+        val directOffered = !viaEntryHop && settings.first().failOpenActive
+        if (!claim(host, domain, viaEntryHop, directOffered)) return
         val outcome = prober.probe(host, probe)
         if (outcome == ProbeOutcome.Reachable) {
             lock.withLock {
@@ -129,22 +140,29 @@ internal class SiteLearner(
         }
         when (outcome) {
             is ProbeOutcome.WarpOnly -> learned.learn(domain, LearnedRoute.Warp, outcome.reason)
-            is ProbeOutcome.RefusedByBoth -> learned.learn(domain, LearnedRoute.RefusedByBoth, outcome.reason)
-            is ProbeOutcome.FallbackOpen -> learned.learn(domain, LearnedRoute.FailOpen, outcome.reason)
+            is ProbeOutcome.RefusedByBoth ->
+                if (directOffered) {
+                    learned.learn(host, LearnedRoute.DirectAvailable, outcome.reason)
+                } else {
+                    learned.learn(domain, LearnedRoute.RefusedByBoth, outcome.reason)
+                }
+            is ProbeOutcome.FallbackOpen -> learned.learn(host, LearnedRoute.FailOpen, outcome.reason)
             is ProbeOutcome.RefusedEverywhere -> learned.learn(domain, LearnedRoute.RefusedEverywhere, outcome.reason)
             ProbeOutcome.Reachable, ProbeOutcome.Unknown -> Unit
         }
     }
 
-    /** False for a domain checked recently, already routed, or paused by the user. */
-    private suspend fun claim(domain: String, canFailOpen: Boolean): Boolean {
+    /** False for a site checked recently, already learned, or paused by the user. */
+    private suspend fun claim(host: String, domain: String, viaEntryHop: Boolean, directOffered: Boolean): Boolean {
         if (lock.withLock { checkedRecently(domain) }) return false
-        val sites = learned.sites.first()
-        // A double refusal recorded before this session could fail open gets one more look.
-        val recheck = canFailOpen &&
-            sites.any { it.domain == domain && it.route == LearnedRoute.RefusedByBoth }
-        if (!recheck && sites.any { it.domain == domain }) return false
-        if (learned.isSuppressed(domain)) return false
+        val known = learned.sites.first().filter { it.domain == domain || it.domain == host }
+        // A refusal recorded when this session's way out did not exist gets one more look.
+        val recheck = known.any {
+            (it.route == LearnedRoute.RefusedByBoth && (viaEntryHop || directOffered)) ||
+                (it.route == LearnedRoute.DirectAvailable && viaEntryHop)
+        }
+        if (!recheck && known.isNotEmpty()) return false
+        if (learned.isSuppressed(domain) || learned.isSuppressed(host)) return false
         return lock.withLock {
             if (checkedRecently(domain)) return@withLock false
             retryUntil.makeRoom()
@@ -176,26 +194,12 @@ internal class SiteLearner(
 
 private fun isHostChar(c: Char) = c in 'a'..'z' || c in '0'..'9' || c == '-' || c == '_'
 
-private val SECOND_LEVEL_LABELS = setOf("co", "com", "org", "net", "gov", "edu", "ac", "or", "ne")
 private val LOCAL_SUFFIXES = setOf("local", "lan", "internal", "localhost", "arpa", "home", "invalid")
-private val SHARED_HOSTING = setOf(
-    "amazonaws.com", "cloudfront.net", "akamaihd.net", "akamaized.net", "fastly.net", "azureedge.net",
-    "azurewebsites.net", "appspot.com", "googleusercontent.com", "herokuapp.com", "github.io", "gitlab.io",
-    "netlify.app", "vercel.app", "pages.dev", "workers.dev", "web.app", "firebaseapp.com", "blogspot.com",
-)
 
-/**
- * The last two labels, or three under a two-letter country code with a common
- * second level (`example.co.uk`). The whole host under a shared-hosting suffix,
- * so one tenant's refusal does not move the platform. Not the public suffix
- * list: a miss only makes a learned rule broader or narrower than it could be.
- * Null for addresses and local names, which are never probed.
- */
-internal fun registrableDomain(host: String): String? {
+/** The host as a lowercase name; null for addresses and local names, which are never probed. */
+internal fun hostName(host: String): String? {
     val labels = host.lowercase().trimEnd('.').split('.')
     if (labels.size < 2 || labels.any { label -> label.isEmpty() || !label.all(::isHostChar) }) return null
     if (labels.last() in LOCAL_SUFFIXES || labels.last().all { it.isDigit() }) return null
-    if (labels.takeLast(2).joinToString(".") in SHARED_HOSTING) return labels.joinToString(".")
-    val keep = if (labels.size >= 3 && labels.last().length == 2 && labels[labels.size - 2] in SECOND_LEVEL_LABELS) 3 else 2
-    return labels.takeLast(keep).joinToString(".")
+    return labels.joinToString(".")
 }

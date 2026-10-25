@@ -20,6 +20,15 @@ interface LearnedSitesRepository {
     /** Drops the entry and keeps it from being learned again for a week. */
     suspend fun remove(domain: String)
 
+    /**
+     * Sends a [LearnedRoute.DirectAvailable] site down the bare link. Only the
+     * user's tap calls this: nothing probes or routes a site there on its own.
+     */
+    suspend fun allowDirect(domain: String)
+
+    /** Takes back [allowDirect]: the site is offered again and leaves the bare link. */
+    suspend fun forget(domain: String)
+
     /** Domains found reachable on the relay and when that verdict lapses, so a restart does not re-probe them. */
     suspend fun reachable(): Map<String, Long>
 
@@ -53,6 +62,16 @@ internal class DefaultLearnedSitesRepository(
         syncRuleSets()
     }
 
+    override suspend fun allowDirect(domain: String) = reroute(domain, from = LearnedRoute.DirectAvailable, to = LearnedRoute.Direct)
+
+    override suspend fun forget(domain: String) = reroute(domain, from = LearnedRoute.Direct, to = LearnedRoute.DirectAvailable)
+
+    private suspend fun reroute(domain: String, from: LearnedRoute, to: LearnedRoute) {
+        val site = preferences.learnedSites.first().find { it.domain == domain && it.route == from } ?: return
+        preferences.putLearnedSite(site.copy(route = to))
+        syncRuleSets()
+    }
+
     override suspend fun reachable(): Map<String, Long> = preferences.reachableDomains.first()
 
     override suspend fun saveReachable(domains: Map<String, Long>) =
@@ -61,11 +80,13 @@ internal class DefaultLearnedSitesRepository(
     override suspend fun syncRuleSets() {
         val learned = preferences.learnedSites.first()
         store.write(RuleSetKind.Warp, learned.filter { it.route == LearnedRoute.Warp }.map { it.domain })
-        store.write(RuleSetKind.Open, learned.filter { it.route == LearnedRoute.FailOpen }.map { it.domain })
+        val direct = learned.filter { it.route == LearnedRoute.Direct }.map { it.domain }
+        store.write(RuleSetKind.Open, learned.filter { it.route == LearnedRoute.FailOpen }.map { it.domain } + direct)
+        store.write(RuleSetKind.Direct, direct)
     }
 
     private companion object {
         const val SUPPRESS_MILLIS = 7L * 24 * 60 * 60 * 1000
-        val ROUTED = setOf(LearnedRoute.Warp, LearnedRoute.FailOpen)
+        val ROUTED = setOf(LearnedRoute.Warp, LearnedRoute.FailOpen, LearnedRoute.Direct)
     }
 }

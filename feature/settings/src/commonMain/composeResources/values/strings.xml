@@ -49,6 +49,7 @@
     <string name="settings_learned_both">%1$s · relay and WARP refused · %2$s</string>
     <string name="settings_learned_entry">%1$s · relay and WARP refused · via entry hop · %2$s</string>
     <string name="settings_learned_direct">%1$s · relay and WARP refused · direct, shows your address · %2$s</string>
+    <string name="settings_learned_offered">%1$s · relay and WARP refused · can go direct · %2$s</string>
     <string name="settings_learned_everywhere">%1$s · every path refused · %2$s</string>
     <string name="settings_learned_age_now">now</string>
     <string name="settings_learned_age_minutes">%1$dm ago</string>

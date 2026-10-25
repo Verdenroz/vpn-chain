@@ -17,7 +17,7 @@ class SingBoxConfigGoldenTest {
             clashApi = CLASH,
             warp = WARP,
             learnedWarpPath = "/run/learned-warp.json",
-            learnedOpenPath = "/run/learned-open.json",
+            learnedDirectPath = "/run/learned-direct.json",
             failOpen = true,
         )
 
@@ -41,7 +41,6 @@ class SingBoxConfigGoldenTest {
         assertEquals(TUN_RELAY, SingBoxConfigFactory.androidChainConfig(RELAY))
     }
 
-    /** Off renders what it did before detection existed, whatever the detection settings say. */
     @Test
     fun `relay only tun config with warp off and fail-open on is unchanged`() {
         val config = SingBoxConfigFactory.androidChainConfig(
@@ -140,7 +139,7 @@ private val WARP = WarpExit(
 
 private val CLASH = ClashApi(port = 9090, secret = "s3cret")
 
-// Captured from the factory before WireGuard-only connections existed, WARP off.
+// WARP off: the relay alone, with nothing of the tail or of detection.
 private val MIXED_RELAY = """
 {
     "log": {

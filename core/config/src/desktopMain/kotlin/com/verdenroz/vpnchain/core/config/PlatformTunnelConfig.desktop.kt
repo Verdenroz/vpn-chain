@@ -23,7 +23,7 @@ actual fun renderPlatformTunnelConfig(
     // this user's home nor its stdout.
     val cachePath = if (SystemdRelay.available) SystemdRelay.cachePath else cacheFilePath()
     val logPath = if (SystemdRelay.available) SystemdRelay.logFile.absolutePath else null
-    val probe = if (settings.learningActive && profile.supportsWarpExit) newProbeProxy() else null
+    val probe = if (settings.learningActive) newProbeProxy() else null
     // No relay means no SOCKS-proxy shape to fall back on: a bare WireGuard
     // peer only exists as a TUN.
     return if (relay == null) {
@@ -49,6 +49,7 @@ actual fun renderPlatformTunnelConfig(
             probe = probe,
             learnedWarpPath = learned?.path(RuleSetKind.Warp),
             learnedOpenPath = learned?.path(RuleSetKind.Open),
+            learnedDirectPath = learned?.path(RuleSetKind.Direct),
             failOpen = settings.failOpen,
             markDirect = true,
         )
@@ -60,7 +61,7 @@ actual fun renderPlatformTunnelConfig(
             warpMode = settings.warpMode,
             probe = probe,
             learnedWarpPath = learned?.path(RuleSetKind.Warp),
-            learnedOpenPath = learned?.path(RuleSetKind.Open),
+            learnedDirectPath = learned?.path(RuleSetKind.Direct),
             failOpen = settings.failOpen,
         )
     }

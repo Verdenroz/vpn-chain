@@ -35,13 +35,14 @@ object SingBoxConfigFactory {
         warpMode: WarpMode = WarpMode.Off,
         probe: ProbeProxy? = null,
         learnedWarpPath: String? = null,
-        learnedOpenPath: String? = null,
+        learnedDirectPath: String? = null,
         failOpen: Boolean = false,
     ): String {
         val tail = warp.takeIf { warpMode != WarpMode.Off }
         val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.Automatic }
         val opensDirect = failOpen && warpMode == WarpMode.Automatic
-        val openPath = learnedOpenPath.takeIf { opensDirect }
+        // No entry hop here, so only sites the user sent to the bare link leave the relay.
+        val openPath = learnedDirectPath.takeIf { opensDirect }
         return render {
             putInfoLog()
             putExperimental(clashApi, cacheFile = false, cachePath = null)
@@ -54,7 +55,7 @@ object SingBoxConfigFactory {
                     put("listen", "127.0.0.1")
                     put("listen_port", profile.localProxyPort)
                 }
-                probe?.let { addProbeInbounds(it, withWarp = tail != null, withFallback = failOpen) }
+                probe?.let { addProbeInbounds(it, withWarp = tail != null, withFallback = false) }
             }
             if (tail != null) {
                 putJsonArray("endpoints") { addWarpEndpoint(tail, detour = "proxy") }
@@ -68,7 +69,7 @@ object SingBoxConfigFactory {
                 putRuleSets(DnsFilter.Off, learnedPath, openPath)
                 putJsonArray("rules") {
                     addJsonObject { put("action", "sniff") }
-                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy", fallbackTag = DIRECT_TAG.takeIf { failOpen }) }
+                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy", fallbackTag = null) }
                     learnedPath?.let { addLearnedRule(LEARNED_WARP_TAG, WARP_TAG) }
                     openPath?.let { addLearnedRule(LEARNED_OPEN_TAG, DIRECT_TAG) }
                 }
@@ -95,6 +96,7 @@ object SingBoxConfigFactory {
         probe: ProbeProxy? = null,
         learnedWarpPath: String? = null,
         learnedOpenPath: String? = null,
+        learnedDirectPath: String? = null,
         failOpen: Boolean = false,
         markDirect: Boolean = false,
     ): String {
@@ -104,12 +106,13 @@ object SingBoxConfigFactory {
         // to come up — one hop shorter, not not at all.
         val tail = warp.takeIf { warpMode != WarpMode.Off }
         val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.Automatic }
-        val openPath = learnedOpenPath.takeIf { failOpen && warpMode == WarpMode.Automatic }
-        // Past the relay, not through it: the entry hop alone, or the bare link without one.
+        val opensOutside = failOpen && warpMode == WarpMode.Automatic
+        // Past the relay, not through it. The entry hop takes what it was probed and found
+        // to reach; without one, the bare link takes only sites the user sent there.
+        val openPath = (if (entry != null) learnedOpenPath else learnedDirectPath).takeIf { opensOutside }
         val openTag = if (entry != null) ENTRY_HOP_TAG else DIRECT_TAG
-        val directMark = FAIL_OPEN_MARK.takeIf {
-            markDirect && openTag == DIRECT_TAG && (openPath != null || (probe != null && failOpen))
-        }
+        val probesFallback = opensOutside && entry != null
+        val directMark = FAIL_OPEN_MARK.takeIf { markDirect && entry == null && openPath != null }
         return render {
             putInfoLog(logPath)
             // The rule-set is remote, so it needs somewhere to persist between
@@ -126,7 +129,7 @@ object SingBoxConfigFactory {
                     mtu = if (entry != null || tail != null) (entry?.mtu?.coerceAtMost(1280) ?: 1280) else 1400,
                     allowLocalNetworks = allowLocalNetworks,
                 )
-                probe?.let { addProbeInbounds(it, withWarp = tail != null, withFallback = failOpen) }
+                probe?.let { addProbeInbounds(it, withWarp = tail != null, withFallback = probesFallback) }
             }
             if (entry != null || tail != null) {
                 putJsonArray("endpoints") {
@@ -156,7 +159,7 @@ object SingBoxConfigFactory {
                         addProbeRules(
                             withWarp = tail != null,
                             relayTag = VLESS_TAG,
-                            fallbackTag = openTag.takeIf { failOpen },
+                            fallbackTag = ENTRY_HOP_TAG.takeIf { probesFallback },
                         )
                     }
                     learnedPath?.let { addLearnedRule(LEARNED_WARP_TAG, WARP_TAG) }
