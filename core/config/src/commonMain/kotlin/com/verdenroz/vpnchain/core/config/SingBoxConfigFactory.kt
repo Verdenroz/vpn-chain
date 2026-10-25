@@ -101,12 +101,10 @@ object SingBoxConfigFactory {
                 if (filtering) putBlocklistRules(dnsFilter)
             }
             putJsonArray("inbounds") {
-                // Default TUN MTU is 9000; capped at 1280 to nest inside the entry
-                // WG tunnel (also 1280), else 1400 for VLESS/TLS headroom under 1500.
-                // A WARP tail is another 1280 WireGuard hop, so it caps this the
-                // same way even when there is no entry hop in front.
+                // sing-box defaults to 9000. 1280 (or a lower entry MTU) nests inside the entry
+                // hop or a 1280 WARP tail; otherwise 1400 leaves VLESS/TLS headroom under 1500.
                 addTunInbound(
-                    mtu = if (entry != null || tail != null) 1280 else 1400,
+                    mtu = if (entry != null || tail != null) (entry?.mtu?.coerceAtMost(1280) ?: 1280) else 1400,
                     allowLocalNetworks = allowLocalNetworks,
                 )
             }
@@ -133,15 +131,7 @@ object SingBoxConfigFactory {
                 put("auto_detect_interface", true)
                 if (filtering) putBlocklistRuleSet(dnsFilter)
                 putJsonArray("rules") {
-                    addJsonObject { put("action", "sniff") }
-                    addJsonObject { put("protocol", "dns"); put("action", "hijack-dns") }
-                    // Reject QUIC so browsers fall back to TCP; QUIC over a small-MTU
-                    // tunnel blackholes and stalls page loads.
-                    addJsonObject {
-                        put("network", "udp")
-                        put("port", 443)
-                        put("action", "reject")
-                    }
+                    addTunBaseRules()
                     if (tail != null && warpMode == WarpMode.BlockedSites) {
                         addWarpDomainRule(tailDomains)
                     }
@@ -167,7 +157,6 @@ object SingBoxConfigFactory {
         logPath: String? = null,
     ): String {
         val filtering = dnsFilter != DnsFilter.Off
-        val addresses = entry.address.split(',').map(String::trim)
         return render {
             putInfoLog(logPath)
             putExperimental(clashApi, cacheFile = filtering, cachePath = cachePath)
@@ -179,22 +168,14 @@ object SingBoxConfigFactory {
                 addTunInbound(mtu = entry.mtu ?: 1280, allowLocalNetworks = allowLocalNetworks)
             }
             putJsonArray("endpoints") {
-                val v6 = addresses.any { ':' in it }
+                val v6 = entry.addresses().any { ':' in it }
                 addWireGuardEndpoint(entry, allowedIps = if (v6) listOf("0.0.0.0/0", "::/0") else listOf("0.0.0.0/0"))
             }
             putJsonArray("outbounds") { addDirectOutbound() }
             putJsonObject("route") {
                 put("auto_detect_interface", true)
                 if (filtering) putBlocklistRuleSet(dnsFilter, detour = ENTRY_HOP_TAG)
-                putJsonArray("rules") {
-                    addJsonObject { put("action", "sniff") }
-                    addJsonObject { put("protocol", "dns"); put("action", "hijack-dns") }
-                    addJsonObject {
-                        put("network", "udp")
-                        put("port", 443)
-                        put("action", "reject")
-                    }
-                }
+                putJsonArray("rules") { addTunBaseRules() }
                 put("final", ENTRY_HOP_TAG)
             }
         }
@@ -338,6 +319,20 @@ object SingBoxConfigFactory {
         put("stack", "gvisor")
     }
 
+    private fun JsonArrayBuilder.addTunBaseRules() {
+        addJsonObject { put("action", "sniff") }
+        addJsonObject { put("protocol", "dns"); put("action", "hijack-dns") }
+        // Reject QUIC so browsers fall back to TCP; QUIC over a small-MTU
+        // tunnel blackholes and stalls page loads.
+        addJsonObject {
+            put("network", "udp")
+            put("port", 443)
+            put("action", "reject")
+        }
+    }
+
+    private fun WireGuardEntry.addresses(): List<String> = address.split(',').map(String::trim)
+
     private fun JsonArrayBuilder.addDirectOutbound() =
         addJsonObject { put("type", "direct"); put("tag", "direct") }
 
@@ -377,7 +372,7 @@ object SingBoxConfigFactory {
         put("type", "wireguard")
         put("tag", ENTRY_HOP_TAG)
         put("mtu", entry.mtu ?: 1280)
-        putJsonArray("address") { entry.address.split(',').forEach { add(it.trim()) } }
+        putJsonArray("address") { entry.addresses().forEach { add(it) } }
         put("private_key", entry.privateKey)
         putJsonArray("peers") {
             addJsonObject {

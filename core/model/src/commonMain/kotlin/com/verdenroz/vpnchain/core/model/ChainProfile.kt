@@ -3,10 +3,10 @@ package com.verdenroz.vpnchain.core.model
 import kotlinx.serialization.Serializable
 
 /**
- * WireGuard peer dialled by sing-box directly (no separate VPN app needed) —
- * any provider's config, or your own box. As the TUN-mode entry hop of a chain
- * it is optional: omitting it makes the chain relay-only, exposing the real IP
- * to the VPS. Use a device-specific config so it stays independently revocable.
+ * A WireGuard peer that sing-box dials itself, so no separate VPN app is needed:
+ * any provider's config, or your own box. As a chain's TUN-mode entry hop it is
+ * optional; without one the chain is relay-only and the VPS sees the real IP.
+ * Use a device-specific config so it can be revoked on its own.
  */
 @Serializable
 data class WireGuardEntry(

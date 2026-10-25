@@ -127,7 +127,7 @@ class ObserveChainRouteUseCase(
         // Guard against recording the relay's own address as this machine's:
         // a tunnel that came up outside the app can be live before the status
         // catches up, and that answer would be indistinguishable otherwise.
-        if (!connected && taken.ip != profile?.relay?.vpsIp) originRepository.record(taken.ip)
+        if (!connected && taken.ip != profile?.host) originRepository.record(taken.ip)
         return taken
     }
 
@@ -144,7 +144,7 @@ class ObserveChainRouteUseCase(
         val measured = sample?.takeIf { !connected && !it.throughChain }?.ip
         // A recalled value that matches an exit isn't an origin, whatever the
         // store says: it was captured through a tunnel the app hadn't noticed.
-        val recalled = lastOrigin?.takeIf { it != profile?.relay?.vpsIp && it != status.exitIp }
+        val recalled = lastOrigin?.takeIf { it != profile?.host && it != status.exitIp }
         val ip = measured ?: recalled
         return ChainHop(
             role = HopRole.Origin,

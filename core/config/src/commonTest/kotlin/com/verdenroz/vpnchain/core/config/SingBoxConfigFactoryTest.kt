@@ -156,6 +156,13 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
+    fun `a lower entry mtu caps the tun`() {
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(), entry().copy(mtu = 1200)))
+
+        assertEquals(1200, config.array("inbounds").single().jsonObject.getValue("mtu").jsonPrimitive.int)
+    }
+
+    @Test
     fun `the relay detours through the entry hop only when one is configured`() {
         val withEntry = parse(SingBoxConfigFactory.androidChainConfig(profile(), entry()))
         val relayOnly = parse(SingBoxConfigFactory.androidChainConfig(profile()))

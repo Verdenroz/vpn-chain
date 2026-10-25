@@ -20,6 +20,10 @@ actual fun renderPlatformTunnelConfig(
 ): String {
     val relay = profile.relay
     val clashApi = newClashApi()
+    // The unit runs sing-box as its own user, which can reach neither
+    // this user's home nor its stdout.
+    val cachePath = if (SystemdRelay.available) SystemdRelay.cachePath else cacheFilePath()
+    val logPath = if (SystemdRelay.available) SystemdRelay.logFile.absolutePath else null
     // No relay means no SOCKS-proxy shape to fall back on: a bare WireGuard
     // peer only exists as a TUN.
     return if (relay == null) {
@@ -27,9 +31,9 @@ actual fun renderPlatformTunnelConfig(
             entry = requireNotNull(profile.wireGuard),
             clashApi = clashApi,
             dnsFilter = settings.dnsFilter,
-            cachePath = if (SystemdRelay.available) SystemdRelay.cachePath else cacheFilePath(),
+            cachePath = cachePath,
             allowLocalNetworks = settings.allowLocalNetworks,
-            logPath = if (SystemdRelay.available) SystemdRelay.logFile.absolutePath else null,
+            logPath = logPath,
         )
     } else if (settings.systemWideTun) {
         SingBoxConfigFactory.androidChainConfig(
@@ -37,14 +41,12 @@ actual fun renderPlatformTunnelConfig(
             entry = profile.wireGuard,
             clashApi = clashApi,
             dnsFilter = settings.dnsFilter,
-            // The unit runs sing-box as its own user, which can reach neither
-            // this user's home nor its stdout.
-            cachePath = if (SystemdRelay.available) SystemdRelay.cachePath else cacheFilePath(),
+            cachePath = cachePath,
             warp = warp,
             warpMode = settings.warpMode,
             warpDomains = settings.warpDomains,
             allowLocalNetworks = settings.allowLocalNetworks,
-            logPath = if (SystemdRelay.available) SystemdRelay.logFile.absolutePath else null,
+            logPath = logPath,
         )
     } else {
         SingBoxConfigFactory.mixedProxyConfig(

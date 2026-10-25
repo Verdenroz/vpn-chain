@@ -9,7 +9,7 @@ sealed class WireGuardConfError(message: String) : IllegalArgumentException(mess
     class PeerCount(val count: Int) : WireGuardConfError(
         if (count == 0) "Config has no peer." else "Config has $count peers. Use one.",
     )
-    class HostnameEndpoint : WireGuardConfError("Use an IP endpoint.")
+    class EndpointNotIpv4 : WireGuardConfError("Use an IPv4 endpoint.")
     class SplitTunnel : WireGuardConfError("Only full-tunnel configs work. Set AllowedIPs to 0.0.0.0/0.")
 }
 
@@ -65,9 +65,7 @@ object WireGuardConfParser {
             dns = interfaceKeys.list("DNS").firstOrNull(),
             presharedKey = peer.single("PresharedKey")?.also { requireKey("PresharedKey", it) },
             mtu = interfaceKeys.single("MTU")?.let { number("MTU", it, min = 576) },
-            keepaliveSeconds = peer.single("PersistentKeepalive")
-                ?.let { number("PersistentKeepalive", it, min = 0) }
-                ?.takeIf { it > 0 },
+            keepaliveSeconds = peer.single("PersistentKeepalive")?.let { number("PersistentKeepalive", it, min = 0) },
         )
     }
 
@@ -100,39 +98,17 @@ object WireGuardConfParser {
         if ('/' in address) address else if (':' in address) "$address/128" else "$address/32"
 
     private fun parseEndpoint(endpoint: String): Pair<String, Int> {
-        val host: String
-        val rawPort: String
-        if (endpoint.startsWith("[")) {
-            host = endpoint.substringAfter('[').substringBefore(']')
-            rawPort = endpoint.substringAfter("]:", missingDelimiterValue = "")
-        } else {
-            host = endpoint.substringBeforeLast(':')
-            rawPort = endpoint.substringAfterLast(':', missingDelimiterValue = "")
-        }
-        val port = rawPort.toIntOrNull()?.takeIf { it in 1..MAX_PORT }
+        val host = endpoint.substringBeforeLast(':')
+        val port = endpoint.substringAfterLast(':', missingDelimiterValue = "").toIntOrNull()?.takeIf { it in 1..MAX_PORT }
         if (host.isEmpty() || port == null) throw WireGuardConfError.Invalid("Endpoint")
-        // The kill switch can only exempt an address, so a name would leave the tunnel unprotected.
-        if (!isIpv4(host) && !isIpv6(host)) throw WireGuardConfError.HostnameEndpoint()
+        // The desktop kill switch can only exempt an IPv4 address; anything else leaves the tunnel unprotected.
+        if (!isIpv4(host)) throw WireGuardConfError.EndpointNotIpv4()
         return host to port
     }
 
     private fun isIpv4(text: String): Boolean {
         val octets = text.split('.')
         return octets.size == 4 && octets.all { it.length in 1..3 && it.all(Char::isDigit) && it.toInt() <= 255 }
-    }
-
-    private fun isIpv6(text: String): Boolean {
-        if (':' !in text || ":::" in text) return false
-        val halves = text.split("::")
-        if (halves.size > 2) return false
-        val groups = halves.flatMap { half -> if (half.isEmpty()) emptyList() else half.split(':') }
-        // A trailing dotted quad stands for two groups.
-        val embedded = groups.lastOrNull()?.takeIf { '.' in it }
-        if (embedded != null && !isIpv4(embedded)) return false
-        val hex = if (embedded != null) groups.dropLast(1) else groups
-        val size = hex.size + if (embedded != null) 2 else 0
-        val valid = hex.all { it.length in 1..4 && it.all { c -> c.isDigit() || c.lowercaseChar() in 'a'..'f' } }
-        return valid && if (halves.size == 2) size < 8 else size == 8
     }
 
     private val KEY_PATTERN = Regex("[A-Za-z0-9+/]{43}=")

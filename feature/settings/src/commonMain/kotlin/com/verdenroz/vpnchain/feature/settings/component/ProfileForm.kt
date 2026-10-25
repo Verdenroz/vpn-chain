@@ -154,7 +154,9 @@ fun ProfileForm(
                             endpointPort = wgPort.toIntOrNull()
                                 ?: WireGuardEntry.DEFAULT_ENDPOINT_PORT,
                             dns = wgDns.trim().ifBlank { null },
-                            presharedKey = initial?.wireGuard?.presharedKey,
+                            presharedKey = initial?.wireGuard
+                                ?.takeIf { it.peerPublicKey == wgPeerKey.trim() }
+                                ?.presharedKey,
                             mtu = initial?.wireGuard?.mtu,
                             keepaliveSeconds = initial?.wireGuard?.keepaliveSeconds,
                         )

@@ -80,6 +80,19 @@ class DefaultProfileRepositoryTest {
     }
 
     @Test
+    fun `saving with a stale selection edits the profile on screen`() = runTest {
+        val repository = repository()
+        repository.add("relay", RELAY, null)
+        repository.setActive("gone")
+
+        repository.save(RELAY.copy(sni = "www.example.com"), null)
+
+        val profiles = repository.profiles.first()
+        assertEquals(1, profiles.size)
+        assertEquals("www.example.com", profiles.single().relay?.sni)
+    }
+
+    @Test
     fun `a bad conf changes nothing`() = runTest {
         val repository = repository()
 

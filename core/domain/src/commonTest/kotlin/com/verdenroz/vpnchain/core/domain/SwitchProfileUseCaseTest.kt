@@ -152,10 +152,12 @@ class ImportWireGuardConfUseCaseTest {
     }
 
     @Test
-    fun `a failed restart is reported`() = runTest {
+    fun `a failed restart is reported apart from a successful import`() = runTest {
         val log = mutableListOf<String>()
         val chain = RecordingChain(TunnelState.Connected, log, Result.failure(IllegalStateException("no")), false)
 
-        assertTrue(ImportWireGuardConfUseCase(RecordingProfiles(log), chain)("conf").isFailure)
+        val imported = ImportWireGuardConfUseCase(RecordingProfiles(log), chain)("conf").getOrThrow()
+
+        assertTrue(imported.reconnect.isFailure)
     }
 }

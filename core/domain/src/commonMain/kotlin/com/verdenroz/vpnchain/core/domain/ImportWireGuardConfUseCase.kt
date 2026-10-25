@@ -13,9 +13,11 @@ class ImportWireGuardConfUseCase(
     private val profileRepository: ProfileRepository,
     private val chainRepository: ChainRepository,
 ) {
-    suspend operator fun invoke(confText: String, intoActive: Boolean = false): Result<WireGuardEntry> =
-        profileRepository.importWireGuardConf(confText, intoActive).mapCatching { entry ->
-            chainRepository.restartIfWanted().getOrThrow()
-            entry
+    /** A failed [reconnect] leaves the import saved, so it must not read as a failed import. */
+    data class Imported(val entry: WireGuardEntry, val reconnect: Result<Unit>)
+
+    suspend operator fun invoke(confText: String, intoActive: Boolean = false): Result<Imported> =
+        profileRepository.importWireGuardConf(confText, intoActive).map { entry ->
+            Imported(entry, chainRepository.restartIfWanted())
         }
 }

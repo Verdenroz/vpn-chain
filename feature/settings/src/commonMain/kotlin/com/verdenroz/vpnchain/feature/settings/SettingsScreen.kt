@@ -213,7 +213,7 @@ fun SettingsScreen(
 ) {
     val colors = PanelTheme.colors
     val hasProfile = uiState.profile != null
-    // The relay form would attach a relay to it, which only a relay import may do.
+    // Saving the relay form must never attach a relay to a WireGuard-only connection.
     val wireGuardOnly = uiState.profile?.kind == ConnectionKind.WireGuard
     // Import is the primary path for a fresh install; once a profile exists it
     // collapses back to a summary so re-importing is a deliberate action.
@@ -385,38 +385,40 @@ fun SettingsScreen(
                 }
             }
 
-            // Always rendered: the WARP tail applies to every chain, including
-            // an Android profile with no entry hop to configure.
-            SectionCard(title = stringResource(Res.string.settings_routing_title)) {
-                val profileHasEntry = uiState.profile?.wireGuard != null
-                // Android has no proxy-only mode — the tunnel is always TUN —
-                // so this toggle would be a no-op there.
-                if (currentPlatform == Platform.Desktop) {
-                    SettingRow(
-                        title = stringResource(Res.string.settings_route_entire_system_title),
-                        detail = stringResource(Res.string.settings_route_entire_system_detail),
-                        checked = uiState.settings.systemWideTun,
-                        onCheckedChange = onToggleSystemWide,
+            // Shown for every chain, even an Android one with no entry hop, for the WARP
+            // tail. A bare WireGuard peer has no routing choices.
+            if (!wireGuardOnly) {
+                SectionCard(title = stringResource(Res.string.settings_routing_title)) {
+                    val profileHasEntry = uiState.profile?.kind == ConnectionKind.Chain
+                    // Android has no proxy-only mode — the tunnel is always TUN —
+                    // so this toggle would be a no-op there.
+                    if (currentPlatform == Platform.Desktop) {
+                        SettingRow(
+                            title = stringResource(Res.string.settings_route_entire_system_title),
+                            detail = stringResource(Res.string.settings_route_entire_system_detail),
+                            checked = uiState.settings.systemWideTun,
+                            onCheckedChange = onToggleSystemWide,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                    }
+                    // Only for profiles that have an entry to disable; a profile
+                    // without one is single-hop with or without this.
+                    if (profileHasEntry) {
+                        SettingRow(
+                            title = stringResource(Res.string.settings_entry_hop_title),
+                            detail = stringResource(Res.string.settings_entry_hop_detail),
+                            checked = uiState.settings.entryHopEnabled,
+                            onCheckedChange = onToggleEntryHop,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                    }
+                    WarpSection(
+                        mode = uiState.settings.warpMode,
+                        domains = uiState.settings.warpDomains,
+                        onSetMode = onSetWarpMode,
+                        onSetDomains = onSetWarpDomains,
                     )
-                    Spacer(Modifier.height(16.dp))
                 }
-                // Only for profiles that have an entry to disable; a profile
-                // without one is single-hop with or without this.
-                if (profileHasEntry) {
-                    SettingRow(
-                        title = stringResource(Res.string.settings_entry_hop_title),
-                        detail = stringResource(Res.string.settings_entry_hop_detail),
-                        checked = uiState.settings.entryHopEnabled,
-                        onCheckedChange = onToggleEntryHop,
-                    )
-                    Spacer(Modifier.height(16.dp))
-                }
-                WarpSection(
-                    mode = uiState.settings.warpMode,
-                    domains = uiState.settings.warpDomains,
-                    onSetMode = onSetWarpMode,
-                    onSetDomains = onSetWarpDomains,
-                )
             }
 
             SectionCard(title = stringResource(Res.string.settings_kill_switch_title)) {
@@ -450,7 +452,7 @@ fun SettingsScreen(
             // The chain renders a resolver of its own only for a TUN chain;
             // desktop's proxy mode leaves DNS to the system, where this would
             // be a toggle that does nothing.
-            if (currentPlatform == Platform.Android || uiState.settings.systemWideTun) {
+            if (currentPlatform == Platform.Android || uiState.settings.systemWideTun || wireGuardOnly) {
                 SectionCard(title = stringResource(Res.string.settings_dns_title)) {
                     Text(
                         stringResource(Res.string.settings_dns_filter_title),
@@ -652,7 +654,7 @@ private fun ImportSection(
 @Composable
 private fun QrPairingPanel(profile: ChainProfile, entryHop: WireGuardEntry?) {
     val colors = PanelTheme.colors
-    val bitmap = remember(profile) { renderQrCode(SecretsEnvParser.format(SecretsEnvParser.Parsed(profile, entryHop))) }
+    val bitmap = remember(profile, entryHop) { renderQrCode(SecretsEnvParser.format(SecretsEnvParser.Parsed(profile, entryHop))) }
     Column {
         Text(
             stringResource(Res.string.settings_qr_warning),

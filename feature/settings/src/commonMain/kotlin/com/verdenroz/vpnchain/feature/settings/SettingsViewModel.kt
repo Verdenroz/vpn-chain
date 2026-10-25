@@ -20,6 +20,7 @@ import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_failed
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_imported_not_connected
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_imported_profile
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_secrets_env_found
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_cleared
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.StringResource
 
 data class SettingsUiState(
     val settings: UserSettings = UserSettings(),
@@ -137,10 +139,7 @@ class SettingsViewModel(
 
     fun setAutoStartOnLogin(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setAutoStartOnLogin(enabled).onFailure { failure ->
-            _message.value = SettingsMessage.Error(
-                failure.message?.let(UiText::Dynamic)
-                    ?: UiText.Resource(Res.string.settings_auto_start_failed),
-            )
+            _message.value = failure.toError(Res.string.settings_auto_start_failed)
         }
     }
 
@@ -153,11 +152,7 @@ class SettingsViewModel(
                     )
                 }
             },
-            onFailure = {
-                _message.value = SettingsMessage.Error(
-                    it.message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.settings_switch_failed),
-                )
-            },
+            onFailure = { _message.value = it.toError(Res.string.settings_switch_failed) },
         )
     }
 
@@ -186,11 +181,7 @@ class SettingsViewModel(
                     UiText.Resource(Res.string.settings_imported_profile, listOf(it.vpsIp)),
                 )
             },
-            onFailure = {
-                _message.value = SettingsMessage.Error(
-                    it.message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.settings_import_failed),
-                )
-            },
+            onFailure = { _message.value = it.toError(Res.string.settings_import_failed) },
         )
     }
 
@@ -198,16 +189,15 @@ class SettingsViewModel(
 
     private suspend fun importConf(text: String, intoActive: Boolean) {
         importWireGuardConf(text, intoActive).fold(
-            onSuccess = {
-                _message.value = SettingsMessage.Info(
-                    UiText.Resource(Res.string.settings_imported_profile, listOf(it.endpointHost)),
-                )
+            onSuccess = { imported ->
+                val host = listOf(imported.entry.endpointHost)
+                _message.value = if (imported.reconnect.isSuccess) {
+                    SettingsMessage.Info(UiText.Resource(Res.string.settings_imported_profile, host))
+                } else {
+                    SettingsMessage.Error(UiText.Resource(Res.string.settings_imported_not_connected, host))
+                }
             },
-            onFailure = {
-                _message.value = SettingsMessage.Error(
-                    it.message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.settings_import_failed),
-                )
-            },
+            onFailure = { _message.value = it.toError(Res.string.settings_import_failed) },
         )
     }
 
@@ -224,4 +214,7 @@ class SettingsViewModel(
     fun consumeMessage() { _message.value = null }
 
     fun openSystemVpnSettings() = chainRepository.openSystemVpnSettings()
+
+    private fun Throwable.toError(fallback: StringResource) =
+        SettingsMessage.Error(message?.let(UiText::Dynamic) ?: UiText.Resource(fallback))
 }

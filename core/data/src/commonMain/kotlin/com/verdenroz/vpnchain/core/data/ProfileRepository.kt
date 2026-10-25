@@ -59,15 +59,13 @@ internal class DefaultProfileRepository(
     override val activeProfileId: Flow<String?> = preferences.activeProfileId
 
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) {
-        val saved = preferences.profiles.first()
-        val activeId = preferences.activeProfileId.first()
-        val active = saved.firstOrNull { it.id == activeId }
+        val active = preferences.profile.first()
         if (active == null || active.kind == ConnectionKind.WireGuard) {
             add(name = relay.vpsIp, relay = relay, wireGuard = entryHop)
             return
         }
         preferences.setProfiles(
-            saved.map { if (it.id == activeId) it.copy(relay = relay, wireGuard = entryHop) else it },
+            preferences.profiles.first().map { if (it.id == active.id) it.copy(relay = relay, wireGuard = entryHop) else it },
         )
     }
 

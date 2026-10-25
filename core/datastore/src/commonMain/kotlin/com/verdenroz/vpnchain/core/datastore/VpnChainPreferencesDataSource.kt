@@ -57,30 +57,28 @@ class VpnChainPreferencesDataSource(
      * wrong therefore looks like nothing happened, not like a wiped config.
      */
     private fun readProfiles(prefs: Preferences): List<SavedProfile> {
-        prefs[PROFILES_KEY]?.let { raw ->
-            runCatching { json.parseToJsonElement(raw).jsonArray }
-                .getOrNull()
-                ?.let { entries -> return entries.mapNotNull(::decodeEntry) }
-        }
-        return prefs[PROFILE_KEY]
-            ?.let { raw -> runCatching { listOf(decodeLegacyProfile(raw)) }.getOrNull() }
-            ?: emptyList()
+        storedEntries(prefs)?.let { entries -> return entries.mapNotNull(::decodeEntry) }
+        return listOfNotNull(prefs[PROFILE_KEY]?.let(::decodeLegacyProfile))
     }
+
+    private fun storedEntries(prefs: Preferences): JsonArray? =
+        prefs[PROFILES_KEY]?.let { raw -> runCatching { json.parseToJsonElement(raw).jsonArray }.getOrNull() }
 
     /** One entry that fails to decode must not take the rest of the list with it. */
     private fun decodeEntry(entry: JsonElement): SavedProfile? =
         runCatching { json.decodeFromJsonElement<SavedProfile>(upgradeProfileShape(entry)) }.getOrNull()
 
-    private fun decodeLegacyProfile(raw: String): SavedProfile {
-        val profile = json.parseToJsonElement(raw).jsonObject
+    private fun decodeLegacyProfile(raw: String): SavedProfile? {
+        val profile = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return null
+        val name = profile["vpsIp"] ?: return null
         val wrapped = JsonObject(
             mapOf(
                 "id" to JsonPrimitive(LEGACY_PROFILE_ID),
-                "name" to profile.getValue("vpsIp"),
+                "name" to name,
                 "profile" to profile,
             ),
         )
-        return decodeEntry(wrapped) ?: error("unreadable legacy profile")
+        return decodeEntry(wrapped)
     }
 
     /**
@@ -148,10 +146,7 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { prefs ->
             // Entries this build cannot read are written back untouched, so a
             // save never discards a connection a newer shape stored.
-            val unreadable = prefs[PROFILES_KEY]
-                ?.let { raw -> runCatching { json.parseToJsonElement(raw).jsonArray }.getOrNull() }
-                .orEmpty()
-                .filter { decodeEntry(it) == null }
+            val unreadable = storedEntries(prefs).orEmpty().filter { decodeEntry(it) == null }
             prefs[PROFILES_KEY] = JsonArray(json.encodeToJsonElement(profiles).jsonArray + unreadable).toString()
             // The single-slot key has been folded into the list by now; leaving
             // it would resurrect a stale profile if the list ever failed to parse.

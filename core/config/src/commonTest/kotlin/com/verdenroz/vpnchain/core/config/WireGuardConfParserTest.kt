@@ -62,21 +62,11 @@ class WireGuardConfParserTest {
     }
 
     @Test
-    fun `reads a bracketed v6 endpoint`() {
-        val entry = WireGuardConfParser.parse(
-            PROTON.replace("203.0.113.9:51820", "[2001:db8::1]:51821"),
-        ).getOrThrow()
-
-        assertEquals("2001:db8::1", entry.endpointHost)
-        assertEquals(51821, entry.endpointPort)
-    }
-
-    @Test
     fun `refuses a hostname endpoint`() {
         val error = failure(PROTON.replace("203.0.113.9:51820", "node-is-01.protonvpn.net:51820"))
 
-        assertIs<WireGuardConfError.HostnameEndpoint>(error)
-        assertEquals("Use an IP endpoint.", error.message)
+        assertIs<WireGuardConfError.EndpointNotIpv4>(error)
+        assertEquals("Use an IPv4 endpoint.", error.message)
     }
 
     @Test
@@ -92,12 +82,12 @@ class WireGuardConfParserTest {
     }
 
     @Test
-    fun `a zero keepalive means off`() {
+    fun `a zero keepalive is kept so it stays off`() {
         val entry = WireGuardConfParser.parse(
             PROTON.replace("AllowedIPs", "PersistentKeepalive = 0\nAllowedIPs"),
         ).getOrThrow()
 
-        assertNull(entry.keepaliveSeconds)
+        assertEquals(0, entry.keepaliveSeconds)
     }
 
     @Test
@@ -188,16 +178,16 @@ class WireGuardConfParserTest {
         listOf("999.1.1.1", "1.2.3", "1.2.3.4.5", "[1:2:3]", "[::1::2]", "[12345::1]", "[g::1]").forEach { host ->
             val error = failure(PROTON.replace("203.0.113.9:51820", "$host:51820"))
 
-            assertEquals("Use an IP endpoint.", error.message, host)
+            assertEquals("Use an IPv4 endpoint.", error.message, host)
         }
     }
 
     @Test
-    fun `accepts compressed and full v6 endpoints`() {
-        listOf("::1", "2001:db8::1", "2001:db8:0:0:0:0:0:1", "::ffff:192.0.2.1").forEach { host ->
-            val entry = WireGuardConfParser.parse(PROTON.replace("203.0.113.9:51820", "[$host]:51820"))
+    fun `refuses v6 endpoints`() {
+        listOf("::1", "2001:db8::1", "::ffff:192.0.2.1").forEach { host ->
+            val error = failure(PROTON.replace("203.0.113.9:51820", "[$host]:51820"))
 
-            assertTrue(entry.isSuccess, host)
+            assertIs<WireGuardConfError.EndpointNotIpv4>(error, host)
         }
     }
 
