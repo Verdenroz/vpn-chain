@@ -534,7 +534,12 @@ class VpnChainService : VpnService(), CommandServerHandler {
     /** Forwards engine log lines onto the shared bridge for the Logs screen. */
     private inner class LogHandler : CommandClientHandler {
         override fun writeLogs(messageList: LogIterator) {
-            while (messageList.hasNext()) TunnelBridge.logRelay(messageList.next().message)
+            while (messageList.hasNext()) {
+                val entry = messageList.next()
+                // The stream carries every level whatever the config says; there is
+                // no server-side switch, so cut here before a String is built.
+                if (entry.level <= LOG_LEVEL_INFO) TunnelBridge.logRelay(entry.message)
+            }
         }
         override fun connected() = Unit
         override fun disconnected(message: String?) = Unit
@@ -559,6 +564,8 @@ class VpnChainService : VpnService(), CommandServerHandler {
         const val NOTIFICATION_ID = 1
         private const val LEGACY_CHANNEL_ID = "vpn-chain"
         private const val LOCKDOWN_POLL_MS = 3_000L
+        // sing-box's scale: panic 0, fatal 1, error 2, warn 3, info 4, debug 5, trace 6.
+        private const val LOG_LEVEL_INFO = 4
         private const val STATUS_INTERVAL_NS = 1_000_000_000L
         private const val READINESS_ATTEMPTS = 5
         private const val READINESS_RETRY_MS = 1_500L
