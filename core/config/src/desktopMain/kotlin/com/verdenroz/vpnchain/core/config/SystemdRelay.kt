@@ -22,6 +22,9 @@ object SystemdRelay {
     val runDir = File("/run/vpn-chain")
     val configFile = File(runDir, "relay.json")
     val logFile = File(runDir, "relay.log")
+
+    /** Which render schema wrote [configFile]; see [RENDER_SCHEMA]. */
+    val stampFile = File(runDir, "relay.render")
     val cachePath = "$STATE_DIR/singbox-cache.db"
 
     /**

@@ -518,6 +518,13 @@ object SingBoxConfigFactory {
      */
     const val FAIL_OPEN_MARK = 0x760000
 
+    /**
+     * Bumped whenever a config this build renders would route differently from
+     * an older one's. A relay outlives the app under systemd, so on adoption a
+     * config stamped with another schema is rendered again rather than reused.
+     */
+    const val RENDER_SCHEMA = 2
+
     private data class Blocklist(val tag: String, val url: String)
 
     /**

@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.core.tunnel
 import com.verdenroz.vpnchain.core.common.PrivateStorage
 import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.config.ClashApi
+import com.verdenroz.vpnchain.core.config.SingBoxConfigFactory
 import com.verdenroz.vpnchain.core.config.SystemdRelay
 import com.verdenroz.vpnchain.core.config.isLostPortRace
 import com.verdenroz.vpnchain.core.model.ChainStatus
@@ -24,6 +25,7 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_relay
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_stopped_carrying
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_error_tun_privilege_hint
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted_relay_port
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted_stale
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted_system_wide
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_no_mark
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_port_race_retry
@@ -136,6 +138,8 @@ class DesktopTunnelController(
     private var process: RelayProcess? = null
     private var readerJob: Job? = null
     private var configProvider: (suspend () -> String?)? = null
+    private var launchedThisAttempt = false
+    private var launchLogOffset = 0L
     private var logTailJob: Job? = null
     private var healthJob: Job? = null
 
@@ -222,12 +226,14 @@ class DesktopTunnelController(
             // machine offline — so adopt what's running instead of competing.
             if (adoptRunningSession()) return@withLock
             _status.value = ChainStatus(state = TunnelState.Connecting)
+            launchedThisAttempt = false
             if (tunMode) startTun(configJson) else startProxy(configJson)
             if (!lostPortRace()) return@withLock
             val fresh = configProvider?.invoke() ?: return@withLock
             emitLog(Res.string.tunnel_log_port_race_retry)
             applyConfig(fresh)
             _status.value = ChainStatus(state = TunnelState.Connecting)
+            launchedThisAttempt = false
             if (tunMode) startTun(fresh) else startProxy(fresh)
         }
     }
@@ -277,11 +283,10 @@ class DesktopTunnelController(
      * taken before it bound, so that one failure is worth one fresh render.
      */
     private suspend fun lostPortRace(): Boolean {
-        if (process?.isAlive == true) return false
+        if (!launchedThisAttempt || process?.isAlive == true) return false
         withTimeoutOrNull(EXIT_SETTLE_MS) { readerJob?.join() }
         if (_status.value.state != TunnelState.Error) return false
-        val tail = runCatching { relayLog.readLines().takeLast(LOG_TAIL_LINES) }.getOrDefault(emptyList())
-        return isLostPortRace(tail.joinToString("\n"), fixedPort = proxyPort.takeUnless { tunMode })
+        return isLostPortRace(logSince(relayLog, launchLogOffset), fixedPort = proxyPort.takeUnless { tunMode })
     }
 
     private suspend fun startProxy(configJson: String) {
@@ -358,12 +363,24 @@ class DesktopTunnelController(
         val managed = ManagedRelay.available && ManagedRelay.isActive()
         val recorded = readSessionState() != null
         relayLog = if (managed) SystemdRelay.logFile else File(runtimeDir, "relay.log")
-        _runningConfig.value = if (managed) adoptedManagedConfig() else null
         tunMode = session.tun
         tunHasEntry = session.entry
         killSwitchEngaged = session.killSwitch
         killSwitchFault = null
         killSwitchEnabled = session.killSwitchEnabled
+        if (managed && adoptedManagedConfig() == null) {
+            val fresh = configProvider?.invoke()
+            if (fresh != null) {
+                emitLog(Res.string.tunnel_log_adopted_stale)
+                ManagedRelay.stop()
+                readConfig(fresh)
+                _status.value = ChainStatus(state = TunnelState.Connecting)
+                launchedThisAttempt = false
+                if (tunMode) startTun(fresh) else startProxy(fresh)
+                return true
+            }
+        }
+        _runningConfig.value = if (managed) adoptedManagedConfig() else null
         if (shouldRestoreKillSwitch(managed, recorded)) {
             adoptedManagedConfig()?.let {
                 engageKillSwitch(it)
@@ -392,9 +409,11 @@ class DesktopTunnelController(
         tunMode && managed && recorded && killSwitchEnabled && !killSwitchEngaged && firewallIsOurs()
 
     /** The live config of a systemd-managed relay, which is the only adopted
-     *  relay whose config outlives the process that rendered it. */
-    private fun adoptedManagedConfig(): String? =
-        runCatching { SystemdRelay.configFile.readText() }.getOrNull()
+     *  relay whose config outlives the process that rendered it; null unless
+     *  this build's render schema wrote it. */
+    private fun adoptedManagedConfig(): String? = runCatching {
+        SystemdRelay.configFile.readText().takeIf { renderedByThisBuild(SystemdRelay.stampFile.readText()) }
+    }.getOrNull()
 
     /**
      * Whether fail-closed protection is this app's job for the chain being
@@ -500,7 +519,10 @@ class DesktopTunnelController(
             emitLog(Res.string.tunnel_log_managed_unusable)
         }
         val relay = if (ManagedRelay.available) startManagedRelay(configJson) else startOwnedRelay(configJson)
-        if (relay != null) _runningConfig.value = configJson
+        if (relay != null) {
+            _runningConfig.value = configJson
+            launchedThisAttempt = true
+        }
         return relay
     }
 
@@ -520,6 +542,7 @@ class DesktopTunnelController(
             )
             return null
         }
+        launchLogOffset = 0L
 
         val proc = try {
             ProcessBuilder(singBoxBin, "run", "-c", cfg.absolutePath)
@@ -554,6 +577,7 @@ class DesktopTunnelController(
      */
     private suspend fun startManagedRelay(configJson: String): RelayProcess? {
         relayLog = SystemdRelay.logFile
+        launchLogOffset = relayLog.length()
         val wrote = runCatching { writeManagedConfig(configJson) }
         if (wrote.isFailure) {
             failManagedStart(Res.string.tunnel_error_managed_config_write, SystemdRelay.configFile.path)
@@ -579,6 +603,7 @@ class DesktopTunnelController(
         Files.createFile(path)
         Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rw-r-----"))
         SystemdRelay.configFile.writeText(configJson)
+        SystemdRelay.stampFile.writeText(SingBoxConfigFactory.RENDER_SCHEMA.toString())
     }
 
     private suspend fun failManagedStart(message: StringResource, detail: String) {

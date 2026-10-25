@@ -76,8 +76,11 @@ A site learned for WARP is reduced to its registrable domain under the
 (`core/warp/src/jvmShared/resources/vpnchain/public_suffix_list.dat`, MPL-2.0).
 The list's private section names shared hosts (`cloudfront.net`, `github.io`
 and similar), so one tenant's refusal does not move every site on that
-platform. A site that fails open is learned for its exact host only, since
-that route leaves the relay. Names that are not plain host names are never
+platform. A host that is itself on the list (`github.io`, `s3.amazonaws.com`)
+is learned for WARP as that host alone. A site that fails open, or is sent
+direct, is learned and matched for its exact host only (`domain`, not
+`domain_suffix`), since that route leaves the relay. Probe verdicts are cached
+per host, so one host answering says nothing about its siblings. Names that are not plain host names are never
 probed.
 
 **How a site is probed.** Each new domain is fetched once, `GET /` with a
@@ -164,7 +167,12 @@ and nothing is probed through `direct`. Only the user's "Send direct" on that
 site (`LearnedSitesRepository.allowDirect`) adds it to the bare link's
 rule-set, and no probe follows even then: the next page load is the test.
 "Undo" (`forget`) takes it back. Desktop's proxy mode never dials an entry
-hop, so it always works this way.
+hop, so it always works this way. A later probe never changes a host the
+user sent direct, or one failing open through the entry hop.
+
+The learner uses the fallback probe only when both ends agree: the running
+config routes `probe-fallback` to the entry hop, and the active connection
+dials one.
 
 The two lists are separate files: `learned-open.json` holds sites failing open
 through the entry hop plus the sites sent direct, and is rendered only with an
@@ -184,6 +192,13 @@ cannot bind (checked with a throwaway instance on a busy port: `FATAL start
 service: start inbound: ... bind: address already in use`), so a start that
 fails that way on a loopback port this app picked is rendered once more with
 fresh ports.
+
+**An adopted relay from another build.** The systemd relay outlives the app,
+including across an in-app update, and an older build's config may send
+fail-open sites to `direct`. The app writes the render schema to
+`/run/vpn-chain/relay.render` next to `relay.json`; on adoption, a missing or
+different stamp means the relay is started again with a fresh render, and the
+kill switch is never re-armed from such a config.
 
 **Which session is watched.** Detection reads the probe ports and credentials
 from the config the engine actually runs (`TunnelController.runningConfig`),

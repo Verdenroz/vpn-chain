@@ -27,6 +27,7 @@
     <string name="tunnel_log_adopted_system_wide">adopted running system-wide relay (started outside this app)</string>
     <string name="tunnel_log_adopted_relay_port">adopted existing relay on 127.0.0.1:%1$d</string>
     <string name="tunnel_log_kill_switch_no_exempt">kill switch: could not determine which IPs to exempt, not engaging</string>
+    <string name="tunnel_log_adopted_stale">the running relay was set up by another version of this app, starting it again with this one's config</string>
     <string name="tunnel_log_port_race_retry">a local port was taken before sing-box could bind it, starting again with new ports</string>
     <string name="tunnel_log_kill_switch_no_mark">kill switch helper is out of date, so sites that fail open stay blocked. Rebuild cli/killswitch/ and setcap it again.</string>
     <string name="tunnel_log_kill_switch_engaged">kill switch engaged (nftables, exempting %1$s)</string>

@@ -265,6 +265,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 TunnelBridge.log("a local port was taken before sing-box could bind it, starting again with new ports")
                 cleanup()
                 tearingDown = false
+                lockdownPoller.postDelayed(lockdownCheck, LOCKDOWN_POLL_MS)
                 startEngine(fresh)
             } else {
                 started.getOrThrow()
