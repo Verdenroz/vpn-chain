@@ -72,8 +72,12 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_hop_exit
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_hop_origin
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_hop_unresolved
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_helper
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_external_app
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_helper_not_found
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_helper_timed_out
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_helper_unprivileged
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_no_exempt
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_not_engaged
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_none
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_protected
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_open_settings
@@ -477,12 +481,11 @@ private fun StatusStrip(status: ChainStatus, rttMs: Int?) {
                 Text(
                     stringResource(
                         when (status.killSwitch) {
-                            KillSwitchState.HelperNotFound,
-                            KillSwitchState.HelperUnprivileged,
-                            KillSwitchState.HelperTimedOut,
-                            KillSwitchState.NoExemptAddresses,
-                            KillSwitchState.NotEngaged,
-                            -> Res.string.chain_kill_switch_hint_helper
+                            KillSwitchState.HelperNotFound -> Res.string.chain_kill_switch_hint_helper_not_found
+                            KillSwitchState.HelperUnprivileged -> Res.string.chain_kill_switch_hint_helper_unprivileged
+                            KillSwitchState.HelperTimedOut -> Res.string.chain_kill_switch_hint_helper_timed_out
+                            KillSwitchState.NoExemptAddresses -> Res.string.chain_kill_switch_hint_no_exempt
+                            KillSwitchState.NotEngaged -> Res.string.chain_kill_switch_hint_not_engaged
                             KillSwitchState.ExternalAppRequired -> Res.string.chain_kill_switch_hint_external_app
                             else -> Res.string.chain_kill_switch_hint
                         },
