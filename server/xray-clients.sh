@@ -87,8 +87,8 @@ commit() {
     bak="$CFG.bak.$(date +%s)"
     cp -p "$CFG" "$bak"
     mv "$tmp" "$CFG"; chmod 644 "$CFG"
-    if ! { bash -c "$RELOAD_CMD" && sleep "$SETTLE" && bash -c "$ACTIVE_CMD"; }; then
-        cp -p "$bak" "$CFG"; bash -c "$RELOAD_CMD" || true
+    if ! { bash -c "$RELOAD_CMD" 9>&- && sleep "$SETTLE" && bash -c "$ACTIVE_CMD"; }; then
+        cp -p "$bak" "$CFG"; bash -c "$RELOAD_CMD" 9>&- || true
         die "xray did not come up; restored $bak"
     fi
     write_sidecar
