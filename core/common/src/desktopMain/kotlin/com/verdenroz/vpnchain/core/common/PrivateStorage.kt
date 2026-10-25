@@ -31,4 +31,7 @@ object PrivateStorage {
     fun createFile(file: File) {
         if (!file.exists()) Files.createFile(file.toPath(), fileAttr)
     }
+
+    fun createTempFile(dir: File, prefix: String, suffix: String): File =
+        Files.createTempFile(dir.toPath(), prefix, suffix, fileAttr).toFile()
 }

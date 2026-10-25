@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.tunnel
 
+import com.verdenroz.vpnchain.core.common.PrivateStorage
 import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.config.ClashApi
 import com.verdenroz.vpnchain.core.config.SystemdRelay
@@ -418,10 +419,9 @@ class DesktopTunnelController(
     }
 
     private suspend fun startOwnedRelay(configJson: String): RelayProcess? {
-        // The rendered config carries credentials — keep it owner-only and ephemeral.
-        val cfg = File.createTempFile("vpn-chain-", ".json").apply {
-            setReadable(false, false)
-            setReadable(true, true)
+        // The rendered config carries credentials, so it never lands in a shared directory.
+        val cfgDir = if (System.getenv("XDG_RUNTIME_DIR") != null) runtimeDir.apply { mkdirs() } else PrivateStorage.configDir()
+        val cfg = PrivateStorage.createTempFile(cfgDir, "vpn-chain-", ".json").apply {
             deleteOnExit()
             writeText(configJson)
         }

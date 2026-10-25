@@ -51,4 +51,11 @@ class PrivateStorageTest {
         assertEquals("rw-------", mode(file))
         assertEquals("keep", file.readText())
     }
+
+    @Test
+    fun `temp file is owner-only`() {
+        val file = PrivateStorage.createTempFile(PrivateStorage.configDir(home()), "vpn-chain-", ".json")
+
+        assertEquals("rw-------", mode(file))
+    }
 }
