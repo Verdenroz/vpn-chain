@@ -16,11 +16,12 @@ import com.verdenroz.vpnchain.core.model.WarpExit
  * use — never registered, or registration failed. A null renders the chain
  * without a tail rather than refusing to render at all.
  *
- * [learned] locates the rule-set files holding the sites detection found.
+ * [learned] locates the rule-set files holding the sites detection found; null
+ * when they could not be written, which renders the chain without them.
  */
 expect fun renderPlatformTunnelConfig(
     profile: SavedProfile,
     settings: UserSettings,
     warp: WarpExit?,
-    learned: LearnedRuleSetStore,
+    learned: LearnedRuleSetStore?,
 ): String

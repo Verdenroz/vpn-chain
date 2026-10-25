@@ -12,7 +12,7 @@ actual fun renderPlatformTunnelConfig(
     profile: SavedProfile,
     settings: UserSettings,
     warp: WarpExit?,
-    learned: LearnedRuleSetStore,
+    learned: LearnedRuleSetStore?,
 ): String {
     val relay = profile.relay
         ?: return SingBoxConfigFactory.wireGuardConfig(
@@ -27,6 +27,6 @@ actual fun renderPlatformTunnelConfig(
         warpMode = settings.warpMode,
         warpDomains = settings.warpDomains,
         probe = if (settings.learningActive) newProbeProxy() else null,
-        learnedWarpPath = learned.path(LearnedRoute.Warp),
+        learnedWarpPath = learned?.path(LearnedRoute.Warp),
     )
 }

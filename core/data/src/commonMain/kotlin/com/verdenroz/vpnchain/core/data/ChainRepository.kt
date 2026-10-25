@@ -138,11 +138,13 @@ internal class DefaultChainRepository(
         // tail, never the connect.
         val wantsTail = settings.warpMode != WarpMode.Off && profile.supportsWarpExit
         val warp = if (wantsTail) warpRepository.exit() else null
-        return runCatching {
-            // The file has to exist before sing-box loads a config that names it.
-            learnedSites.syncRuleSets()
-            renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp, learnedStore)
+        // Like the tail, a failure here costs the learned sites, never the connect.
+        val learned = learnedStore.takeIf {
+            runCatching { learnedSites.syncRuleSets() }
+                .onFailure { logger.w(TAG, "learned rule-set write failed: ${it.message}") }
+                .isSuccess
         }
+        return runCatching { renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp, learned) }
             .onFailure { logger.e(TAG, "config render failed", it) }
             .getOrNull()
     }

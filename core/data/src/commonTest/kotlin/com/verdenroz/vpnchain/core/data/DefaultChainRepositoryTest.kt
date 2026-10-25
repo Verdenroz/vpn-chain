@@ -14,6 +14,7 @@ import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpExit
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
 import kotlinx.coroutines.CoroutineScope
@@ -118,6 +119,29 @@ class DefaultChainRepositoryTest {
     }
 
     @Test
+    fun `the learned rule-set is named in the rendered config`() = runTest {
+        val world = RepositoryWorld(backgroundScope)
+        world.profiles.stored.value = REPOSITORY_PROFILE
+        runCurrent()
+
+        val config = world.controller.configProvider?.invoke()
+
+        assertTrue("learned-warp" in config.orEmpty())
+    }
+
+    @Test
+    fun `a rule-set that cannot be written costs the learned sites, not the config`() = runTest {
+        val world = RepositoryWorld(backgroundScope, store = ThrowingRuleSetStore())
+        world.profiles.stored.value = REPOSITORY_PROFILE
+        runCurrent()
+
+        val config = world.controller.configProvider?.invoke()
+
+        assertNotNull(config)
+        assertFalse("learned-warp" in config)
+    }
+
+    @Test
     fun `release stops the controller without touching intent`() = runTest {
         val world = RepositoryWorld(backgroundScope)
         world.preferences.setConnectionIntent(true)
@@ -144,7 +168,7 @@ private val REPOSITORY_PROFILE = SavedProfile(
     ),
 )
 
-private class RepositoryWorld(scope: CoroutineScope) {
+private class RepositoryWorld(scope: CoroutineScope, store: LearnedRuleSetStore = StubRuleSetStore()) {
     val controller = FakeTunnelController()
     val profiles = StubProfileRepository()
     val preferences = VpnChainPreferencesDataSource(InMemoryPreferences())
@@ -153,8 +177,8 @@ private class RepositoryWorld(scope: CoroutineScope) {
         profileRepository = profiles,
         settingsRepository = StubSettingsRepository(),
         warpRepository = StubWarpRepository(),
-        learnedSites = DefaultLearnedSitesRepository(preferences, store = StubRuleSetStore(), now = { 0L }),
-        learnedStore = StubRuleSetStore(),
+        learnedSites = DefaultLearnedSitesRepository(preferences, store = store, now = { 0L }),
+        learnedStore = store,
         preferences = preferences,
         logger = SilentLogger(),
         scope = scope,
@@ -164,6 +188,11 @@ private class RepositoryWorld(scope: CoroutineScope) {
 private class StubRuleSetStore : LearnedRuleSetStore {
     override fun path(route: LearnedRoute) = "/dev/null"
     override fun write(route: LearnedRoute, domains: List<String>) = Unit
+}
+
+private class ThrowingRuleSetStore : LearnedRuleSetStore {
+    override fun path(route: LearnedRoute) = "/learned"
+    override fun write(route: LearnedRoute, domains: List<String>) = error("disk full")
 }
 
 private class InMemoryPreferences : DataStore<Preferences> {
@@ -238,7 +267,12 @@ private class StubSettingsRepository : SettingsRepository {
 }
 
 private class StubWarpRepository : WarpRepository {
-    override suspend fun exit() = null
+    override suspend fun exit() = WarpExit(
+        privateKey = "priv",
+        addressV4 = "172.16.0.2/32",
+        addressV6 = "2606:4700::2/128",
+        peerPublicKey = "peer",
+    )
 }
 
 private class SilentLogger : Logger {

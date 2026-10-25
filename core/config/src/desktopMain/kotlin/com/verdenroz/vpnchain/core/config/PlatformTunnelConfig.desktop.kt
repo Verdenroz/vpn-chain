@@ -18,7 +18,7 @@ actual fun renderPlatformTunnelConfig(
     profile: SavedProfile,
     settings: UserSettings,
     warp: WarpExit?,
-    learned: LearnedRuleSetStore,
+    learned: LearnedRuleSetStore?,
 ): String {
     val relay = profile.relay
     val clashApi = newClashApi()
@@ -51,7 +51,7 @@ actual fun renderPlatformTunnelConfig(
             allowLocalNetworks = settings.allowLocalNetworks,
             logPath = logPath,
             probe = probe,
-            learnedWarpPath = learned.path(LearnedRoute.Warp),
+            learnedWarpPath = learned?.path(LearnedRoute.Warp),
         )
     } else {
         SingBoxConfigFactory.mixedProxyConfig(
@@ -61,7 +61,7 @@ actual fun renderPlatformTunnelConfig(
             warpMode = settings.warpMode,
             warpDomains = settings.warpDomains,
             probe = probe,
-            learnedWarpPath = learned.path(LearnedRoute.Warp),
+            learnedWarpPath = learned?.path(LearnedRoute.Warp),
         )
     }
 }
