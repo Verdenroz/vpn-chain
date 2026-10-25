@@ -23,6 +23,7 @@ import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.model.outsideExit
+import com.verdenroz.vpnchain.core.model.outsideExitFor
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_failed
@@ -56,6 +57,8 @@ data class SettingsUiState(
     val activeProfileId: String? = null,
     val learned: List<LearnedSite> = emptyList(),
     val exits: Map<String, OutsideExit> = emptyMap(),
+    /** Whether a refused site can be sent down the bare link: failing open on, and no entry hop dialled. */
+    val directOffered: Boolean = false,
 )
 
 /**
@@ -114,6 +117,7 @@ class SettingsViewModel(
                 activeProfileId = activeProfileId,
                 learned = learned.sortedByDescending { it.learnedAtMillis },
                 exits = learned.mapNotNull { site -> site.outsideExit(settings, profile)?.let { site.domain to it } }.toMap(),
+                directOffered = profile.outsideExitFor(settings) == OutsideExit.Direct,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -171,6 +175,14 @@ class SettingsViewModel(
 
     fun removeLearned(domain: String) = viewModelScope.launch {
         learnedSites.remove(domain)
+    }
+
+    fun sendDirect(domain: String) = viewModelScope.launch {
+        learnedSites.allowDirect(domain)
+    }
+
+    fun undoDirect(domain: String) = viewModelScope.launch {
+        learnedSites.forget(domain)
     }
 
     fun setAutoConnectOnLaunch(enabled: Boolean) = viewModelScope.launch {

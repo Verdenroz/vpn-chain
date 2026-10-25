@@ -193,6 +193,8 @@ fun SettingsRoute(
         onToggleLearn = viewModel::setLearnBlockedSites,
         onToggleFailOpen = viewModel::setFailOpen,
         onRemoveLearned = viewModel::removeLearned,
+        onSendDirect = viewModel::sendDirect,
+        onUndoDirect = viewModel::undoDirect,
         onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
         onToggleAutoReconnect = viewModel::setAutoReconnect,
         onToggleAutoStart = viewModel::setAutoStartOnLogin,
@@ -230,6 +232,8 @@ fun SettingsScreen(
     onToggleLearn: (Boolean) -> Unit,
     onToggleFailOpen: (Boolean) -> Unit,
     onRemoveLearned: (String) -> Unit,
+    onSendDirect: (String) -> Unit,
+    onUndoDirect: (String) -> Unit,
     onToggleAutoConnect: (Boolean) -> Unit,
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleAutoStart: (Boolean) -> Unit,
@@ -461,10 +465,13 @@ fun SettingsScreen(
                         failOpen = uiState.settings.failOpen,
                         learned = uiState.learned,
                         exits = uiState.exits,
+                        directOffered = uiState.directOffered,
                         onSetMode = onSetWarpMode,
                         onToggleLearn = onToggleLearn,
                         onToggleFailOpen = onToggleFailOpen,
                         onRemoveLearned = onRemoveLearned,
+                        onSendDirect = onSendDirect,
+                        onUndoDirect = onUndoDirect,
                     )
                 }
             }
@@ -541,10 +548,13 @@ private fun WarpSection(
     failOpen: Boolean,
     learned: List<LearnedSite>,
     exits: Map<String, OutsideExit>,
+    directOffered: Boolean,
     onSetMode: (WarpMode) -> Unit,
     onToggleLearn: (Boolean) -> Unit,
     onToggleFailOpen: (Boolean) -> Unit,
     onRemoveLearned: (String) -> Unit,
+    onSendDirect: (String) -> Unit,
+    onUndoDirect: (String) -> Unit,
 ) {
     val colors = VpnChainTheme.colors
     Column {
@@ -578,7 +588,7 @@ private fun WarpSection(
                     checked = failOpen,
                     onCheckedChange = onToggleFailOpen,
                 )
-                LearnedSites(learned, exits, onRemoveLearned)
+                LearnedSites(learned, exits, directOffered, onRemoveLearned, onSendDirect, onUndoDirect)
             }
         }
     }

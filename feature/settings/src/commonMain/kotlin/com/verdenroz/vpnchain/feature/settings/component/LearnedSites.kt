@@ -36,6 +36,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_lear
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_everywhere
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_offered
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_remove
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_send_direct
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_undo_direct
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learned_warp
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_reason_forbidden
@@ -45,12 +47,19 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_reas
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** The sites detection found, newest first, each with a way to drop it. */
+/**
+ * The sites detection found, newest first, each with a way to drop it. Where
+ * [directOffered], a site both exits refused can be sent down the bare link,
+ * and one already sent there taken back.
+ */
 @Composable
 internal fun LearnedSites(
     sites: List<LearnedSite>,
     exits: Map<String, OutsideExit>,
+    directOffered: Boolean,
     onRemove: (String) -> Unit,
+    onSendDirect: (String) -> Unit,
+    onUndoDirect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (sites.isEmpty()) return
@@ -83,6 +92,17 @@ internal fun LearnedSites(
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.inkMuted,
                     )
+                }
+                val direct = when {
+                    site.route == LearnedRoute.DirectAvailable && directOffered ->
+                        Res.string.settings_learned_send_direct to onSendDirect
+                    site.route == LearnedRoute.Direct && exits[site.domain] == OutsideExit.Direct ->
+                        Res.string.settings_learned_undo_direct to onUndoDirect
+                    else -> null
+                }
+                direct?.let { (label, action) ->
+                    ActionButton(text = stringResource(label), onClick = { action(site.domain) }, compact = true)
+                    Spacer(Modifier.width(8.dp))
                 }
                 ActionButton(
                     text = stringResource(Res.string.settings_learned_remove),

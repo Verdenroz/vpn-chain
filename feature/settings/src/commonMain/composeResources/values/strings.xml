@@ -45,6 +45,8 @@
     <string name="settings_fail_open_title">Bypass the relay when WARP is also refused</string>
     <string name="settings_learned_title">Learned</string>
     <string name="settings_learned_remove">Remove</string>
+    <string name="settings_learned_send_direct">Send direct</string>
+    <string name="settings_learned_undo_direct">Undo</string>
     <string name="settings_learned_warp">%1$s · via WARP · %2$s</string>
     <string name="settings_learned_both">%1$s · relay and WARP refused · %2$s</string>
     <string name="settings_learned_entry">%1$s · relay and WARP refused · via entry hop · %2$s</string>
