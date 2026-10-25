@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.update.di
 
 import com.verdenroz.vpnchain.core.common.di.applicationScopeQualifier
+import com.verdenroz.vpnchain.core.common.di.ioDispatcherQualifier
 import com.verdenroz.vpnchain.core.update.AndroidAppInstaller
 import com.verdenroz.vpnchain.core.update.AppInstaller
 import com.verdenroz.vpnchain.core.update.AppUpdates
@@ -15,7 +16,7 @@ import org.koin.core.module.Module
 import org.koin.dsl.module
 
 actual val updateModule: Module = module {
-    single { ReleaseRepository(createReleaseTransport(), FileSystem.SYSTEM) }
+    single { ReleaseRepository(createReleaseTransport(), FileSystem.SYSTEM, get(ioDispatcherQualifier)) }
     single<AppInstaller> { AndroidAppInstaller(androidContext()) }
     single(createdAtStart = true) {
         val context = androidContext()

@@ -38,7 +38,7 @@ class DesktopAppInstaller(
 // The jpackage launcher treats a process carrying this as its own re-exec and skips the JVM arguments.
 private const val JPACKAGE_LAUNCHER_ENV = "_JPACKAGE_LAUNCHER"
 
-// Waits for this process to exit first so the preferences file is never open in two.
+// Waits for this process to exit first so the preferences file is never open in two processes.
 internal fun relaunchCommand(
     pid: Long,
     launcher: Path,

@@ -41,7 +41,7 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 
-/** The one place an update is offered, followed and retried; empty while there is nothing to say. */
+/** Offers an available update and follows it through download, install and retry. Shows nothing otherwise. */
 @Composable
 fun UpdateBanner(updates: AppUpdates = koinInject()) {
     val state by updates.banner.collectAsStateWithLifecycle(null)

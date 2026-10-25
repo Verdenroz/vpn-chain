@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.core.update
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
@@ -14,26 +15,38 @@ import okio.Path
 
 /** Installs through a [PackageInstaller] session: the system asks the user and reports back to [InstallStatusReceiver]. */
 class AndroidAppInstaller(private val context: Context) : AppInstaller {
-    // The ABIs the release splits cover.
+    // Debug builds are signed with a different key than releases, so Android would reject every update.
     override val artifactKey: String? =
-        Build.SUPPORTED_ABIS.firstOrNull { it == "arm64-v8a" || it == "x86_64" }?.let { "android-$it" }
+        Build.SUPPORTED_ABIS.firstOrNull { it == "arm64-v8a" || it == "x86_64" }
+            ?.takeIf { context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0 }
+            ?.let { "android-$it" }
 
     override suspend fun install(file: Path, release: AppRelease): InstallResult {
         if (!canInstall()) return InstallResult.NeedsPermission
         val installer = context.packageManager.packageInstaller
         val apk = file.toFile()
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply { setSize(apk.length()) }
-        val id = installer.createSession(params)
+        val id = try {
+            installer.createSession(params)
+        } catch (e: IOException) {
+            return InstallResult.Failed(e.message ?: "Could not start the install")
+        }
         val verdict = InstallSessions.expect(id)
         return try {
             withContext(Dispatchers.IO) { commit(installer, id, apk) }
             verdict.await()
         } catch (e: IOException) {
-            installer.abandonSession(id)
-            InstallResult.Failed(e.message ?: "Could not write the update")
+            abandon(installer, id, e)
+        } catch (e: SecurityException) {
+            abandon(installer, id, e)
         } finally {
             InstallSessions.forget(id)
         }
+    }
+
+    private fun abandon(installer: PackageInstaller, id: Int, cause: Exception): InstallResult {
+        installer.abandonSession(id)
+        return InstallResult.Failed(cause.message ?: "Could not write the update")
     }
 
     override fun canInstall() = context.packageManager.canRequestPackageInstalls()

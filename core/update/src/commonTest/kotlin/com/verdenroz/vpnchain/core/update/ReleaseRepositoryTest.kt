@@ -5,6 +5,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import okio.ByteString.Companion.encodeUtf8
 import okio.Path.Companion.toPath
@@ -21,13 +23,13 @@ class ReleaseRepositoryTest {
 
     private fun release(size: Long = BODY.length.toLong(), sha256: String = BODY_SHA256) = AppRelease(
         versionName = "0.1.7",
-        versionCode = 107,
         artifacts = mapOf(
             "android-arm64-v8a" to ReleaseArtifact("vpn-chain-0.1.7-android-arm64-v8a.apk", size, sha256),
         ),
     )
 
-    private fun repository(transport: FakeTransport) = ReleaseRepository(transport, fileSystem)
+    private fun TestScope.repository(transport: FakeTransport) =
+        ReleaseRepository(transport, fileSystem, StandardTestDispatcher(testScheduler))
 
     @Test
     fun `reads the latest release's manifest`() = runTest {

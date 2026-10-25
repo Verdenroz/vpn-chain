@@ -13,7 +13,7 @@
     <string name="update_allow_installs">Allow installs to update</string>
     <string name="update_restart">Restart to finish</string>
     <string name="update_failed_network">Download failed</string>
-    <string name="update_corrupt">Download did not verify</string>
+    <string name="update_corrupt">Download was corrupt</string>
     <string name="update_no_build">No build for this device</string>
     <string name="update_failed_install">Install failed</string>
     <string name="update_install">Install</string>

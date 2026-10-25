@@ -172,12 +172,15 @@ The Android app and the Linux desktop app check the latest release's
 `manifest.json` at start and every 24 hours, and offer **Update x.y.z** in a
 banner (**Settings → about → check now** looks again). Requests take whatever
 path the app's traffic normally takes, the tunnel included. Downloads are
-checked against the manifest's size and SHA-256 before anything is installed.
+checked against the manifest's size and SHA-256 before anything is installed,
+and the Linux install refuses a tarball with entries or links outside its folder.
 
 - **Android** installs through the system installer, so the first update asks
-  you to allow installs from the app. Releases must be signed with the same key
-  for Android to accept them over each other (see below). If the chain was up,
-  the app brings it back up after the update.
+  you to allow installs from the app. Keep the app open until Android shows its
+  install prompt; if you leave first, tap retry when you're back. Releases must
+  be signed with the same key for Android to accept them over each other (see
+  below), so a debug build is never offered updates. If the chain was up, the
+  app brings it back up after the update.
 - **Linux desktop** updates a managed install; a build from source or a `.deb`
   is never offered updates. Set one up with `cli/install-desktop.sh` (installs
   under `~/.local/share/vpn-chain`, a launcher `vpn-chain-gui` in

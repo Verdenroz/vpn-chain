@@ -6,9 +6,11 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -60,7 +62,7 @@ class AppUpdatesTest {
         installer: AppInstaller = this@AppUpdatesTest.installer,
     ): Pair<AppUpdates, FakeTransport> {
         val transport = FakeTransport(pages)
-        val updates = AppUpdates(ReleaseRepository(transport, fileSystem), installer, "/cache/update".toPath(), installed)
+        val updates = AppUpdates(ReleaseRepository(transport, fileSystem, StandardTestDispatcher(testScheduler)), installer, "/cache/update".toPath(), installed)
         backgroundScope.launch { updates.run() }
         return updates to transport
     }
@@ -209,6 +211,42 @@ class AppUpdatesTest {
         runCurrent()
 
         assertIs<AppUpdateState.Ready>(updates.state.value)
+    }
+
+    @Test
+    fun `a tap made during an attempt does not retry it`() = runTest {
+        val verdict = CompletableDeferred<InstallResult>()
+        val slow = object : AppInstaller by installer {
+            var calls = 0
+
+            override suspend fun install(file: Path, release: AppRelease): InstallResult {
+                calls++
+                return verdict.await()
+            }
+        }
+        val (updates) = updates(newer, installer = slow)
+        runCurrent()
+        updates.update()
+        runCurrent()
+
+        updates.update()
+        verdict.complete(InstallResult.Failed("declined"))
+        runCurrent()
+
+        assertEquals(1, slow.calls)
+        assertIs<AppUpdateState.Failed>(updates.state.value)
+    }
+
+    @Test
+    fun `drops a build an earlier run left behind`() = runTest {
+        val stale = "/cache/update/$KEY".toPath()
+        fileSystem.createDirectories(stale.parent!!)
+        fileSystem.write(stale) { writeUtf8(BODY) }
+
+        updates(newer)
+        runCurrent()
+
+        assertTrue(!fileSystem.exists(stale))
     }
 
     @Test

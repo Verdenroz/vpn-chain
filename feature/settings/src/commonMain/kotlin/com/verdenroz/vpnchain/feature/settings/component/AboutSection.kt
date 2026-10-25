@@ -18,7 +18,6 @@ import com.verdenroz.vpnchain.core.ui.SectionCard
 import com.verdenroz.vpnchain.core.update.AppUpdateState
 import com.verdenroz.vpnchain.core.update.AppUpdates
 import com.verdenroz.vpnchain.core.update.CheckStatus
-import com.verdenroz.vpnchain.core.update.release
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_about_check_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_about_check_now
@@ -30,7 +29,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_abou
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 
-/** The installed version, the newest known one and a way to look again; the check only shows where updating is possible. */
+/** Shows the installed version, plus the latest one and a check button where this copy can update itself. */
 @Composable
 fun AboutSection(updates: AppUpdates = koinInject()) {
     val state by updates.state.collectAsStateWithLifecycle()
@@ -52,8 +51,8 @@ fun AboutSection(updates: AppUpdates = koinInject()) {
 
 @Composable
 private fun latest(state: AppUpdateState, check: CheckStatus): String =
-    state.release()?.versionName ?: when (check) {
-        CheckStatus.Idle, CheckStatus.Checking -> stringResource(Res.string.settings_about_checking)
+    state.release?.versionName ?: when (check) {
+        CheckStatus.Checking -> stringResource(Res.string.settings_about_checking)
         CheckStatus.Failed -> stringResource(Res.string.settings_about_check_failed)
         CheckStatus.Done -> stringResource(Res.string.settings_about_up_to_date)
     }

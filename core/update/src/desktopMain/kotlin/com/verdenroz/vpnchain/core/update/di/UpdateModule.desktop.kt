@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.update.di
 
 import com.verdenroz.vpnchain.core.common.di.applicationScopeQualifier
+import com.verdenroz.vpnchain.core.common.di.ioDispatcherQualifier
 import com.verdenroz.vpnchain.core.update.AppInstaller
 import com.verdenroz.vpnchain.core.update.AppUpdates
 import com.verdenroz.vpnchain.core.update.DesktopAppInstaller
@@ -21,7 +22,7 @@ private fun xdgDir(variable: String, fallback: String): Path {
 }
 
 actual val updateModule: Module = module {
-    single { ReleaseRepository(createReleaseTransport(), FileSystem.SYSTEM) }
+    single { ReleaseRepository(createReleaseTransport(), FileSystem.SYSTEM, get(ioDispatcherQualifier)) }
     single<AppInstaller> { DesktopAppInstaller(DesktopInstall(xdgDir("XDG_DATA_HOME", ".local/share"))) }
     single(createdAtStart = true) {
         AppUpdates(

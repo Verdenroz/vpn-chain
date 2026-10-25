@@ -1,5 +1,7 @@
 package com.verdenroz.vpnchain.core.update
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import okio.BufferedSink
 import okio.FileSystem
@@ -37,6 +39,7 @@ enum class DownloadFailure { NoBuild, Network, WrongSize, WrongDigest }
 class ReleaseRepository(
     private val transport: ReleaseTransport,
     private val fileSystem: FileSystem,
+    private val io: CoroutineDispatcher,
 ) {
     suspend fun latest(): Result<AppRelease> =
         try {
@@ -58,13 +61,20 @@ class ReleaseRepository(
         key: String,
         dest: Path,
         onProgress: (Long) -> Unit = {},
+    ): DownloadResult = withContext(io) { fetch(release, key, dest, onProgress) }
+
+    private suspend fun fetch(
+        release: AppRelease,
+        key: String,
+        dest: Path,
+        onProgress: (Long) -> Unit,
     ): DownloadResult {
         val artifact = release.artifacts[key] ?: return DownloadResult.Failed(DownloadFailure.NoBuild)
-        if (fileSystem.exists(dest) && failureOf(dest, artifact) { digestOf(dest) } == null) return DownloadResult.Verified(dest)
         val partial = dest.parent!! / "${dest.name}.part"
-        fileSystem.createDirectories(partial.parent!!)
-        val hashing = HashingSink.sha256(fileSystem.sink(partial))
         try {
+            if (fileSystem.exists(dest) && failureOf(dest, artifact) { digestOf(dest) } == null) return DownloadResult.Verified(dest)
+            fileSystem.createDirectories(partial.parent!!)
+            val hashing = HashingSink.sha256(fileSystem.sink(partial))
             hashing.buffer().use { transport.download("$RELEASES_URL/download/v${release.versionName}/${artifact.path}", it, onProgress) }
             failureOf(partial, artifact) { hashing.hash.hex() }?.let { return DownloadResult.Failed(it) }
             fileSystem.atomicMove(partial, dest)
@@ -73,6 +83,15 @@ class ReleaseRepository(
             return DownloadResult.Failed(DownloadFailure.Network)
         } finally {
             fileSystem.delete(partial)
+        }
+    }
+
+    /** Deletes a build left at [dest] by an earlier run; whatever it held is installed or superseded by now. */
+    fun discard(dest: Path) {
+        try {
+            fileSystem.delete(dest)
+        } catch (e: IOException) {
+            // Only wasted space; the next download replaces it.
         }
     }
 

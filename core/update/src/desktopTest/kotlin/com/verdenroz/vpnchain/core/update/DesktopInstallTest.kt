@@ -21,7 +21,13 @@ class DesktopInstallTest {
         temp.toFile().deleteRecursively()
     }
 
-    private fun tarball(name: String, launcher: Boolean = true, marker: String = name): Path {
+    private fun tarball(
+        name: String,
+        launcher: Boolean = true,
+        marker: String = name,
+        links: Map<String, String> = emptyMap(),
+        tarArgs: List<String> = emptyList(),
+    ): Path {
         val tree = temp.resolve("tree-$name")
         val bin = Files.createDirectories(tree.resolve("vpn-chain/bin"))
         if (launcher) {
@@ -30,8 +36,10 @@ class DesktopInstallTest {
         } else {
             Files.writeString(bin.resolve("other"), "x")
         }
+        links.forEach { (link, target) -> Files.createSymbolicLink(tree.resolve("vpn-chain").resolve(link), Path.of(target)) }
         val archive = temp.resolve("$name.tar.gz")
-        check(ProcessBuilder("tar", "-czf", archive.toString(), "-C", tree.toString(), "vpn-chain").start().waitFor() == 0)
+        val tar = ProcessBuilder("tar", "-czf", archive.toString(), *tarArgs.toTypedArray(), "-C", tree.toString(), "vpn-chain").start()
+        check(tar.waitFor() == 0)
         return archive
     }
 
@@ -74,6 +82,40 @@ class DesktopInstallTest {
         assertFailsWith<IOException> { install.install(junk, "0.1.8") }
 
         assertEquals("0.1.7", currentVersion())
+    }
+
+    @Test
+    fun `keeps a symlink that stays inside the release`() {
+        install.install(tarball("a", links = mapOf("bin/again" to "vpn-chain")), "0.1.7")
+
+        assertEquals("0.1.7", currentVersion())
+    }
+
+    @Test
+    fun `refuses a symlink that leaves the release`() {
+        install.install(tarball("a"), "0.1.7")
+        val outside = mapOf("bin/escape" to "../../../../outside", "bin/absolute" to temp.toString())
+
+        for ((link, target) in outside) {
+            assertFailsWith<IOException> { install.install(tarball("b-${link.substringAfter('/')}", links = mapOf(link to target)), "0.1.8") }
+        }
+
+        assertEquals("0.1.7", currentVersion())
+        assertFalse(Files.exists(root.resolve("versions/0.1.8")))
+    }
+
+    @Test
+    fun `refuses entries outside the release`() {
+        install.install(tarball("a"), "0.1.7")
+        val escapes = listOf("--transform=s,^vpn-chain,../vpn-chain,", "--transform=s,^vpn-chain,$temp/abs/vpn-chain,")
+
+        escapes.forEachIndexed { i, transform ->
+            assertFailsWith<IOException> { install.install(tarball("b$i", tarArgs = listOf("-P", transform)), "0.1.8") }
+        }
+
+        assertEquals("0.1.7", currentVersion())
+        assertFalse(Files.exists(temp.resolve("data/vpn-chain/vpn-chain")))
+        assertFalse(Files.exists(temp.resolve("abs")))
     }
 
     @Test

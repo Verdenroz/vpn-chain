@@ -31,7 +31,7 @@ class AppUpdates(
     private val _state = MutableStateFlow<AppUpdateState>(AppUpdateState.UpToDate)
     val state: StateFlow<AppUpdateState> = _state.asStateFlow()
 
-    private val _check = MutableStateFlow(CheckStatus.Idle)
+    private val _check = MutableStateFlow(CheckStatus.Checking)
     val check: StateFlow<CheckStatus> = _check.asStateFlow()
 
     private val dismissed = MutableStateFlow<String?>(null)
@@ -39,14 +39,14 @@ class AppUpdates(
     /** What the banner shows, or null when there is nothing to show or its release was dismissed. */
     val banner: Flow<AppUpdateState?> =
         combine(_state, dismissed) { current, dismissedVersion ->
-            current.takeIf { it !is AppUpdateState.UpToDate && it.release()?.versionName != dismissedVersion }
+            current.takeIf { it !is AppUpdateState.UpToDate && it.release?.versionName != dismissedVersion }
         }
 
     private val installs = Channel<Unit>(Channel.CONFLATED)
     private val checks = Channel<Unit>(Channel.CONFLATED)
 
     fun dismiss() {
-        _state.value.release()?.let { dismissed.value = it.versionName }
+        _state.value.release?.let { dismissed.value = it.versionName }
     }
 
     fun update() {
@@ -59,9 +59,16 @@ class AppUpdates(
 
     /** Checks on entry, then each [checkEvery] or whenever [checkNow] asks, and installs when [update] asks. */
     suspend fun run() {
-        if (!supported) return
+        val key = installer.artifactKey ?: return
+        repository.discard(directory / key)
         coroutineScope {
-            launch { for (request in installs) install() }
+            launch {
+                for (request in installs) {
+                    install(key)
+                    // A tap made while that attempt ran is not a request to retry it.
+                    installs.tryReceive()
+                }
+            }
             while (true) {
                 check()
                 withTimeoutOrNull(checkEvery) { checks.receive() }
@@ -89,9 +96,8 @@ class AppUpdates(
     private fun offers(release: AppRelease): Boolean =
         isNewer(release.versionName, installedVersion) && installer.artifactKey in release.artifacts
 
-    private suspend fun install() {
-        val key = installer.artifactKey ?: return
-        val release = _state.value.takeIf { it.isStartable() }?.release() ?: return
+    private suspend fun install(key: String) {
+        val release = _state.value.takeIf { it.isStartable() }?.release ?: return
         if (!installer.canInstall()) {
             _state.value = AppUpdateState.NeedsPermission(release)
             installer.allowInstalls()
@@ -102,7 +108,7 @@ class AppUpdates(
         _state.value = AppUpdateState.Downloading(release, 0f)
         // Named by key: the manifest's own path is not trusted as a place to write.
         val result = repository.download(release, key, directory / key) { received ->
-            val now = (received * 100 / size).toInt()
+            val now = (received * 100 / size).toInt().coerceAtMost(100)
             if (now != percent) {
                 percent = now
                 _state.value = AppUpdateState.Downloading(release, now / 100f)

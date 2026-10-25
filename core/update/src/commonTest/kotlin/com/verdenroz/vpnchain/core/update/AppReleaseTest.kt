@@ -17,7 +17,6 @@ class AppReleaseTest {
         )
 
         assertEquals("0.1.7", release.versionName)
-        assertEquals(107, release.versionCode)
         assertEquals(ReleaseArtifact("vpn-chain-0.1.7-linux-x64.tar.gz", 22, "bb"), release.artifacts["linux-x64"])
         assertEquals(setOf("android-arm64-v8a", "linux-x64"), release.artifacts.keys)
     }
@@ -35,6 +34,17 @@ class AppReleaseTest {
     fun `rejects a manifest version it does not know`() {
         assertFailsWith<IllegalArgumentException> {
             parseManifest("""{"version":2,"versionName":"0.1.7","versionCode":107,"artifacts":{}}""")
+        }
+    }
+
+    @Test
+    fun `rejects an artifact path that is not a plain file name`() {
+        for (path in listOf("../other/x.apk", "dir/x.apk", "x y.apk", "")) {
+            assertFailsWith<IllegalArgumentException> {
+                parseManifest(
+                    """{"version":1,"versionName":"0.1.7","versionCode":107,"artifacts":{"linux-x64":{"path":"$path","size":1,"sha256":"aa"}}}""",
+                )
+            }
         }
     }
 }

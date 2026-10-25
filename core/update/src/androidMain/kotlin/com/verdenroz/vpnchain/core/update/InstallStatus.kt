@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.update
 
+import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -9,9 +10,9 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CompletableDeferred
 
 /**
- * Every abort is a failure. One that arrives without a prompt was the device refusing the install and says [unprompted].
- * One after a prompt says [aborted]: the user declining and a setting such as Samsung's Auto Blocker refusing the install
- * there report the same status, so the message has to cover both.
+ * Every abort is a failure. An abort before any prompt means the device refused the install, and gets [unprompted].
+ * An abort after a prompt gets [aborted]: the user declining and a setting such as Samsung's Auto Blocker report the
+ * same status, so that message covers both.
  */
 internal fun installResult(
     status: Int,
@@ -51,7 +52,13 @@ class InstallStatusReceiver : BroadcastReceiver() {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         val id = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
         if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
-            val confirm = confirmation(intent) ?: return
+            val confirm = confirmation(intent)
+            // Android blocks activity starts from the background, and the session would then wait forever.
+            if (confirm == null || !inForeground()) {
+                context.packageManager.packageInstaller.abandonSession(id)
+                InstallSessions.finish(id, InstallResult.Failed(context.getString(R.string.install_backgrounded)))
+                return
+            }
             InstallSessions.prompt(id)
             context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
@@ -67,6 +74,11 @@ class InstallStatusReceiver : BroadcastReceiver() {
             ),
         )
     }
+
+    private fun inForeground(): Boolean =
+        ActivityManager.RunningAppProcessInfo()
+            .also(ActivityManager::getMyMemoryState)
+            .importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
 
     @Suppress("DEPRECATION")
     private fun confirmation(intent: Intent): Intent? =

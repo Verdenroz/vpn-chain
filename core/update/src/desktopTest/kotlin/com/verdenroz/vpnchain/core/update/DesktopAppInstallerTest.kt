@@ -15,7 +15,7 @@ import okio.Path.Companion.toOkioPath
 class DesktopAppInstallerTest {
     private val temp = Files.createTempDirectory("vpn-chain-installer")
     private val install = DesktopInstall(temp.resolve("vpn-chain"))
-    private val release = AppRelease("0.1.7", 107, emptyMap())
+    private val release = AppRelease("0.1.7", emptyMap())
 
     @AfterTest
     fun cleanUp() {
