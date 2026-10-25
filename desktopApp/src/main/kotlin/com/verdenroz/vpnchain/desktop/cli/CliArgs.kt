@@ -1,7 +1,7 @@
 package com.verdenroz.vpnchain.desktop.cli
 
 internal sealed interface Command {
-    data class Up(val profile: String?, val wait: Boolean) : Command
+    data class Up(val profile: String?, val wait: Boolean, val timeoutSeconds: Int = DEFAULT_UP_TIMEOUT_SECONDS) : Command
     data object Down : Command
     data class Status(val watch: Boolean) : Command
     data object List : Command
@@ -11,6 +11,8 @@ internal sealed interface Command {
     data object Version : Command
 }
 
+internal const val DEFAULT_UP_TIMEOUT_SECONDS = 60
+
 internal data class Invocation(val command: Command, val json: Boolean = false)
 
 internal class UsageException(message: String) : Exception(message)
@@ -18,7 +20,9 @@ internal class UsageException(message: String) : Exception(message)
 internal val USAGE = """
     usage: vpn-chain <command> [--json]
 
-      up [NAME] [--no-wait]   connect, switching to NAME (a saved connection's name or id) first
+      up [NAME] [--no-wait] [--timeout S]
+                              connect, switching to NAME (a saved connection's name or id) first;
+                              waits up to S seconds (default $DEFAULT_UP_TIMEOUT_SECONDS) while the engine redials
       down                    disconnect
       status [--watch]        show the chain's state; --watch follows it
       list                    list saved connections
@@ -35,7 +39,11 @@ internal fun parse(args: List<String>): Invocation {
     val command = when (val name = rest.firstOrNull()) {
         null, "help", "-h", "--help" -> Command.Help
         "--version", "version" -> Command.Version
-        "up" -> Command.Up(wait = !operands.flag("--no-wait"), profile = operands.optional())
+        "up" -> Command.Up(
+            wait = !operands.flag("--no-wait"),
+            timeoutSeconds = operands.count("--timeout") ?: DEFAULT_UP_TIMEOUT_SECONDS,
+            profile = operands.optional(),
+        )
         "down" -> Command.Down
         "status" -> Command.Status(watch = operands.flag("--watch"))
         "list" -> Command.List

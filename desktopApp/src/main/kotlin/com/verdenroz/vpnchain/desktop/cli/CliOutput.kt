@@ -53,6 +53,7 @@ internal fun statusJson(status: EngineStatus, detail: String?): JsonObject = bui
     put("killSwitch", status.killSwitch.label)
     put("exitIp", status.exitIp)
     put("detail", detail)
+    put("willRetry", status.willRetry)
 }
 
 internal fun profilesText(profiles: List<ProfileSummary>): String =

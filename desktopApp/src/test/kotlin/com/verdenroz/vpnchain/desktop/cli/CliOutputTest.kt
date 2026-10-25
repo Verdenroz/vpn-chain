@@ -52,7 +52,7 @@ class CliOutputTest {
     fun `status as json`() {
         assertEquals(
             """{"state":"connected","connection":{"id":"p1","name":"Home","kind":"chain","active":true},""" +
-                """"entryHop":true,"killSwitch":"active","exitIp":"198.51.100.7","detail":null}""",
+                """"entryHop":true,"killSwitch":"active","exitIp":"198.51.100.7","detail":null,"willRetry":false}""",
             statusJson(connected, null).toString(),
         )
     }

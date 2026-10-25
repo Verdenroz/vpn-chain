@@ -18,6 +18,12 @@ class CliArgsTest {
     }
 
     @Test
+    fun `up takes a timeout`() {
+        assertEquals(Invocation(Command.Up("Work", wait = true, timeoutSeconds = 5)), parse(listOf("up", "--timeout", "5", "Work")))
+        assertFailsWith<UsageException> { parse(listOf("up", "--timeout", "soon")) }
+    }
+
+    @Test
     fun `json is accepted anywhere`() {
         assertEquals(Invocation(Command.Status(watch = false), json = true), parse(listOf("--json", "status")))
         assertEquals(Invocation(Command.List, json = true), parse(listOf("list", "--json")))
