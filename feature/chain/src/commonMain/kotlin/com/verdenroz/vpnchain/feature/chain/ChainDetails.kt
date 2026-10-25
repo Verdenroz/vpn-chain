@@ -33,6 +33,7 @@ import com.verdenroz.vpnchain.core.domain.HopEvidence
 import com.verdenroz.vpnchain.core.domain.HopRole
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.KillSwitchState
+import com.verdenroz.vpnchain.core.model.OutsideExit
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.ui.asString
@@ -59,10 +60,14 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switc
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_none
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_protected
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_open_settings
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_outside_direct
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_outside_entry_hop
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_outside_sites
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_rerouted_all
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_rerouted_sites
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_ip
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_kill_switch
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_outside
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_placeholder
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_rerouted
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_state_connected
@@ -135,7 +140,8 @@ private fun Readouts(uiState: ChainUiState) {
 
     Spacer(Modifier.height(12.dp))
     uiState.route.hops.forEach { hop -> HopInfoRow(hop) }
-    RerouteRow(uiState)
+    RerouteRow(uiState.routing)
+    OutsideChainRow(uiState.routing)
     InfoRow(
         label = stringResource(Res.string.chain_row_ip),
         value = exit?.ip ?: stringResource(Res.string.chain_row_placeholder),
@@ -206,20 +212,33 @@ private fun HopInfoRow(hop: ChainHop) {
 }
 
 @Composable
-private fun RerouteRow(uiState: ChainUiState) {
-    val value = when (uiState.warpMode) {
+private fun RerouteRow(routing: LearnedRouting) {
+    val value = when (routing.warpMode) {
         WarpMode.Off -> return
         WarpMode.AllTraffic -> stringResource(Res.string.chain_rerouted_all)
-        WarpMode.BlockedSites -> pluralStringResource(
-            Res.plurals.chain_rerouted_sites,
-            uiState.warpSiteCount,
-            uiState.warpSiteCount,
-        )
+        WarpMode.Automatic -> pluralStringResource(Res.plurals.chain_rerouted_sites, routing.warpCount, routing.warpCount)
     }
     InfoRow(
         label = stringResource(Res.string.chain_row_rerouted),
         value = value,
         marker = RowMarker(VpnChainTheme.colors.rerouted, filled = true),
+    )
+}
+
+/** Sites failing open skip the relay, so the row says so and how. */
+@Composable
+private fun OutsideChainRow(routing: LearnedRouting) {
+    val exit = routing.outsideExit ?: return
+    InfoRow(
+        label = stringResource(Res.string.chain_row_outside),
+        value = pluralStringResource(Res.plurals.chain_outside_sites, routing.outsideCount, routing.outsideCount),
+        marker = RowMarker(VpnChainTheme.colors.unprotected, filled = true),
+        note = stringResource(
+            when (exit) {
+                OutsideExit.EntryHop -> Res.string.chain_outside_entry_hop
+                OutsideExit.Direct -> Res.string.chain_outside_direct
+            },
+        ),
     )
 }
 

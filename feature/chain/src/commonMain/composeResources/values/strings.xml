@@ -15,6 +15,13 @@
         <item quantity="one">%1$d site</item>
         <item quantity="other">%1$d sites</item>
     </plurals>
+    <string name="chain_row_outside">Outside chain</string>
+    <plurals name="chain_outside_sites">
+        <item quantity="one">%1$d site</item>
+        <item quantity="other">%1$d sites</item>
+    </plurals>
+    <string name="chain_outside_entry_hop">entry hop</string>
+    <string name="chain_outside_direct">direct, shows your address</string>
     <string name="chain_hop_origin">You</string>
     <string name="chain_hop_entry">Entry</string>
     <string name="chain_hop_exit">Exit</string>
