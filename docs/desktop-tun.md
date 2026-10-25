@@ -1,91 +1,118 @@
-# Desktop TUN mode
+# Desktop setup and TUN mode
 
-TUN is the default: sing-box creates a TUN device and captures all system
-traffic, doing both hops itself (`tun` → optional WireGuard entry →
-VLESS). The narrower alternative is SOCKS-proxy mode — only apps configured
-to use `127.0.0.1:1080` are tunneled, and any entry hop is your own
-responsibility to run. Toggle between them at **Settings → Routing → "Route
-entire system (TUN)"**.
+The desktop app drives the `sing-box` binary. In TUN mode (the default) sing-box
+creates a TUN device, captures all system traffic and does both hops itself:
+`tun → optional WireGuard entry → VLESS relay`. The CLI's chain has the same
+shape, so the GUI and CLI are functionally equivalent.
 
-`SingBoxConfigFactory.renderPlatformTunnelConfig` picks the shape per
-platform; desktop's TUN chain mirrors the CLI's
-`you → entry hop → VPS → internet` chain, so the GUI and CLI are functionally
-equivalent.
+## Set up
 
-## Local proxy
+1. Install `sing-box` (it must be on `PATH`).
+2. Run the one-time setup. It is safe to re-run.
 
-SOCKS-proxy mode listens on loopback only and has no login, so on a shared
-machine any local user can send traffic through the chain. Use TUN mode on
-multi-user machines.
+   ```
+   cli/setup-desktop.sh
+   ```
 
-## One-time privileged setup
+   It does three things, each with `sudo`:
 
-TUN needs `CAP_NET_ADMIN`. Run `cli/setup-desktop.sh` for this, the kill-switch
-helper (see `docs/kill-switch.md`), and the polkit rules, in one guided pass.
-Safe to re-run.
+   | Step | Result |
+   |---|---|
+   | Build and `setcap` the kill-switch helper | `cli/killswitch/vpn-chain-killswitch`, see [kill-switch.md](kill-switch.md) |
+   | Install the relay unit | `vpn-chain-relay.service` and the `/run/vpn-chain` handoff directory |
+   | Install polkit rules | No password prompt on connect, disconnect and DNS setup |
 
-On systemd it installs `cli/systemd/vpn-chain-relay.service`, which carries the
-capability as an `AmbientCapabilities=` grant and runs sing-box as the
-unprivileged `sing-box` user. **This is genuinely one-time.** The older approach
-of `setcap`-ing the binary is not: a file capability lives on the inode, so every
-package upgrade of sing-box replaces the binary and silently drops the grant,
-leaving TUN broken until someone re-runs the command. The unit grants the
-capability to the process instead, so the binary is never touched.
+3. Put the kill-switch helper on `PATH`; the app looks it up by name:
 
-The app hands the rendered config to the service through `/run/vpn-chain`, which
-setup creates owned by you with group `vpn-chain`. You own it, so writing the
-config needs no group membership and no logout: the service reaches the same
-directory through the group instead. If that directory is ever not writable, the
-app treats the unit as unavailable, falls back to running sing-box itself, and
-says so in the log rather than failing the connect.
+   ```
+   ln -s "$PWD/cli/killswitch/vpn-chain-killswitch" ~/.local/bin/
+   ```
 
-Where there is no systemd, the script falls back to the file capability and says
-so:
+4. Import a connection (**Settings → Chain identity → Import**) and connect.
+
+To switch to a local SOCKS proxy instead (only apps set to `127.0.0.1:1080` are
+tunneled, and any entry hop is yours to run), turn off **Settings → Routing →
+Route entire system**. The proxy listens on loopback only and has no login, so on
+a shared machine any local user can send traffic through the chain. Use TUN mode
+on multi-user machines.
+
+## The relay service
+
+The unit gives sing-box `CAP_NET_ADMIN` as an `AmbientCapabilities=` grant and
+runs it as the unprivileged `sing-box` user.
+
+| Path | Role |
+|---|---|
+| `/etc/systemd/system/vpn-chain-relay.service` | The unit, from `cli/systemd/vpn-chain-relay.service` |
+| `/etc/tmpfiles.d/vpn-chain.conf` | Creates `/run/vpn-chain` (mode `2770`, owned by you, group `vpn-chain`) |
+| `/run/vpn-chain/relay.json` | Config the app writes; the unit reads it through the group |
+| `/run/vpn-chain/relay.log` | The unit's log, which the Logs screen follows |
+| `/etc/polkit-1/rules.d/10-vpn-chain-*.rules` | Start/stop of the unit and `systemd-resolved` DNS calls |
+
+Owning the directory means the app writes the config with no group membership
+and no logout. If it is not writable, the app falls back to running sing-box
+itself and says so in the log.
+
+**No systemd.** The script falls back to a file capability:
 
 ```
 sudo setcap cap_net_admin,cap_net_bind_service=+ep $(command -v sing-box)
 ```
 
-Connect then fails with `TUNSETIFF: operation not permitted` whenever an upgrade
-has cleared it. The app detects the missing capability before connecting and
-shows the command as the error. That check is skipped when the unit is installed,
-where the binary having no capability is the expected state.
+A sing-box package upgrade replaces the binary and drops the capability, and
+connect then fails with `TUNSETIFF: operation not permitted`. The app checks for
+the capability before connecting and shows that command as the error. Re-run the
+setup script. The check is skipped when the unit is installed, since the binary
+having no capability is expected there.
 
-With the service in play, `cli/vpn-chain down` stops the unit too. If
-`systemctl stop` is refused (say, over SSH, where the polkit rule doesn't apply),
-it exits without touching anything else, so the relay keeps running with its kill
-switch in place.
+**Stopping.** With the unit in play, `cli/vpn-chain down` stops the unit too. If
+`systemctl stop` is refused (over SSH, say, where the polkit rule does not
+apply), it exits without touching anything else, so the relay keeps running with
+its kill switch in place.
 
-TUN mode also asks `systemd-resolved` to set/revert DNS on the tunnel interface
-on every connect and disconnect, which by default means a polkit password prompt
-each time. `cli/setup-desktop.sh` installs rules scoped to just that and to
-starting the unit (`cli/polkit/`) so it stops prompting. The resolved rule has to
-cover the `sing-box` service user as well as your own session: a system service
-has no logind session, so it is neither active nor local, and without that branch
-DNS setup fails on every connect.
+**Polkit.** TUN mode asks `systemd-resolved` to set and revert DNS on every
+connect and disconnect. The installed rules cover just that and starting the
+unit. The resolved rule covers the `sing-box` user too: a system service has no
+logind session, so without that branch DNS setup fails on every connect.
 
-## Adding the WireGuard entry hop
+## Entry hop
 
-Generate a **dedicated** WireGuard config from your provider (a
-*different* one than any other device uses — the same key can't be active in
-two places) and import it without exposing the key:
+The entry hop is optional. Without one the TUN chain is relay-only, and the VPS
+sees your address.
 
-```
-cli/import-entry-conf.sh ~/Downloads/your-entry.conf   # → secrets.env
-```
+1. Generate a WireGuard config at your provider for this device alone; a key
+   cannot be active in two places.
+2. Import it without printing the key:
 
-then in the app: **Settings → Import ~/.config/vpn-chain/secrets.env**. Or
-type the fields into the Settings form's *TUN entry hop* section. Without an
-entry the TUN chain is relay-only.
+   ```
+   cli/import-entry-conf.sh ~/Downloads/your-entry.conf
+   ```
 
-## Conflict with a separate VPN app
+   This writes the `ENTRY_*` keys into `~/.config/vpn-chain/secrets.env`.
+3. In the app, **Settings → Chain identity → Import → Import from disk**, or paste
+   the `.conf` and tap **Use as entry hop**.
 
-If you also run the CLI's local app-based entry hop (a separate VPN client, not the WG
-config above), disconnect it before using desktop TUN mode
-(e.g. `protonvpn disconnect`) — sing-box now dials the entry peer itself via
-the WireGuard entry, so a second VPN connection fights over the routing
-table, and its kill switch would block sing-box's traffic. Afterwards confirm
-your default route is back on your physical interface
-(`ip route show default`) and no `pvpnksintrf0` kill-switch interface
-lingers; if it does, you have a permanent kill switch enabled — disable it in
-ProtonVPN before connecting.
+**Settings → Routing → Wireguard entry hop** turns it off without editing the
+profile.
+
+## Using an external VPN app as the entry hop
+
+Leave the entry fields blank and run the VPN app yourself. Its interface carries
+sing-box's dial, and its kill switch protects the chain; see
+[kill-switch.md](kill-switch.md). The desktop app recognises ProtonVPN by its
+`proton0` interface.
+
+Do not run that app alongside a configured WireGuard entry hop. Two VPNs fight
+over the routing table, and the app's kill switch blocks sing-box. Before
+connecting:
+
+1. Disconnect the app (for ProtonVPN, `protonvpn disconnect`).
+2. Check the default route is back on the physical interface: `ip route show default`.
+3. Check no `pvpnksintrf0` interface lingers. If it does, a permanent kill switch
+   is on; disable it in ProtonVPN.
+
+## Troubleshooting
+
+`cli/diagnose-tun.sh [out.txt]` writes TUN diagnostics to a file (default
+`/tmp/vpn-chain-tun-diag.txt`) while the app is connected: the sing-box process,
+the TUN device and MTU, routes, and the VLESS connection. It reads no secrets.

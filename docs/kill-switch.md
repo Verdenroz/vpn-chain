@@ -1,143 +1,161 @@
 # Desktop kill switch
 
-Desktop gets a real kill switch in every mode, through one of two mechanisms:
-the app's own nftables helper for any TUN chain it dials itself, or the real
-external VPN app's kill switch when that app is carrying the entry hop.
+Every desktop mode has a kill switch, from one of two sources. Android uses the
+system Always-on VPN instead: [android.md](android.md#kill-switch).
 
-## Relay-only mode, with an external VPN app
+| Mode | Kill switch | Setup |
+|---|---|---|
+| WireGuard entry hop (sing-box dials it) | The app's nftables table | The helper below |
+| Single hop (no entry, no external VPN app) | The app's nftables table, exempting only the VPS | The helper below |
+| No entry fields, external VPN app carries the hop | The VPN app's own | Enable it in that app |
+| Proxy mode (**Route entire system** off) | None: nothing is captured system-wide, so there is no leak to catch | none |
 
-Leave the entry-hop fields blank and run an external VPN app with its own
-kill switch enabled. sing-box's VLESS dial just rides whatever the OS default
-route is — since that's the app's tunnel, the app's kill switch protects it
-exactly as if it were any other app on your system. No custom code involved.
+The Chain card's **Kill switch** row reports what actually holds, not the mode
+you configured: **On**, or **Off** with a hint naming the cause: set up in
+Settings, helper not installed, helper not privileged (run `setcap` again after
+every build), helper failed or timed out, no relay address to exempt, not armed
+this session, or provided by your system VPN app. The app cannot enable another
+app's kill switch for you.
 
-The app detects this (ProtonVPN's `proton0` is up — the one external client
-with a fixed interface name) and stands down rather than installing its own
-table: the rendered config never lists that app's WireGuard endpoint as
-an exemption, so our rule would blackhole the very tunnel it is riding.
+## Install the helper
 
-## Single-hop mode
+1. Build it and grant the capability (or run `cli/setup-desktop.sh`, which does both):
 
-Leave the entry-hop fields blank and *don't* run an external VPN app, and the
-chain is you → relay VPS → internet. Neither of the above applies — there is
-no external kill switch to inherit — so the app installs its own table, exactly
-as below but exempting only the VPS. Enabled by the same **Settings → kill
-switch** toggle, and it needs the same helper.
+   ```
+   cli/killswitch/build.sh
+   sudo setcap cap_net_admin=eip cli/killswitch/vpn-chain-killswitch
+   ```
 
-## WireGuard entry hop mode
+   `build.sh` needs `gcc` and the libcap headers.
+2. Put it on `PATH` as `vpn-chain-killswitch`:
 
-When a WireGuard entry hop is configured (see `docs/desktop-tun.md`),
-sing-box dials the entry peer itself, so there's no external app/tunnel for a kill
-switch to attach to. Instead, build the narrow helper in `cli/killswitch/`
-(or run `cli/setup-desktop.sh`, which does this step too):
+   ```
+   ln -s "$PWD/cli/killswitch/vpn-chain-killswitch" ~/.local/bin/
+   ```
+
+3. Check it: `vpn-chain status` prints `kill switch: helper ready`, `helper not
+   installed` or `helper not privileged`.
+
+On by default. **Settings → Kill switch → Fail closed** turns it off.
+**Allow local networks** (on by default) keeps LAN and Docker reachable; turning
+it off is strictly fail-closed.
+
+If the helper is missing or unprivileged, the app warns and connects without the
+safety net.
+
+### After upgrading the helper
+
+A helper from before `--allow-mark` rejects it with exit 2, a usage error; the
+current helper exits 3 for an invalid value, which is never retried. The app then installs
+the table without the mark and logs that sites failing open stay blocked. The
+kill switch stays up; only failing open to the bare link is lost. To get it back,
+rebuild and re-grant, once:
 
 ```
 cli/killswitch/build.sh
 sudo setcap cap_net_admin=eip cli/killswitch/vpn-chain-killswitch
 ```
 
-then put `vpn-chain-killswitch` on `PATH`. Enabled by default — flip
-**Settings → Kill switch** off if you'd rather connect without it.
+## The table
 
-### How it works
+The app installs an nftables table on the `OUTPUT` hook before connecting. It
+accepts, in order, then rejects everything else:
 
-Before connecting, the app installs an **nftables** table on the `OUTPUT`
-hook — not a routing-table change — that rejects all outbound traffic except
-loopback, anything already routed to `tun0`, the VPS/entry-endpoint
-exemptions, and (by default) local networks.
+| Accept | Why |
+|---|---|
+| Loopback | Local services |
+| Anything routed to `tun0` | Traffic sing-box is already carrying |
+| The VPS and entry-peer addresses | sing-box's own uplink |
+| RFC1918 and link-local (with **Allow local networks**) | LAN, Docker bridges, printers |
+| Packets with the fail-open mark (see below) | Sites sent past the relay |
 
-- **Firewall, not routing.** sing-box's own `auto_detect_interface` watches
-  the routing table via netlink to find "the real" interface; a route with no
-  interface attached (e.g. a blackhole route) would confuse that detection
-  and break sing-box's own uplink. A firewall rule leaves the routing table
-  untouched.
-- **`reject`, not `drop`.** Other apps on the system get an immediate failure
-  instead of hanging until their own timeout; the original packet never
-  leaves the machine either way.
-- **The `tun0` exemption matters.** Without it, the rule would block ordinary
-  browsing traffic too, not just leaks — anything sing-box's TUN is actively
-  capturing to relay has a real destination IP (the site you're visiting),
-  not the VPS, so it needs its own exemption distinct from sing-box's own
-  uplink. That's safe because the exemption stops applying the instant
-  sing-box crashes and `tun0` stops existing; leaked traffic then falls back
-  to the physical link, where only the VPS/entry IPs still get through and
-  everything else is rejected.
-- **Direct traffic is accepted by mark, not by address.** A site the user
-  sent direct on a chain with no entry hop leaves by sing-box's `direct` outbound, onto
-  the physical link, which the table would reject like any other packet. So
-  that outbound alone carries `routing_mark` `0x760000`, and the helper takes
-  `up [--allow-local] [--allow-mark <hex>] <exempt_ip>...`, adding one rule,
-  `meta mark <hex> accept`, ahead of the final reject. It is rendered only
-  on desktop, in `automatic` mode with failing open on, no entry hop and the
-  sent-direct rule-set present; with
-  an entry hop the fallback goes through the entry peer, which is already
-  exempt. Android never renders it.
+`tun0` is sing-box's default TUN name. The TUN also carries a matching
+`route_exclude_address` list with **Allow local networks**, so `auto_route` does
+not pull those destinations into `tun0` and swallow the replies.
 
-  The mark was chosen to stay clear of sing-box's auto_redirect marks (0x2023
-  to 0x2025), WireGuard quick (51820), Kubernetes (0x4000, 0x8000) and
-  Tailscale (0x40000, 0x80000 under mask 0xff0000). The helper accepts only a
-  `0x`-prefixed value of up to eight hex digits that is not zero, and writes it
-  into the same one-transaction script, just before the `reject`.
+The helper usage:
 
-  Risks. sing-box stamps the mark, so the hole closes when sing-box dies,
-  unlike an address exemption. Any other process holding `CAP_NET_ADMIN` can
-  set the same mark and leak past the table; ordinary apps cannot. The
-  rule exempts everything on the `direct` outbound, which is safe only while
-  failing open is the sole use of it. It does not change what the site sees:
-  the real network address, with no kill switch behind those flows. And it
-  needs the helper rebuilt (`cli/killswitch/build.sh`) and `setcap` run on it
-  once more. Until then an older helper rejects `--allow-mark` with exit 2 (a usage
-  error; the current helper reserves exit 3 for an invalid value),
-  and the app installs the table again without the mark and logs that sites
-  that fail open stay blocked. The kill switch stays up; only failing open to
-  the bare link is lost.
-- **Local networks are exempt by default.** RFC1918 and link-local
-  destinations are accepted, so Docker bridges, LAN hosts and printers stay
-  reachable while the chain is up. Without it the `reject` RSTs
-  host-to-container traffic that never reaches the physical link in the first
-  place, and a container the host cannot talk to looks exactly like a crashed
-  service. The chain's TUN carries a matching `route_exclude_address` list so
-  `auto_route` doesn't pull those same destinations into `tun0` and swallow
-  the replies. **Settings → Allow local networks** turns both off together for
-  a strictly fail-closed switch.
-- **Torn down on disconnect, not on crash.** On Disconnect the app tears the
-  table down — but *not* on an unexpected crash, since that's exactly when
-  it's supposed to keep blocking traffic. `vpn-chain down` writes
+```
+vpn-chain-killswitch up [--allow-local] [--allow-mark <hex>] <exempt_ip>...
+vpn-chain-killswitch down
+vpn-chain-killswitch status
+```
+
+`status` exits 0 when the table is installed and 1 when it is not. `up` exits 2
+for a usage error or unknown option and 3 for an invalid address or mark.
+
+### Why it is built this way
+
+- **Firewall, not routing.** sing-box's `auto_detect_interface` watches the
+  routing table to find the real interface. A route with no interface attached,
+  such as a blackhole route, confuses it and breaks sing-box's own uplink.
+- **`reject`, not `drop`.** Other apps fail at once instead of hanging until
+  their own timeout. Neither lets the packet out.
+- **The `tun0` exemption is needed.** Traffic sing-box captures for relay has a
+  real destination (the site), not the VPS. Without the exemption the rule blocks
+  ordinary browsing. It is safe because it stops matching the instant sing-box
+  dies and `tun0` goes away; leaked traffic then falls to the physical link, where
+  only the VPS and entry IPs still pass.
+- **Local networks.** Without that exemption the `reject` resets host-to-container
+  traffic that never reaches the physical link, and a container the host cannot
+  reach looks like a crashed service.
+- **Torn down on Disconnect, not on a crash.** An unexpected crash is exactly
+  when it must keep blocking. `vpn-chain down` writes
   `$XDG_RUNTIME_DIR/vpn-chain/down-requested` before stopping the relay; a
-  running GUI treats that as the user disconnecting (intent cleared, no
-  reconnect), and the next `vpn-chain up` or GUI connect clears the marker.
-- **One transaction.** `up` renders the whole ruleset, final `reject`
-  included, into a single nft script and loads it with one `nft -f -`. The
-  script deletes any existing table and re-creates it in the same commit, so
-  re-arming never opens a window where the old table is gone and the new one
-  has no `reject` yet, and a failed load leaves the previous table in place
-  rather than a half-built one.
-- **No shell.** `nft` is `execve`d by absolute path with a fixed argv, the
-  script on a pipe, and a fixed minimal environment (`PATH`, `LC_ALL=C`), so
-  nothing the caller exported reaches a process running with
-  `CAP_NET_ADMIN`. Exempt IPs are strict dotted quads (octets 0-255, no
-  leading zeros) and are written into the script only after validation. The
-  helper raises `CAP_NET_ADMIN` into its own ambient set, so `nft` itself
-  never needs any capability grant.
+  running GUI treats that as the user disconnecting (no reconnect), and the next
+  `vpn-chain up` or GUI connect clears it.
+- **One transaction.** `up` renders the whole ruleset, the final `reject` and the
+  mark rule included, into one nft script and loads it with a single `nft -f -`.
+  The script deletes any old table and re-creates it in the same commit, so a
+  re-arm never leaves a window with no `reject`, and a failed load leaves the
+  previous table rather than a half-built one.
+- **Known state after a failure.** A failed or timed-out `up` (a timeout also
+  kills the helper's `nft` child) leaves the previous table in place. The app asks
+  `status` whether a table exists and records that, and never tears one down on
+  failure, which would fail open on a re-arm.
+- **No shell.** `nft` is `execve`d by absolute path with a fixed argv, the script
+  on a pipe, and a fixed environment (`PATH`, `LC_ALL=C`). Exempt IPs are strict
+  dotted quads (octets 0-255, no leading zeros) and the mark a strict hex value,
+  both checked before the script is written. The helper raises `CAP_NET_ADMIN`
+  into its own ambient set and execs `nft`, so `nft` never needs a capability
+  grant.
+- **Stands down for an external VPN app.** The app detects ProtonVPN's `proton0`
+  and does not install its own table: it would blackhole the very tunnel it
+  rides, because the rendered config never lists that app's WireGuard endpoint
+  as an exemption.
 
-- **Known state after a failed `up`.** The load is atomic, so a failed `up`
-  or an app timeout (which also kills the helper's `nft` child) leaves the
-  previous table untouched. The app asks the helper's `status` whether a table
-  exists and records that, and never tears one down on failure, since that
-  would fail open on a re-arm.
+## The fail-open mark
 
-If the helper isn't built/setcapped yet, the app warns and connects anyway
-without the safety net.
+A site the user sent direct on a chain with no entry hop leaves by sing-box's
+`direct` outbound, onto the physical link, which the table would reject. So that
+outbound alone carries `routing_mark` `0x760000`, and the helper adds
+`meta mark <hex> accept` ahead of the final reject.
 
-## Status
+- Rendered only on desktop, in `automatic` mode with failing open on, no entry
+  hop, and the sent-direct rule-set present. With an entry hop, the fallback goes
+  through the entry peer, which is already exempt. Android never renders it.
+- The mark avoids sing-box's auto_redirect marks (`0x2023` to `0x2025`),
+  WireGuard quick (51820), Kubernetes (`0x4000`, `0x8000`) and Tailscale
+  (`0x40000`, `0x80000` under mask `0xff0000`).
+- The helper accepts only a `0x`-prefixed, nonzero value of up to eight hex
+  digits, and writes it into the script as `meta mark <hex> accept` just before
+  the `reject`.
 
-The app's **Chain** screen shows `kill switch: protected` when either setup
-is active and detected, or a warning when it isn't — reported from what
-actually holds, not from which mode was configured. There's no way for the
-app to enable an external VPN app's own kill switch for you — turn that one
-on in that app's own settings.
+Risks:
 
-Desktop's proxy mode (**Settings → routing**, system-wide TUN off) is the one
-case with no fail-closed option of ours: nothing is captured system-wide, so
-there is no leak for a firewall to catch. The status says so rather than
-claiming protection.
+- sing-box stamps the mark, so the hole closes when sing-box dies, unlike an
+  address exemption.
+- Any other process holding `CAP_NET_ADMIN` can set the same mark and leak past
+  the table. Ordinary apps cannot.
+- The rule exempts everything on the `direct` outbound. That is safe only while
+  failing open is its sole use.
+- It does not change what the site sees: your real network address, with no kill
+  switch behind those flows.
+
+See [warp-exit.md](warp-exit.md#failing-open).
+
+## With an external VPN app
+
+Leave the entry fields blank and run the app with its own kill switch enabled.
+sing-box's dial rides the default route, which is the app's tunnel, so the app's
+kill switch protects it like any other app. No custom code is involved.
