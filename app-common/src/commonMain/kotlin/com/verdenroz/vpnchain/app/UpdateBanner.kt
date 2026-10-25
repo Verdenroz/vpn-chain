@@ -1,24 +1,23 @@
 package com.verdenroz.vpnchain.app
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -36,6 +35,8 @@ import com.verdenroz.vpnchain.app.generated.resources.update_no_build
 import com.verdenroz.vpnchain.app.generated.resources.update_open_settings
 import com.verdenroz.vpnchain.app.generated.resources.update_restart
 import com.verdenroz.vpnchain.app.generated.resources.update_retry
+import com.verdenroz.vpnchain.core.designsystem.component.ActionButton
+import com.verdenroz.vpnchain.core.designsystem.component.ActionTone
 import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 import com.verdenroz.vpnchain.core.update.AppUpdateState
 import com.verdenroz.vpnchain.core.update.AppUpdates
@@ -46,7 +47,7 @@ import org.koin.compose.koinInject
 
 /** Offers an available update and follows it through download, install and retry. Shows nothing otherwise. */
 @Composable
-fun UpdateBanner(updates: AppUpdates = koinInject(), horizontalPadding: Dp = 20.dp) {
+fun UpdateBanner(horizontalPadding: Dp, updates: AppUpdates = koinInject()) {
     val state by updates.banner.collectAsStateWithLifecycle(null)
     state?.let { UpdateBannerBar(it, horizontalPadding, onAction = updates::update, onDismiss = updates::dismiss) }
 }
@@ -65,17 +66,18 @@ private fun UpdateBannerBar(
         Modifier
             .fillMaxWidth()
             .background(colors.surface)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
             .padding(horizontal = horizontalPadding, vertical = 4.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 state.text(),
                 modifier = Modifier.weight(1f).padding(vertical = 8.dp),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.ink,
             )
-            action?.let { BannerAction(stringResource(it), colors.connectedText, onAction) }
-            if (!busy) BannerAction(stringResource(Res.string.update_dismiss), colors.inkMuted, onDismiss)
+            action?.let { ActionButton(stringResource(it), onClick = onAction, tone = ActionTone.Primary, compact = true) }
+            if (!busy) ActionButton(stringResource(Res.string.update_dismiss), onClick = onDismiss, compact = true)
         }
         if (state is AppUpdateState.Downloading) {
             LinearProgressIndicator(
@@ -86,20 +88,6 @@ private fun UpdateBannerBar(
             )
         }
     }
-}
-
-@Composable
-private fun BannerAction(text: String, color: Color, onClick: () -> Unit) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleSmall,
-        color = color,
-        modifier = Modifier
-            .minimumInteractiveComponentSize()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-    )
 }
 
 @Composable
