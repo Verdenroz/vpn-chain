@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.config
 
+import com.verdenroz.vpnchain.core.common.PrivateStorage
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpExit
@@ -48,8 +49,7 @@ actual fun renderPlatformTunnelConfig(
  * which is whatever the app was launched with — `/` for a login item.
  */
 private fun cacheFilePath(): String {
-    val dir = File(System.getProperty("user.home"), ".config/vpn-chain").apply { mkdirs() }
-    return File(dir, "singbox-cache.db").absolutePath
+    return File(PrivateStorage.configDir(), "singbox-cache.db").absolutePath
 }
 
 /**

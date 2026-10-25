@@ -8,6 +8,7 @@ android { namespace = "com.verdenroz.vpnchain.core.config" }
 kotlin {
     sourceSets {
         commonMain.dependencies {
+            implementation(projects.core.common)
             implementation(projects.core.model)
             implementation(libs.kotlinx.serialization.json)
         }
