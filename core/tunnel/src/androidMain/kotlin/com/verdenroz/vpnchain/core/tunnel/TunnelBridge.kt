@@ -133,7 +133,8 @@ internal object TunnelBridge {
     /**
      * Whether the user asked for the running session. Persisted because a sticky
      * restart after process death delivers a null intent, just as an Always-on
-     * start does, and this is all that tells them apart below API 29.
+     * start does, and this is all that tells them apart below API 29. A marker
+     * left over from before a reboot makes an Always-on start read as not detected.
      */
     fun setUserStarted(context: Context, started: Boolean) {
         prefs(context).edit().putBoolean(KEY_USER_STARTED, started).apply()
