@@ -6,38 +6,13 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
-import okio.BufferedSink
 import okio.ByteString.Companion.encodeUtf8
-import okio.IOException
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
 
 private const val BODY = "apk bytes"
 private val BODY_SHA256 = BODY.encodeUtf8().sha256().hex()
 private val DEST = "/cache/update/vpn-chain.apk".toPath()
-
-private class FakeTransport(
-    private val pages: Map<String, String>,
-    private val chunk: Int = 4,
-) : ReleaseTransport {
-    val requested = mutableListOf<String>()
-
-    override suspend fun fetchText(url: String): String {
-        requested += url
-        return pages[url] ?: throw IOException("HTTP 404")
-    }
-
-    override suspend fun download(url: String, sink: BufferedSink, onProgress: (Long) -> Unit) {
-        requested += url
-        val body = pages[url] ?: throw IOException("HTTP 404")
-        var received = 0L
-        body.encodeUtf8().toByteArray().asList().chunked(chunk).forEach {
-            sink.write(it.toByteArray())
-            received += it.size
-            onProgress(received)
-        }
-    }
-}
 
 class ReleaseRepositoryTest {
     private val fileSystem = FakeFileSystem()
