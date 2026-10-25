@@ -21,6 +21,7 @@ import com.verdenroz.vpnchain.core.engine.di.startHostedEngine
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.desktop.cli.runCli
 import com.verdenroz.vpnchain.desktop.generated.resources.Res
 import com.verdenroz.vpnchain.desktop.generated.resources.app_icon
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_connect
@@ -32,12 +33,19 @@ import com.verdenroz.vpnchain.desktop.generated.resources.tray_tooltip_connectin
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_tooltip_disconnected
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_tooltip_error
 import com.verdenroz.vpnchain.desktop.generated.resources.window_title
+import kotlin.system.exitProcess
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.core.context.startKoin
 
-fun main() {
+fun main(args: Array<String>) {
+    // Any argument makes this the CLI, which must not pay for Compose or Koin.
+    if (args.isNotEmpty()) exitProcess(runCli(args.asList()))
+    runGui()
+}
+
+private fun runGui() {
     // Resolved from the Koin instance directly rather than through Compose
     // locals: this runs outside any KoinApplication composition.
     val koin = startKoin { modules(engineModules + controlServerModule + uiModules) }.koin

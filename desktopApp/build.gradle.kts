@@ -21,6 +21,7 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(libs.compose.material3)
     implementation(libs.compose.components.resources)
+    testImplementation(libs.kotlin.test)
 }
 
 compose.resources {
