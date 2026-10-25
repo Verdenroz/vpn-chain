@@ -84,6 +84,7 @@ class DesktopTunnelController(
     private val scope: CoroutineScope,
     private val singBoxBin: String = "sing-box",
     private val killSwitchBin: String = "vpn-chain-killswitch",
+    private val helperRunner: HelperRunner = processHelperRunner(killSwitchBin),
 ) : TunnelController {
 
     private val _stats = MutableStateFlow(SessionStats())
@@ -141,6 +142,10 @@ class DesktopTunnelController(
     /** True once the nftables kill-switch table has been installed for this session. */
     @Volatile
     private var killSwitchEngaged: Boolean = false
+
+    /** Why the last engage attempt left the chain unprotected; null if none failed. */
+    @Volatile
+    private var killSwitchFault: KillSwitchState? = null
 
     /** Set while a Disconnect is queued, so a start still checking whether the
      *  chain carries traffic gives up the lock instead of making the user wait. */
@@ -328,17 +333,13 @@ class DesktopTunnelController(
      */
     private suspend fun engageKillSwitch(configJson: String) {
         val exemptIps = RelayConfig.exemptIps(configJson)
-        if (exemptIps.isEmpty()) {
-            emitLog(Res.string.tunnel_log_kill_switch_no_exempt)
-            return
-        }
-        val localArgs = if (allowLocalNetworks) listOf("--allow-local") else emptyList()
-        val result = runKillSwitchHelper(listOf("up") + localArgs + exemptIps)
-        killSwitchEngaged = result == 0
-        if (!killSwitchEngaged) {
-            emitLog(Res.string.tunnel_error_kill_switch_unavailable)
-        } else {
-            emitLog(Res.string.tunnel_log_kill_switch_engaged, exemptIps.joinToString())
+        val fault = engageKillSwitchFault(exemptIps, allowLocalNetworks, ::runKillSwitchHelper)
+        killSwitchFault = fault
+        killSwitchEngaged = fault == null
+        when (fault) {
+            null -> emitLog(Res.string.tunnel_log_kill_switch_engaged, exemptIps.joinToString())
+            KillSwitchState.NoExemptAddresses -> emitLog(Res.string.tunnel_log_kill_switch_no_exempt)
+            else -> emitLog(Res.string.tunnel_error_kill_switch_unavailable)
         }
     }
 
@@ -350,28 +351,20 @@ class DesktopTunnelController(
         val wasEngaged = killSwitchEngaged
         runKillSwitchHelper(listOf("down"))
         killSwitchEngaged = false
+        killSwitchFault = null
         if (wasEngaged) emitLog(Res.string.tunnel_log_kill_switch_disengaged)
     }
 
-    private suspend fun runKillSwitchHelper(args: List<String>): Int? {
-        var output = ""
-        val exit = runCatching {
-            val proc = ProcessBuilder(listOf(killSwitchBin) + args).redirectErrorStream(true).start()
-            output = proc.inputStream.bufferedReader().readText()
-            if (!proc.waitFor(5, TimeUnit.SECONDS)) {
-                proc.destroyForcibly()
-                return@runCatching null
-            }
-            proc.exitValue()
-        }.getOrNull() ?: return null
-        if (exit != 0) {
+    private suspend fun runKillSwitchHelper(args: List<String>): HelperOutcome {
+        val outcome = helperRunner(args)
+        if (outcome is HelperOutcome.Exited && outcome.code != 0) {
             emitLog(
                 Res.string.tunnel_log_kill_switch_helper_error,
                 "$killSwitchBin ${args.joinToString(" ")}",
-                output.trim().ifBlank { "exit $exit" },
+                outcome.output.trim().ifBlank { "exit ${outcome.code}" },
             )
         }
-        return exit
+        return outcome
     }
 
     /**
@@ -669,8 +662,7 @@ class DesktopTunnelController(
                 // Proxy mode captures nothing system-wide, so there is nothing
                 // for a firewall of ours to fail closed around.
                 !tunMode -> KillSwitchState.ExternalAppRequired
-                // Enabled and attempted, but the helper never came back happy.
-                else -> KillSwitchState.HelperUnavailable
+                else -> killSwitchFault ?: KillSwitchState.NotEngaged
             },
             detail = when {
                 tunMode && adopted -> UiText.Resource(Res.string.tunnel_status_tun_adopted)

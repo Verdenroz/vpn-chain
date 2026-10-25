@@ -477,7 +477,12 @@ private fun StatusStrip(status: ChainStatus, rttMs: Int?) {
                 Text(
                     stringResource(
                         when (status.killSwitch) {
-                            KillSwitchState.HelperUnavailable -> Res.string.chain_kill_switch_hint_helper
+                            KillSwitchState.HelperNotFound,
+                            KillSwitchState.HelperUnprivileged,
+                            KillSwitchState.HelperTimedOut,
+                            KillSwitchState.NoExemptAddresses,
+                            KillSwitchState.NotEngaged,
+                            -> Res.string.chain_kill_switch_hint_helper
                             KillSwitchState.ExternalAppRequired -> Res.string.chain_kill_switch_hint_external_app
                             else -> Res.string.chain_kill_switch_hint
                         },
