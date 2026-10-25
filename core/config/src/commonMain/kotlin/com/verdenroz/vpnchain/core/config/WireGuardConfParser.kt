@@ -52,7 +52,7 @@ object WireGuardConfParser {
         val publicKey = peer.key("PublicKey")
         val allowedIps = peer.list("AllowedIPs")
         if (allowedIps.isEmpty()) throw WireGuardConfError.Missing("AllowedIPs")
-        if ("0.0.0.0/0" !in allowedIps) throw WireGuardConfError.SplitTunnel()
+        if (!allowedIps.routesEverything()) throw WireGuardConfError.SplitTunnel()
         val (host, port) = parseEndpoint(peer.single("Endpoint") ?: throw WireGuardConfError.Missing("Endpoint"))
 
         return WireGuardEntry(
@@ -69,6 +69,10 @@ object WireGuardConfParser {
                 ?.takeIf { it > 0 },
         )
     }
+
+    /** Either the default route, or the halves wg-quick configs use to leave the default route alone. */
+    private fun List<String>.routesEverything(): Boolean =
+        "0.0.0.0/0" in this || ("0.0.0.0/1" in this && "128.0.0.0/1" in this)
 
     private fun Map<String, List<String>>.single(key: String): String? =
         this[key.lowercase()]?.lastOrNull()?.takeIf(String::isNotEmpty)

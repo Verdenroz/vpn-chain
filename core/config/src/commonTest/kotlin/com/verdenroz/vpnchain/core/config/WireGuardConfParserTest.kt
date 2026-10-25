@@ -126,6 +126,20 @@ class WireGuardConfParserTest {
     }
 
     @Test
+    fun `accepts a full tunnel written as two halves`() {
+        val entry = WireGuardConfParser.parse(PROTON.replace("0.0.0.0/0", "0.0.0.0/1, 128.0.0.0/1"))
+
+        assertTrue(entry.isSuccess)
+    }
+
+    @Test
+    fun `refuses one half of a split default route`() {
+        val error = failure(PROTON.replace("0.0.0.0/0", "0.0.0.0/1"))
+
+        assertIs<WireGuardConfError.SplitTunnel>(error)
+    }
+
+    @Test
     fun `refuses a split tunnel`() {
         val error = failure(PROTON.replace("0.0.0.0/0", "10.0.0.0/8, 192.168.1.0/24"))
 
@@ -174,6 +188,17 @@ class WireGuardConfParserTest {
     @Test
     fun `refuses text that is not a config`() {
         assertEquals("Config has no peer.", failure("hello").message)
+    }
+
+    @Test
+    fun `secrets stay out of toString`() {
+        val entry = WireGuardConfParser.parse(PROTON.replace("AllowedIPs", "PresharedKey = $PRESHARED\nAllowedIPs"))
+            .getOrThrow()
+
+        val printed = entry.toString()
+
+        assertFalse(PRIVATE in printed)
+        assertFalse(PRESHARED in printed)
     }
 
     @Test

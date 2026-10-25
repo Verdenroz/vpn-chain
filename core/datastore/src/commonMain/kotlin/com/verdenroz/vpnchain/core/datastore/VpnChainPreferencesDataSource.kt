@@ -21,6 +21,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
@@ -57,19 +58,18 @@ class VpnChainPreferencesDataSource(
      */
     private fun readProfiles(prefs: Preferences): List<SavedProfile> {
         prefs[PROFILES_KEY]?.let { raw ->
-            runCatching { decodeProfiles(raw) }
+            runCatching { json.parseToJsonElement(raw).jsonArray }
                 .getOrNull()
-                ?.let { return it }
+                ?.let { entries -> return entries.mapNotNull(::decodeEntry) }
         }
         return prefs[PROFILE_KEY]
             ?.let { raw -> runCatching { listOf(decodeLegacyProfile(raw)) }.getOrNull() }
             ?: emptyList()
     }
 
-    private fun decodeProfiles(raw: String): List<SavedProfile> {
-        val upgraded = JsonArray(json.parseToJsonElement(raw).jsonArray.map(::upgradeProfileShape))
-        return json.decodeFromJsonElement(upgraded)
-    }
+    /** One entry that fails to decode must not take the rest of the list with it. */
+    private fun decodeEntry(entry: JsonElement): SavedProfile? =
+        runCatching { json.decodeFromJsonElement<SavedProfile>(upgradeProfileShape(entry)) }.getOrNull()
 
     private fun decodeLegacyProfile(raw: String): SavedProfile {
         val profile = json.parseToJsonElement(raw).jsonObject
@@ -80,7 +80,7 @@ class VpnChainPreferencesDataSource(
                 "profile" to profile,
             ),
         )
-        return json.decodeFromJsonElement(upgradeProfileShape(wrapped))
+        return decodeEntry(wrapped) ?: error("unreadable legacy profile")
     }
 
     /**
@@ -146,7 +146,13 @@ class VpnChainPreferencesDataSource(
 
     suspend fun setProfiles(profiles: List<SavedProfile>) {
         dataStore.edit { prefs ->
-            prefs[PROFILES_KEY] = json.encodeToString(profiles)
+            // Entries this build cannot read are written back untouched, so a
+            // save never discards a connection a newer shape stored.
+            val unreadable = prefs[PROFILES_KEY]
+                ?.let { raw -> runCatching { json.parseToJsonElement(raw).jsonArray }.getOrNull() }
+                .orEmpty()
+                .filter { decodeEntry(it) == null }
+            prefs[PROFILES_KEY] = JsonArray(json.encodeToJsonElement(profiles).jsonArray + unreadable).toString()
             // The single-slot key has been folded into the list by now; leaving
             // it would resurrect a stale profile if the list ever failed to parse.
             prefs.remove(PROFILE_KEY)

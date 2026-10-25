@@ -153,6 +153,29 @@ class ProfileMigrationTest {
     }
 
     @Test
+    fun `one unreadable entry leaves the rest of the list readable`() = runTest {
+        val store = newStore()
+        store.edit { it[LIST_KEY] = """[{"id":"bad","name":"x"},{"id":"a","name":"one","relay":${relayJson()}}]""" }
+
+        val profiles = VpnChainPreferencesDataSource(store).profiles.first()
+
+        assertEquals(listOf("a"), profiles.map { it.id })
+    }
+
+    @Test
+    fun `saving keeps an entry this build cannot read`() = runTest {
+        val store = newStore()
+        store.edit { it[LIST_KEY] = """[{"id":"bad","name":"x"},{"id":"a","name":"one","relay":${relayJson()}}]""" }
+        val source = VpnChainPreferencesDataSource(store)
+
+        source.setProfiles(source.profiles.first() + SavedProfile(id = "b", name = "two", relay = profile("10.0.0.2")))
+
+        val raw = store.data.first()[LIST_KEY].orEmpty()
+        assertTrue("\"bad\"" in raw)
+        assertEquals(listOf("a", "b"), source.profiles.first().map { it.id })
+    }
+
+    @Test
     fun `no profiles reports nothing active`() = runTest {
         val source = VpnChainPreferencesDataSource(newStore())
 
@@ -186,6 +209,8 @@ private fun entry() = WireGuardEntry(
     peerPublicKey = "peer",
     endpointHost = "203.0.113.9",
 )
+
+private fun relayJson() = LEGACY_JSON
 
 private val LIST_KEY = stringPreferencesKey("chain_profiles_json")
 

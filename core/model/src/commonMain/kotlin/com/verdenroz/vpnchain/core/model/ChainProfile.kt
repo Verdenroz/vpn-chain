@@ -21,6 +21,8 @@ data class WireGuardEntry(
     val mtu: Int? = null,
     val keepaliveSeconds: Int? = null,
 ) {
+    override fun toString() = "WireGuardEntry(endpoint=$endpointHost:$endpointPort)"
+
     companion object {
         const val DEFAULT_ENDPOINT_PORT = 51820
     }
@@ -41,6 +43,8 @@ data class ChainProfile(
     /** Local SOCKS/HTTP proxy the rendered relay listens on. */
     val localProxyPort: Int = DEFAULT_LOCAL_PROXY_PORT,
 ) {
+    override fun toString() = "ChainProfile(server=$vpsIp:$serverPort)"
+
     companion object {
         const val DEFAULT_SNI = "www.samsung.com"
         const val DEFAULT_SERVER_PORT = 443
