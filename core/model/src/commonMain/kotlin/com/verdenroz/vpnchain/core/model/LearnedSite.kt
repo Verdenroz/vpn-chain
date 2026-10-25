@@ -1,0 +1,24 @@
+package com.verdenroz.vpnchain.core.model
+
+import kotlinx.serialization.Serializable
+
+/** Where a learned site leaves the chain. */
+enum class LearnedRoute {
+    /** The relay refuses it and WARP answers, so it takes the tail. */
+    Warp,
+
+    /** Both refuse it, so it stays on the relay. */
+    RefusedByBoth,
+}
+
+/**
+ * A site the chain found out for itself, by probing. [reason] is what the
+ * relay answered with, as a short label.
+ */
+@Serializable
+data class LearnedSite(
+    val domain: String,
+    val reason: String,
+    val learnedAtMillis: Long,
+    val route: LearnedRoute,
+)

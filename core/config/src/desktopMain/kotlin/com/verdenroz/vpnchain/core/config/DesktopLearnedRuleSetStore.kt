@@ -1,0 +1,34 @@
+package com.verdenroz.vpnchain.core.config
+
+import com.verdenroz.vpnchain.core.model.LearnedRoute
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.PosixFilePermissions
+
+/**
+ * Beside the rendered config under systemd, where the relay's own user reads
+ * it through the `vpn-chain` group; in the user's config directory when the
+ * app spawns sing-box itself.
+ */
+class DesktopLearnedRuleSetStore : LearnedRuleSetStore {
+
+    private val dir: File
+        get() = if (SystemdRelay.available) {
+            SystemdRelay.runDir
+        } else {
+            File(System.getProperty("user.home"), ".config/vpn-chain").apply { mkdirs() }
+        }
+
+    override fun path(route: LearnedRoute): String =
+        File(dir, LearnedRuleSet.fileName(route)).absolutePath
+
+    override fun write(route: LearnedRoute, domains: List<String>) {
+        val target = File(path(route)).toPath()
+        val staged = target.resolveSibling("${target.fileName}.tmp")
+        Files.deleteIfExists(staged)
+        Files.createFile(staged, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-r-----")))
+        Files.writeString(staged, LearnedRuleSet.render(domains))
+        Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+    }
+}

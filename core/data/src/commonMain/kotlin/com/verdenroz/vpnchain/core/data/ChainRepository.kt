@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.data
 
+import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
 import com.verdenroz.vpnchain.core.config.renderPlatformTunnelConfig
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.logging.Logger
@@ -77,6 +78,8 @@ internal class DefaultChainRepository(
     private val profileRepository: ProfileRepository,
     private val settingsRepository: SettingsRepository,
     private val warpRepository: WarpRepository,
+    private val learnedSites: LearnedSitesRepository,
+    private val learnedStore: LearnedRuleSetStore,
     private val preferences: VpnChainPreferencesDataSource,
     private val logger: Logger,
     scope: CoroutineScope,
@@ -135,7 +138,11 @@ internal class DefaultChainRepository(
         // tail, never the connect.
         val wantsTail = settings.warpMode != WarpMode.Off && profile.supportsWarpExit
         val warp = if (wantsTail) warpRepository.exit() else null
-        return runCatching { renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp) }
+        return runCatching {
+            // The file has to exist before sing-box loads a config that names it.
+            learnedSites.syncRuleSets()
+            renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp, learnedStore)
+        }
             .onFailure { logger.e(TAG, "config render failed", it) }
             .getOrNull()
     }

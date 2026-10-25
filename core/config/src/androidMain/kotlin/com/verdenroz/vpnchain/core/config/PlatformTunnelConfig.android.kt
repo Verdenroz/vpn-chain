@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.config
 
+import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpExit
@@ -11,6 +12,7 @@ actual fun renderPlatformTunnelConfig(
     profile: SavedProfile,
     settings: UserSettings,
     warp: WarpExit?,
+    learned: LearnedRuleSetStore,
 ): String {
     val relay = profile.relay
         ?: return SingBoxConfigFactory.wireGuardConfig(
@@ -24,6 +26,7 @@ actual fun renderPlatformTunnelConfig(
         warp = warp,
         warpMode = settings.warpMode,
         warpDomains = settings.warpDomains,
-        probe = if (settings.learnBlockedSites) newProbeProxy() else null,
+        probe = if (settings.learningActive) newProbeProxy() else null,
+        learnedWarpPath = learned.path(LearnedRoute.Warp),
     )
 }

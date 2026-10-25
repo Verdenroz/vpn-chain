@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.verdenroz.vpnchain.core.model.DnsFilter
+import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
@@ -115,6 +116,7 @@ class VpnChainPreferencesDataSource(
                 ?.let { raw -> runCatching { json.decodeFromString<List<String>>(raw) }.getOrNull() }
                 ?.takeUnless { it == LEGACY_WARP_SEED }
                 ?: emptyList(),
+            learnBlockedSites = prefs[LEARN_BLOCKED_SITES_KEY] ?: true,
             autoConnectOnLaunch = prefs[AUTO_CONNECT_ON_LAUNCH_KEY] ?: false,
             autoReconnect = prefs[AUTO_RECONNECT_KEY] ?: true,
             autoStartOnLogin = prefs[AUTO_START_ON_LOGIN_KEY] ?: false,
@@ -198,6 +200,40 @@ class VpnChainPreferencesDataSource(
         dataStore.edit { it[WARP_DOMAINS_KEY] = json.encodeToString(domains) }
     }
 
+    suspend fun setLearnBlockedSites(enabled: Boolean) {
+        dataStore.edit { it[LEARN_BLOCKED_SITES_KEY] = enabled }
+    }
+
+    val learnedSites: Flow<List<LearnedSite>> = dataStore.data.map(::readLearned)
+
+    /** Domains whose learning is paused, with the time it resumes. */
+    val learnedSuppressions: Flow<Map<String, Long>> = dataStore.data.map(::readSuppressed)
+
+    /** Replaces any earlier entry for the same domain. */
+    suspend fun putLearnedSite(site: LearnedSite) {
+        dataStore.edit { prefs ->
+            val kept = readLearned(prefs).filterNot { it.domain == site.domain }
+            prefs[LEARNED_SITES_KEY] = json.encodeToString(kept + site)
+        }
+    }
+
+    /** Drops the entry and stops it being learned again until [suppressUntilMillis]. */
+    suspend fun removeLearnedSite(domain: String, suppressUntilMillis: Long) {
+        dataStore.edit { prefs ->
+            prefs[LEARNED_SITES_KEY] = json.encodeToString(readLearned(prefs).filterNot { it.domain == domain })
+            prefs[LEARNED_SUPPRESSED_KEY] =
+                json.encodeToString(readSuppressed(prefs) + (domain to suppressUntilMillis))
+        }
+    }
+
+    private fun readLearned(prefs: Preferences): List<LearnedSite> = prefs[LEARNED_SITES_KEY]
+        ?.let { raw -> runCatching { json.decodeFromString<List<LearnedSite>>(raw) }.getOrNull() }
+        .orEmpty()
+
+    private fun readSuppressed(prefs: Preferences): Map<String, Long> = prefs[LEARNED_SUPPRESSED_KEY]
+        ?.let { raw -> runCatching { json.decodeFromString<Map<String, Long>>(raw) }.getOrNull() }
+        .orEmpty()
+
     /**
      * The registered WARP tail, or null before one exists. A private key like
      * any other in here: never logged, never exported with the profile.
@@ -251,6 +287,9 @@ class VpnChainPreferencesDataSource(
         val ENTRY_HOP_ENABLED_KEY = booleanPreferencesKey("entry_hop_enabled")
         val WARP_MODE_KEY = stringPreferencesKey("warp_mode")
         val WARP_DOMAINS_KEY = stringPreferencesKey("warp_domains_json")
+        val LEARN_BLOCKED_SITES_KEY = booleanPreferencesKey("learn_blocked_sites")
+        val LEARNED_SITES_KEY = stringPreferencesKey("learned_sites_json")
+        val LEARNED_SUPPRESSED_KEY = stringPreferencesKey("learned_suppressed_json")
         val WARP_EXIT_KEY = stringPreferencesKey("warp_exit_json")
         val LAST_ORIGIN_IP_KEY = stringPreferencesKey("last_origin_ip")
         val AUTO_CONNECT_ON_LAUNCH_KEY = booleanPreferencesKey("auto_connect_on_launch")

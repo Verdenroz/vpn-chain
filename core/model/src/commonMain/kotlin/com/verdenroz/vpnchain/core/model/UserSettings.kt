@@ -86,7 +86,10 @@ data class UserSettings(
      * On by default — a VPN you dismissed is not a VPN you meant to turn off.
      */
     val closeToTray: Boolean = true,
-)
+) {
+    /** Detection only has anything to route in blocked-sites mode. */
+    val learningActive: Boolean get() = learnBlockedSites && warpMode == WarpMode.BlockedSites
+}
 
 /**
  * The profile as the chain should actually dial it under these settings.

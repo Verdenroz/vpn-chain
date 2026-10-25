@@ -18,6 +18,7 @@ interface SettingsRepository {
     suspend fun setEntryHopEnabled(enabled: Boolean)
     suspend fun setWarpMode(mode: WarpMode)
     suspend fun setWarpDomains(domains: List<String>)
+    suspend fun setLearnBlockedSites(enabled: Boolean)
     suspend fun setAutoConnectOnLaunch(enabled: Boolean)
     suspend fun setAutoReconnect(enabled: Boolean)
     suspend fun setCloseToTray(enabled: Boolean)
@@ -59,6 +60,8 @@ internal class DefaultSettingsRepository(
         preferences.setWarpMode(mode)
     override suspend fun setWarpDomains(domains: List<String>) =
         preferences.setWarpDomains(domains)
+    override suspend fun setLearnBlockedSites(enabled: Boolean) =
+        preferences.setLearnBlockedSites(enabled)
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) =
         preferences.setAutoConnectOnLaunch(enabled)
     override suspend fun setAutoReconnect(enabled: Boolean) =

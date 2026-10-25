@@ -15,9 +15,12 @@ import com.verdenroz.vpnchain.core.model.WarpExit
  * [warp] carries the tail exit's credentials, or null when there are none to
  * use — never registered, or registration failed. A null renders the chain
  * without a tail rather than refusing to render at all.
+ *
+ * [learned] locates the rule-set files holding the sites detection found.
  */
 expect fun renderPlatformTunnelConfig(
     profile: SavedProfile,
     settings: UserSettings,
     warp: WarpExit?,
+    learned: LearnedRuleSetStore,
 ): String

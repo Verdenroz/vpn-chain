@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.common.PrivateStorage
+import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpExit
@@ -17,6 +18,7 @@ actual fun renderPlatformTunnelConfig(
     profile: SavedProfile,
     settings: UserSettings,
     warp: WarpExit?,
+    learned: LearnedRuleSetStore,
 ): String {
     val relay = profile.relay
     val clashApi = newClashApi()
@@ -24,7 +26,7 @@ actual fun renderPlatformTunnelConfig(
     // this user's home nor its stdout.
     val cachePath = if (SystemdRelay.available) SystemdRelay.cachePath else cacheFilePath()
     val logPath = if (SystemdRelay.available) SystemdRelay.logFile.absolutePath else null
-    val probe = if (settings.learnBlockedSites) newProbeProxy() else null
+    val probe = if (settings.learningActive) newProbeProxy() else null
     // No relay means no SOCKS-proxy shape to fall back on: a bare WireGuard
     // peer only exists as a TUN.
     return if (relay == null) {
@@ -49,6 +51,7 @@ actual fun renderPlatformTunnelConfig(
             allowLocalNetworks = settings.allowLocalNetworks,
             logPath = logPath,
             probe = probe,
+            learnedWarpPath = learned.path(LearnedRoute.Warp),
         )
     } else {
         SingBoxConfigFactory.mixedProxyConfig(
@@ -58,6 +61,7 @@ actual fun renderPlatformTunnelConfig(
             warpMode = settings.warpMode,
             warpDomains = settings.warpDomains,
             probe = probe,
+            learnedWarpPath = learned.path(LearnedRoute.Warp),
         )
     }
 }

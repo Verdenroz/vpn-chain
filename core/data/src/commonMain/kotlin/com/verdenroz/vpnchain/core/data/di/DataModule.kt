@@ -7,11 +7,13 @@ import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ConnectivityRepository
 import com.verdenroz.vpnchain.core.data.DefaultChainRepository
 import com.verdenroz.vpnchain.core.data.DefaultConnectivityRepository
+import com.verdenroz.vpnchain.core.data.DefaultLearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.DefaultLogRepository
 import com.verdenroz.vpnchain.core.data.DefaultOriginRepository
 import com.verdenroz.vpnchain.core.data.DefaultProfileRepository
 import com.verdenroz.vpnchain.core.data.DefaultSettingsRepository
 import com.verdenroz.vpnchain.core.data.DefaultWarpRepository
+import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.LogRepository
 import com.verdenroz.vpnchain.core.data.OriginRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
@@ -39,6 +41,13 @@ val dataModule = module {
             now = ::currentTimeMillis,
         )
     }
+    single<LearnedSitesRepository> {
+        DefaultLearnedSitesRepository(
+            preferences = get(),
+            store = get(),
+            now = ::currentTimeMillis,
+        )
+    }
     // Named rather than positional: every collaborator here is resolved by a
     // bare get(), so a reordered parameter would bind silently and wrongly.
     // Eager: it has to be watching for out-of-app stops (Android's notification
@@ -49,6 +58,8 @@ val dataModule = module {
             profileRepository = get(),
             settingsRepository = get(),
             warpRepository = get(),
+            learnedSites = get(),
+            learnedStore = get(),
             preferences = get(),
             logger = get(),
             scope = get<CoroutineScope>(applicationScopeQualifier),

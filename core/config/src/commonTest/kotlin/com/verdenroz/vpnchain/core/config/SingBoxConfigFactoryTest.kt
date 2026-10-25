@@ -662,4 +662,64 @@ class SingBoxConfigFactoryTest {
         assertEquals(probe(), ProbeProxy.fromConfig(raw))
         assertEquals(null, ProbeProxy.fromConfig(SingBoxConfigFactory.androidChainConfig(profile())))
     }
+
+    @Test
+    fun `learned sites are a local rule-set routed to the tail beside the manual list`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(),
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                warpDomains = listOf("manual.com"),
+                learnedWarpPath = "/run/learned-warp.json",
+            ),
+        )
+
+        val route = config.getValue("route").jsonObject
+        val set = route.array("rule_set").taggedWith("learned-warp")
+        assertEquals("local", set?.getValue("type")?.jsonPrimitive?.content)
+        assertEquals("source", set?.getValue("format")?.jsonPrimitive?.content)
+        assertEquals("/run/learned-warp.json", set?.getValue("path")?.jsonPrimitive?.content)
+        val rules = route.array("rules").map { it.jsonObject }
+        val learned = rules.single { "rule_set" in it }
+        assertEquals("warp-exit", learned.getValue("outbound").jsonPrimitive.content)
+        assertTrue(rules.indexOf(learned) > rules.indexOfFirst { "domain_suffix" in it })
+    }
+
+    @Test
+    fun `learned sites share the rule-set list with the blocklists`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(),
+                dnsFilter = DnsFilter.Malware,
+                warp = warp(),
+                warpMode = WarpMode.BlockedSites,
+                learnedWarpPath = "/run/learned-warp.json",
+            ),
+        )
+
+        val tags = config.getValue("route").jsonObject.array("rule_set").map { it.jsonObject.getValue("tag").jsonPrimitive.content }
+        assertEquals(listOf("blocklist-threats", "learned-warp"), tags)
+    }
+
+    @Test
+    fun `learned sites are ignored outside blocked-sites mode`() {
+        val raw = SingBoxConfigFactory.androidChainConfig(
+            profile(),
+            warp = warp(),
+            warpMode = WarpMode.AllTraffic,
+            learnedWarpPath = "/run/learned-warp.json",
+        )
+
+        assertFalse("learned-warp" in raw)
+    }
+
+    @Test
+    fun `the rule-set file lists the domains as suffixes`() {
+        val parsed = parse(LearnedRuleSet.render(listOf("a.com", "b.org")))
+
+        assertEquals(1, parsed.getValue("version").jsonPrimitive.int)
+        val suffixes = parsed.array("rules").single().jsonObject.array("domain_suffix").map { it.jsonPrimitive.content }
+        assertEquals(listOf("a.com", "b.org"), suffixes)
+    }
 }

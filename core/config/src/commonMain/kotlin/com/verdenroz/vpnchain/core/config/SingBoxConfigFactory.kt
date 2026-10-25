@@ -35,9 +35,11 @@ object SingBoxConfigFactory {
         warpMode: WarpMode = WarpMode.Off,
         warpDomains: List<String> = emptyList(),
         probe: ProbeProxy? = null,
+        learnedWarpPath: String? = null,
     ): String {
         val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
-        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null) }
+        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null || learnedWarpPath != null) }
+        val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.BlockedSites }
         return render {
             putInfoLog()
             putExperimental(clashApi, cacheFile = false, cachePath = null)
@@ -59,12 +61,14 @@ object SingBoxConfigFactory {
             }
             putJsonObject("route") {
                 put("auto_detect_interface", false)
+                putRuleSets(DnsFilter.Off, learnedPath)
                 putJsonArray("rules") {
                     addJsonObject { put("action", "sniff") }
                     probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy") }
                     if (tail != null && warpMode == WarpMode.BlockedSites && tailDomains.isNotEmpty()) {
                         addWarpDomainRule(tailDomains)
                     }
+                    learnedPath?.let { addLearnedWarpRule() }
                 }
                 put("final", if (tail != null && warpMode == WarpMode.AllTraffic) WARP_TAG else "proxy")
             }
@@ -88,13 +92,15 @@ object SingBoxConfigFactory {
         allowLocalNetworks: Boolean = false,
         logPath: String? = null,
         probe: ProbeProxy? = null,
+        learnedWarpPath: String? = null,
     ): String {
         val filtering = dnsFilter != DnsFilter.Off
         val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
         // No credentials means no tail, whatever the mode says: registration
         // can fail on a network that blocks Cloudflare, and the chain still has
         // to come up — one hop shorter, not not at all.
-        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null) }
+        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null || learnedWarpPath != null) }
+        val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.BlockedSites }
         return render {
             putInfoLog(logPath)
             // The rule-set is remote, so it needs somewhere to persist between
@@ -134,13 +140,14 @@ object SingBoxConfigFactory {
             }
             putJsonObject("route") {
                 put("auto_detect_interface", true)
-                if (filtering) putBlocklistRuleSet(dnsFilter)
+                putRuleSets(dnsFilter, learnedPath)
                 putJsonArray("rules") {
                     addTunBaseRules()
                     probe?.let { addProbeRules(withWarp = tail != null, relayTag = VLESS_TAG) }
                     if (tail != null && warpMode == WarpMode.BlockedSites && tailDomains.isNotEmpty()) {
                         addWarpDomainRule(tailDomains)
                     }
+                    learnedPath?.let { addLearnedWarpRule() }
                 }
                 put(
                     "final",
@@ -180,7 +187,7 @@ object SingBoxConfigFactory {
             putJsonArray("outbounds") { addDirectOutbound() }
             putJsonObject("route") {
                 put("auto_detect_interface", true)
-                if (filtering) putBlocklistRuleSet(dnsFilter, detour = ENTRY_HOP_TAG)
+                putRuleSets(dnsFilter, learnedWarpPath = null, detour = ENTRY_HOP_TAG)
                 putJsonArray("rules") { addTunBaseRules() }
                 put("final", ENTRY_HOP_TAG)
             }
@@ -238,24 +245,38 @@ object SingBoxConfigFactory {
         }
     }
 
+    private fun JsonObjectBuilder.putRuleSets(
+        filter: DnsFilter,
+        learnedWarpPath: String?,
+        detour: String = VLESS_TAG,
+    ) {
+        val blocklists = blocklistsFor(filter)
+        if (blocklists.isEmpty() && learnedWarpPath == null) return
+        putJsonArray("rule_set") {
+            blocklists.forEach { addBlocklistRuleSet(it, detour) }
+            learnedWarpPath?.let { path ->
+                addJsonObject {
+                    put("type", "local")
+                    put("tag", LEARNED_WARP_TAG)
+                    put("format", "source")
+                    put("path", path)
+                }
+            }
+        }
+    }
+
     /**
      * Downloaded through the chain, never around it — a blocklist fetched over
      * the bare link would announce the app to the network it is hiding from.
      * Binary `.srs` is the compiled form sing-box loads directly.
      */
-    private fun JsonObjectBuilder.putBlocklistRuleSet(filter: DnsFilter, detour: String = VLESS_TAG) {
-        putJsonArray("rule_set") {
-            blocklistsFor(filter).forEach { list ->
-                addJsonObject {
-                    put("type", "remote")
-                    put("tag", list.tag)
-                    put("format", "binary")
-                    put("url", list.url)
-                    put("download_detour", detour)
-                    put("update_interval", "168h")
-                }
-            }
-        }
+    private fun JsonArrayBuilder.addBlocklistRuleSet(list: Blocklist, detour: String) = addJsonObject {
+        put("type", "remote")
+        put("tag", list.tag)
+        put("format", "binary")
+        put("url", list.url)
+        put("download_detour", detour)
+        put("update_interval", "168h")
     }
 
     private fun blocklistsFor(filter: DnsFilter): List<Blocklist> = when (filter) {
@@ -461,6 +482,13 @@ object SingBoxConfigFactory {
         put("outbound", WARP_TAG)
     }
 
+    /** A separate rule from the manual list: fields in one rule are ANDed, not ORed. */
+    private fun JsonArrayBuilder.addLearnedWarpRule() = addJsonObject {
+        putJsonArray("rule_set") { add(LEARNED_WARP_TAG) }
+        put("action", "route")
+        put("outbound", WARP_TAG)
+    }
+
     /**
      * Users type what they read in a URL bar, so a pasted `https://example.com/`
      * or `*.example.com` has to arrive as the bare suffix sing-box matches on.
@@ -491,6 +519,7 @@ object SingBoxConfigFactory {
     private const val VLESS_TAG = "vless-proxy"
     private const val ENTRY_HOP_TAG = "entry-hop"
     private const val WARP_TAG = "warp-exit"
+    private const val LEARNED_WARP_TAG = "learned-warp"
 
     private data class Blocklist(val tag: String, val url: String)
 

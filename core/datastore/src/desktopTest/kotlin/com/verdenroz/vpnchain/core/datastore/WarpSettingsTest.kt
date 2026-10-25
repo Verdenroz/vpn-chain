@@ -5,6 +5,8 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.verdenroz.vpnchain.core.model.LearnedRoute
+import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -86,6 +88,38 @@ class WarpSettingsTest {
         source.setWarpDomains(listOf("example.com"))
 
         assertEquals(listOf("example.com"), source.settings.first().warpDomains)
+    }
+
+    @Test
+    fun `learning is on by default and the switch persists`() = runTest {
+        val source = VpnChainPreferencesDataSource(newStore())
+        assertTrue(source.settings.first().learnBlockedSites)
+
+        source.setLearnBlockedSites(false)
+
+        assertEquals(false, source.settings.first().learnBlockedSites)
+    }
+
+    @Test
+    fun `a learned site survives a reread and is replaced by domain`() = runTest {
+        val source = VpnChainPreferencesDataSource(newStore())
+        val site = LearnedSite("example.com", "403", 5L, LearnedRoute.Warp)
+
+        source.putLearnedSite(site)
+        source.putLearnedSite(site.copy(reason = "challenge"))
+
+        assertEquals(listOf(site.copy(reason = "challenge")), source.learnedSites.first())
+    }
+
+    @Test
+    fun `removing a learned site records when it may be learned again`() = runTest {
+        val source = VpnChainPreferencesDataSource(newStore())
+        source.putLearnedSite(LearnedSite("example.com", "403", 5L, LearnedRoute.Warp))
+
+        source.removeLearnedSite("example.com", suppressUntilMillis = 99L)
+
+        assertTrue(source.learnedSites.first().isEmpty())
+        assertEquals(mapOf("example.com" to 99L), source.learnedSuppressions.first())
     }
 
     private val OLD_SEED = listOf(
