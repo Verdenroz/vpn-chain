@@ -174,6 +174,51 @@ class KillSwitchHelperTest {
 
         assertEquals(null, result)
         assertEquals(listOf(listOf("down")), calls)
+    private val mark = listOf("--allow-mark", "0x760000")
+
+    private fun marked(calls: MutableList<List<String>>, refused: MutableList<Unit>, answer: (List<String>) -> HelperOutcome) =
+        runBlocking {
+            engageKillSwitch(ips, allowLocal = false, run = { calls += it; answer(it) }, markArgs = mark) { refused += Unit }
+        }
+
+    @Test
+    fun `a helper that rejects the mark is run again once without it`() {
+        val calls = mutableListOf<List<String>>()
+        val refused = mutableListOf<Unit>()
+
+        val result = marked(calls, refused) { if (it.containsAll(mark)) HelperOutcome.Exited(2, "unknown option") else HelperOutcome.Exited(0, "") }
+
+        assertEquals(KillSwitchEngagement(null, engaged = true), result)
+        assertEquals(listOf(listOf("up") + mark + ips, listOf("up") + ips), calls)
+        assertEquals(1, refused.size)
+    }
+
+    @Test
+    fun `a failed retry without the mark still asks status`() {
+        val calls = mutableListOf<List<String>>()
+
+        val result = marked(calls, mutableListOf()) { if (it.first() == "status") HelperOutcome.Exited(0, "") else HelperOutcome.Exited(2, "") }
+
+        assertEquals(KillSwitchEngagement(KillSwitchState.HelperFailed, engaged = true), result)
+        assertEquals(listOf(listOf("up") + mark + ips, listOf("up") + ips, listOf("status")), calls)
+    }
+
+    @Test
+    fun `any other failure with the mark is not retried`() {
+        val calls = mutableListOf<List<String>>()
+
+        marked(calls, mutableListOf()) { if (it.first() == "status") HelperOutcome.Exited(1, "") else HelperOutcome.Exited(1, "") }
+
+        assertEquals(listOf(listOf("up") + mark + ips, listOf("status")), calls)
+    }
+
+    @Test
+    fun `without a mark a usage error is final`() {
+        val calls = mutableListOf<List<String>>()
+
+        runBlocking { engageKillSwitch(ips, allowLocal = false, run = { calls += it; HelperOutcome.Exited(2, "") }) }
+
+        assertEquals(listOf(listOf("up") + ips, listOf("status")), calls)
     }
 
     private fun rearm(
