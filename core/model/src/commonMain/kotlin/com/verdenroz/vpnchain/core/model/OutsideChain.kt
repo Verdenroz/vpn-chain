@@ -18,6 +18,6 @@ data class OutsideChainSite(val domain: String, val exit: OutsideExit)
  * entry hop reads as the bare link.
  */
 fun LearnedSite.outsideExit(settings: UserSettings, profile: ChainProfile?): OutsideExit? {
-    if (route != LearnedRoute.FailOpen || !settings.failOpen || settings.warpMode != WarpMode.BlockedSites) return null
+    if (route != LearnedRoute.FailOpen || !settings.failOpen || settings.warpMode != WarpMode.Automatic) return null
     return if (profile?.effectiveFor(settings)?.entryHop != null) OutsideExit.EntryHop else OutsideExit.Direct
 }

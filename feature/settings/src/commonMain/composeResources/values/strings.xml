@@ -39,10 +39,8 @@
     <string name="settings_warp_title">Cloudflare WARP exit</string>
     <string name="settings_warp_detail">Adds a Cloudflare hop after the relay, so sites see Cloudflare's address instead of your VPS. Fixes sites that refuse datacenter addresses outright. Cloudflare then sees which sites you reach — it still never sees this device, only the relay.</string>
     <string name="settings_warp_off">off</string>
-    <string name="settings_warp_blocked">blocked sites</string>
+    <string name="settings_warp_automatic">automatic</string>
     <string name="settings_warp_all">everything</string>
-    <string name="settings_warp_domains_label">always via WARP</string>
-    <string name="settings_warp_domains_hint">One per line.</string>
     <string name="settings_learn_title">Learn blocked sites</string>
     <string name="settings_fail_open_title">Fail open when both are refused</string>
     <string name="settings_learned_title">learned</string>

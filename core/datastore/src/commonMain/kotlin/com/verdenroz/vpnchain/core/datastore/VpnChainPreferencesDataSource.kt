@@ -109,13 +109,7 @@ class VpnChainPreferencesDataSource(
             entryHopEnabled = prefs[ENTRY_HOP_ENABLED_KEY] ?: true,
             warpMode = prefs[WARP_MODE_KEY]
                 ?.let { raw -> runCatching { WarpMode.valueOf(raw) }.getOrNull() }
-                ?: WarpMode.BlockedSites,
-            // The old seed pinned sites to the tail that it can't reach either,
-            // so a stored list that is still exactly that seed reads as empty.
-            warpDomains = prefs[WARP_DOMAINS_KEY]
-                ?.let { raw -> runCatching { json.decodeFromString<List<String>>(raw) }.getOrNull() }
-                ?.takeUnless { it == LEGACY_WARP_SEED }
-                ?: emptyList(),
+                ?: WarpMode.Automatic,
             learnBlockedSites = prefs[LEARN_BLOCKED_SITES_KEY] ?: true,
             failOpen = prefs[FAIL_OPEN_KEY] ?: true,
             autoConnectOnLaunch = prefs[AUTO_CONNECT_ON_LAUNCH_KEY] ?: false,
@@ -195,10 +189,6 @@ class VpnChainPreferencesDataSource(
 
     suspend fun setWarpMode(mode: WarpMode) {
         dataStore.edit { it[WARP_MODE_KEY] = mode.name }
-    }
-
-    suspend fun setWarpDomains(domains: List<String>) {
-        dataStore.edit { it[WARP_DOMAINS_KEY] = json.encodeToString(domains) }
     }
 
     suspend fun setLearnBlockedSites(enabled: Boolean) {
@@ -285,16 +275,6 @@ class VpnChainPreferencesDataSource(
         val PROFILES_KEY = stringPreferencesKey("chain_profiles_json")
         val ACTIVE_PROFILE_ID_KEY = stringPreferencesKey("active_profile_id")
         const val LEGACY_PROFILE_ID = "legacy"
-        val LEGACY_WARP_SEED = listOf(
-            "reddit.com",
-            "redd.it",
-            "redditmedia.com",
-            "redditstatic.com",
-            "chatgpt.com",
-            "openai.com",
-            "oaistatic.com",
-            "oaiusercontent.com",
-        )
         val THEME_KEY = stringPreferencesKey("theme_config")
         val SYSTEM_WIDE_TUN_KEY = booleanPreferencesKey("system_wide_tun")
         val KILL_SWITCH_ENABLED_KEY = booleanPreferencesKey("kill_switch_enabled")
@@ -302,7 +282,6 @@ class VpnChainPreferencesDataSource(
         val DNS_FILTER_KEY = stringPreferencesKey("dns_filter")
         val ENTRY_HOP_ENABLED_KEY = booleanPreferencesKey("entry_hop_enabled")
         val WARP_MODE_KEY = stringPreferencesKey("warp_mode")
-        val WARP_DOMAINS_KEY = stringPreferencesKey("warp_domains_json")
         val LEARN_BLOCKED_SITES_KEY = booleanPreferencesKey("learn_blocked_sites")
         val FAIL_OPEN_KEY = booleanPreferencesKey("fail_open")
         val LEARNED_SITES_KEY = stringPreferencesKey("learned_sites_json")

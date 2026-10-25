@@ -6,12 +6,12 @@ import com.verdenroz.vpnchain.core.designsystem.component.PanelSelector
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_all
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_blocked
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_automatic
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_off
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** How much of the chain's traffic takes the WARP tail — off, some, or all. */
+/** How much of the chain's traffic takes the WARP tail: off, what detection finds, or all. */
 @Composable
 fun WarpModePicker(
     selected: WarpMode,
@@ -29,6 +29,6 @@ fun WarpModePicker(
 
 private fun WarpMode.labelRes(): StringResource = when (this) {
     WarpMode.Off -> Res.string.settings_warp_off
-    WarpMode.BlockedSites -> Res.string.settings_warp_blocked
+    WarpMode.Automatic -> Res.string.settings_warp_automatic
     WarpMode.AllTraffic -> Res.string.settings_warp_all
 }

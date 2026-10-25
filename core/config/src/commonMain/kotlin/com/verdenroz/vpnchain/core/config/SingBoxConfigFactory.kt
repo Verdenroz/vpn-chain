@@ -33,16 +33,14 @@ object SingBoxConfigFactory {
         clashApi: ClashApi? = null,
         warp: WarpExit? = null,
         warpMode: WarpMode = WarpMode.Off,
-        warpDomains: List<String> = emptyList(),
         probe: ProbeProxy? = null,
         learnedWarpPath: String? = null,
         learnedOpenPath: String? = null,
         failOpen: Boolean = false,
     ): String {
-        val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
-        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null || learnedWarpPath != null) }
-        val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.BlockedSites }
-        val openPath = learnedOpenPath.takeIf { failOpen && warpMode == WarpMode.BlockedSites }
+        val tail = warp.takeIf { warpMode != WarpMode.Off }
+        val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.Automatic }
+        val openPath = learnedOpenPath.takeIf { failOpen && warpMode == WarpMode.Automatic }
         return render {
             putInfoLog()
             putExperimental(clashApi, cacheFile = false, cachePath = null)
@@ -68,9 +66,6 @@ object SingBoxConfigFactory {
                 putJsonArray("rules") {
                     addJsonObject { put("action", "sniff") }
                     probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy", fallbackTag = DIRECT_TAG.takeIf { failOpen }) }
-                    if (tail != null && warpMode == WarpMode.BlockedSites && tailDomains.isNotEmpty()) {
-                        addWarpDomainRule(tailDomains)
-                    }
                     learnedPath?.let { addLearnedRule(LEARNED_WARP_TAG, WARP_TAG) }
                     openPath?.let { addLearnedRule(LEARNED_OPEN_TAG, DIRECT_TAG) }
                 }
@@ -92,7 +87,6 @@ object SingBoxConfigFactory {
         cachePath: String? = null,
         warp: WarpExit? = null,
         warpMode: WarpMode = WarpMode.Off,
-        warpDomains: List<String> = emptyList(),
         allowLocalNetworks: Boolean = false,
         logPath: String? = null,
         probe: ProbeProxy? = null,
@@ -101,13 +95,12 @@ object SingBoxConfigFactory {
         failOpen: Boolean = false,
     ): String {
         val filtering = dnsFilter != DnsFilter.Off
-        val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
         // No credentials means no tail, whatever the mode says: registration
         // can fail on a network that blocks Cloudflare, and the chain still has
         // to come up — one hop shorter, not not at all.
-        val tail = warp.takeIf { warpMode.carriesTraffic(tailDomains, probe != null || learnedWarpPath != null) }
-        val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.BlockedSites }
-        val openPath = learnedOpenPath.takeIf { failOpen && warpMode == WarpMode.BlockedSites }
+        val tail = warp.takeIf { warpMode != WarpMode.Off }
+        val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.Automatic }
+        val openPath = learnedOpenPath.takeIf { failOpen && warpMode == WarpMode.Automatic }
         // Past the relay, not through it: the entry hop alone, or the bare link without one.
         val openTag = if (entry != null) ENTRY_HOP_TAG else DIRECT_TAG
         return render {
@@ -158,9 +151,6 @@ object SingBoxConfigFactory {
                             relayTag = VLESS_TAG,
                             fallbackTag = openTag.takeIf { failOpen },
                         )
-                    }
-                    if (tail != null && warpMode == WarpMode.BlockedSites && tailDomains.isNotEmpty()) {
-                        addWarpDomainRule(tailDomains)
                     }
                     learnedPath?.let { addLearnedRule(LEARNED_WARP_TAG, WARP_TAG) }
                     openPath?.let { addLearnedRule(LEARNED_OPEN_TAG, openTag) }
@@ -501,43 +491,11 @@ object SingBoxConfigFactory {
         }
     }
 
-    /** Sends just the listed names down the tail; everything else keeps the relay's exit. */
-    private fun JsonArrayBuilder.addWarpDomainRule(domains: List<String>) = addJsonObject {
-        putJsonArray("domain_suffix") { domains.forEach { add(it) } }
-        put("action", "route")
-        put("outbound", WARP_TAG)
-    }
-
-    /** A separate rule from the manual list: fields in one rule are ANDed, not ORed. */
-    private fun JsonArrayBuilder.addLearnedRule(ruleSet: String, outbound: String) = addJsonObject {
+        private fun JsonArrayBuilder.addLearnedRule(ruleSet: String, outbound: String) = addJsonObject {
         putJsonArray("rule_set") { add(ruleSet) }
         put("action", "route")
         put("outbound", outbound)
     }
-
-    /**
-     * Users type what they read in a URL bar, so a pasted `https://example.com/`
-     * or `*.example.com` has to arrive as the bare suffix sing-box matches on.
-     * Anything left without a dot was never a domain and is dropped, rather
-     * than rendered as a rule that silently matches nothing.
-     */
-    /**
-     * Selective mode with an empty list routes nothing, so the tail is left
-     * out entirely rather than declared as an endpoint nothing ever reaches.
-     */
-    private fun WarpMode.carriesTraffic(domains: List<String>, probing: Boolean): Boolean = when (this) {
-        WarpMode.Off -> false
-        WarpMode.BlockedSites -> domains.isNotEmpty() || probing
-        WarpMode.AllTraffic -> true
-    }
-
-    private fun normalizeSuffix(raw: String): String? = raw.trim()
-        .lowercase()
-        .substringAfter("://")
-        .substringBefore('/')
-        .removePrefix("*")
-        .trim('.')
-        .takeIf { it.isNotEmpty() && '.' in it }
 
     private val LOCAL_ROUTE_EXCLUDES =
         listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16")

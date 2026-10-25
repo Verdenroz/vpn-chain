@@ -72,7 +72,7 @@ private class LearnerWorld(
     val fetcher = ScriptedFetcher(script)
     val gate = MutableStateFlow(true)
     val status = MutableStateFlow(ChainStatus(state = TunnelState.Connected))
-    val settings = MutableStateFlow(UserSettings(warpMode = WarpMode.BlockedSites))
+    val settings = MutableStateFlow(UserSettings(warpMode = WarpMode.Automatic))
     val sessions = LearningSessionStore().apply { current.value = LearningSession(PROBE, clashApi = null) }
     val learned = DefaultLearnedSitesRepository(preferences, NoopStore(), now = { 1L })
 
@@ -188,13 +188,11 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `sites on the manual list or removed by the user are not probed`() = runTest {
+    fun `sites removed by the user are not probed`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, _ -> OPEN }
-        world.settings.value = world.settings.value.copy(warpDomains = listOf("manual.com"))
         world.learned.remove("removed.com")
         runCurrent()
 
-        world.feed.hosts.emit("www.manual.com")
         world.feed.hosts.emit("removed.com")
         runCurrent()
 

@@ -54,12 +54,7 @@ data class UserSettings(
      * the other direction: it costs nothing measurable in speed and denies
      * sites a single-tenant address to fingerprint you by.
      */
-    val warpMode: WarpMode = WarpMode.BlockedSites,
-    /**
-     * Domains [WarpMode.BlockedSites] always routes down the tail, whatever
-     * detection finds. Suffix matches, so `example.com` covers its subdomains.
-     */
-    val warpDomains: List<String> = emptyList(),
+    val warpMode: WarpMode = WarpMode.Automatic,
     /**
      * Probe new destinations through the relay, and through the tail when the
      * relay is refused, and route the sites only the tail can reach down it.
@@ -93,8 +88,8 @@ data class UserSettings(
      */
     val closeToTray: Boolean = true,
 ) {
-    /** Detection only has anything to route in blocked-sites mode. */
-    val learningActive: Boolean get() = learnBlockedSites && warpMode == WarpMode.BlockedSites
+    /** Detection only has anything to route in automatic mode. */
+    val learningActive: Boolean get() = learnBlockedSites && warpMode == WarpMode.Automatic
 }
 
 /**

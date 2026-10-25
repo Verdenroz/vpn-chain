@@ -51,8 +51,8 @@ enum class WarpMode {
     /** Exit from the relay VPS, as the chain did before WARP existed. */
     Off,
 
-    /** Only [UserSettings.warpDomains] take the WARP tail. */
-    BlockedSites,
+    /** Sites found to refuse the relay, by probing, take the WARP tail. */
+    Automatic,
 
     /** Everything exits through WARP. */
     AllTraffic,

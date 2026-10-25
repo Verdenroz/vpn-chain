@@ -391,91 +391,16 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `blocked-sites mode routes only the listed names and leaves the exit alone`() {
+    fun `automatic mode declares the tail but leaves the exit alone`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
                 profile(), entry(),
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
-                warpDomains = listOf("reddit.com", "chatgpt.com"),
+                warpMode = WarpMode.Automatic,
             ),
         )
 
-        val route = config.getValue("route").jsonObject
-        assertEquals("vless-proxy", route.getValue("final").jsonPrimitive.content)
-        val rule = route.array("rules").map { it.jsonObject }.single { "domain_suffix" in it }
-        assertEquals("warp-exit", rule.getValue("outbound").jsonPrimitive.content)
-        assertEquals("route", rule.getValue("action").jsonPrimitive.content)
-        val suffixes = rule.array("domain_suffix").map { it.jsonPrimitive.content }
-        assertTrue("reddit.com" in suffixes, suffixes.toString())
-        assertTrue("chatgpt.com" in suffixes, suffixes.toString())
-    }
-
-    /**
-     * The stored list is the whole rule — nothing is merged in underneath it,
-     * or removing an entry in settings wouldn't actually stop routing it.
-     */
-    @Test
-    fun `only the given domains are routed, with no built-in list behind them`() {
-        val config = parse(
-            SingBoxConfigFactory.androidChainConfig(
-                profile(),
-                warp = warp(),
-                warpMode = WarpMode.BlockedSites,
-                warpDomains = listOf("example.com"),
-            ),
-        )
-
-        val rule = config.getValue("route").jsonObject.array("rules")
-            .map { it.jsonObject }.single { "domain_suffix" in it }
-        assertEquals(
-            listOf("example.com"),
-            rule.array("domain_suffix").map { it.jsonPrimitive.content },
-        )
-    }
-
-    /** Typed by hand, so it arrives however a URL bar shows it. */
-    @Test
-    fun `domains are normalised down to the suffix sing-box matches`() {
-        val config = parse(
-            SingBoxConfigFactory.androidChainConfig(
-                profile(),
-                warp = warp(),
-                warpMode = WarpMode.BlockedSites,
-                warpDomains = listOf(
-                    "https://Example.com/path",
-                    "*.news.site",
-                    " bad ",
-                    "reddit.com",
-                    "REDDIT.com",
-                ),
-            ),
-        )
-
-        val rule = config.getValue("route").jsonObject.array("rules")
-            .map { it.jsonObject }.single { "domain_suffix" in it }
-        val suffixes = rule.array("domain_suffix").map { it.jsonPrimitive.content }
-        assertTrue("example.com" in suffixes, suffixes.toString())
-        assertTrue("news.site" in suffixes, suffixes.toString())
-        // No dot, so it was never a domain; and case aliases collapse to one.
-        assertFalse("bad" in suffixes)
-        assertEquals(1, suffixes.count { it == "reddit.com" })
-    }
-
-    /** Selective mode with nothing listed routes nothing, so there is no tail
-     *  to declare — an endpoint no rule ever reaches is just dead config. */
-    @Test
-    fun `blocked-sites mode with an empty list renders no tail at all`() {
-        val config = parse(
-            SingBoxConfigFactory.androidChainConfig(
-                profile(), entry(),
-                warp = warp(),
-                warpMode = WarpMode.BlockedSites,
-                warpDomains = emptyList(),
-            ),
-        )
-
-        assertTrue(config.array("endpoints").taggedWith("warp-exit") == null)
+        assertEquals("vless-proxy", config.array("endpoints").taggedWith("warp-exit")?.getValue("detour")?.jsonPrimitive?.content)
         val route = config.getValue("route").jsonObject
         assertEquals("vless-proxy", route.getValue("final").jsonPrimitive.content)
         assertTrue(route.array("rules").map { it.jsonObject }.none { "domain_suffix" in it })
@@ -560,7 +485,7 @@ class SingBoxConfigFactoryTest {
             SingBoxConfigFactory.androidChainConfig(
                 profile(),
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
+                warpMode = WarpMode.Automatic,
                 probe = probe(),
             ),
         )
@@ -578,41 +503,24 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `probe rules precede the domain rules and pick their exit by inbound`() {
+    fun `probe rules precede the learned rules and pick their exit by inbound`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
                 profile(),
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
-                warpDomains = listOf("example.com"),
+                warpMode = WarpMode.Automatic,
                 probe = probe(),
+                learnedWarpPath = "/run/learned-warp.json",
             ),
         )
 
         val rules = config.getValue("route").jsonObject.array("rules").map { it.jsonObject }
         val relayAt = rules.indexOfFirst { it["inbound"]?.jsonPrimitive?.content == "probe-relay" }
         val warpAt = rules.indexOfFirst { it["inbound"]?.jsonPrimitive?.content == "probe-warp" }
-        val domainAt = rules.indexOfFirst { "domain_suffix" in it }
-        assertTrue(relayAt in 0 until domainAt && warpAt in 0 until domainAt)
+        val learnedAt = rules.indexOfFirst { "rule_set" in it }
+        assertTrue(relayAt in 0 until learnedAt && warpAt in 0 until learnedAt)
         assertEquals("vless-proxy", rules[relayAt].getValue("outbound").jsonPrimitive.content)
         assertEquals("warp-exit", rules[warpAt].getValue("outbound").jsonPrimitive.content)
-    }
-
-    @Test
-    fun `probing keeps the tail present even with no listed domains`() {
-        val config = parse(
-            SingBoxConfigFactory.androidChainConfig(
-                profile(),
-                warp = warp(),
-                warpMode = WarpMode.BlockedSites,
-                probe = probe(),
-            ),
-        )
-
-        val tail = config.array("endpoints").taggedWith("warp-exit")
-        assertEquals("vless-proxy", tail?.getValue("detour")?.jsonPrimitive?.content)
-        val rules = config.getValue("route").jsonObject.array("rules").map { it.jsonObject }
-        assertFalse(rules.any { "domain_suffix" in it })
     }
 
     @Test
@@ -640,7 +548,7 @@ class SingBoxConfigFactoryTest {
             SingBoxConfigFactory.mixedProxyConfig(
                 profile(),
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
+                warpMode = WarpMode.Automatic,
                 probe = probe(),
             ),
         )
@@ -655,7 +563,7 @@ class SingBoxConfigFactoryTest {
         val raw = SingBoxConfigFactory.androidChainConfig(
             profile(),
             warp = warp(),
-            warpMode = WarpMode.BlockedSites,
+            warpMode = WarpMode.Automatic,
             probe = probe(),
         )
 
@@ -664,13 +572,12 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `learned sites are a local rule-set routed to the tail beside the manual list`() {
+    fun `learned sites are a local rule-set routed to the tail`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
                 profile(),
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
-                warpDomains = listOf("manual.com"),
+                warpMode = WarpMode.Automatic,
                 learnedWarpPath = "/run/learned-warp.json",
             ),
         )
@@ -683,7 +590,6 @@ class SingBoxConfigFactoryTest {
         val rules = route.array("rules").map { it.jsonObject }
         val learned = rules.single { "rule_set" in it }
         assertEquals("warp-exit", learned.getValue("outbound").jsonPrimitive.content)
-        assertTrue(rules.indexOf(learned) > rules.indexOfFirst { "domain_suffix" in it })
     }
 
     @Test
@@ -693,7 +599,7 @@ class SingBoxConfigFactoryTest {
                 profile(),
                 dnsFilter = DnsFilter.Malware,
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
+                warpMode = WarpMode.Automatic,
                 learnedWarpPath = "/run/learned-warp.json",
             ),
         )
@@ -703,7 +609,7 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `learned sites are ignored outside blocked-sites mode`() {
+    fun `learned sites are ignored outside automatic mode`() {
         val raw = SingBoxConfigFactory.androidChainConfig(
             profile(),
             warp = warp(),
@@ -737,7 +643,7 @@ class SingBoxConfigFactoryTest {
             SingBoxConfigFactory.androidChainConfig(
                 profile(entry()),
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
+                warpMode = WarpMode.Automatic,
                 probe = probe(),
                 failOpen = true,
             ),
@@ -755,7 +661,7 @@ class SingBoxConfigFactoryTest {
             SingBoxConfigFactory.androidChainConfig(
                 profile(),
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
+                warpMode = WarpMode.Automatic,
                 probe = probe(),
                 failOpen = true,
             ),
@@ -769,7 +675,7 @@ class SingBoxConfigFactoryTest {
         val raw = SingBoxConfigFactory.androidChainConfig(
             profile(entry()),
             warp = warp(),
-            warpMode = WarpMode.BlockedSites,
+            warpMode = WarpMode.Automatic,
             probe = probe(),
         )
 
@@ -781,13 +687,13 @@ class SingBoxConfigFactoryTest {
         val raw = SingBoxConfigFactory.androidChainConfig(
             profile(),
             warp = warp(),
-            warpMode = WarpMode.BlockedSites,
+            warpMode = WarpMode.Automatic,
             probe = probe(),
             failOpen = true,
         )
 
         assertEquals(probe(), ProbeProxy.fromConfig(raw))
-        assertEquals(0, ProbeProxy.fromConfig(SingBoxConfigFactory.androidChainConfig(profile(), warp = warp(), warpMode = WarpMode.BlockedSites, probe = probe()))?.fallbackPort)
+        assertEquals(0, ProbeProxy.fromConfig(SingBoxConfigFactory.androidChainConfig(profile(), warp = warp(), warpMode = WarpMode.Automatic, probe = probe()))?.fallbackPort)
     }
 
     @Test
@@ -796,7 +702,7 @@ class SingBoxConfigFactoryTest {
             SingBoxConfigFactory.androidChainConfig(
                 profile(entry()),
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
+                warpMode = WarpMode.Automatic,
                 learnedWarpPath = "/run/learned-warp.json",
                 learnedOpenPath = "/run/learned-open.json",
                 failOpen = true,
@@ -815,7 +721,7 @@ class SingBoxConfigFactoryTest {
             SingBoxConfigFactory.androidChainConfig(
                 profile(),
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
+                warpMode = WarpMode.Automatic,
                 learnedOpenPath = "/run/learned-open.json",
                 failOpen = true,
             ),
@@ -831,7 +737,7 @@ class SingBoxConfigFactoryTest {
         val raw = SingBoxConfigFactory.androidChainConfig(
             profile(entry()),
             warp = warp(),
-            warpMode = WarpMode.BlockedSites,
+            warpMode = WarpMode.Automatic,
             learnedOpenPath = "/run/learned-open.json",
         )
 
@@ -844,7 +750,7 @@ class SingBoxConfigFactoryTest {
             SingBoxConfigFactory.androidChainConfig(
                 profile(entry()),
                 warp = warp(),
-                warpMode = WarpMode.BlockedSites,
+                warpMode = WarpMode.Automatic,
                 learnedWarpPath = "/run/learned-warp.json",
                 learnedOpenPath = "/run/learned-open.json",
                 failOpen = true,

@@ -160,13 +160,6 @@ class SettingsViewModel(
         settingsRepository.setWarpMode(mode)
     }
 
-    /** One domain per line in the UI; blank lines are just typing, not entries. */
-    fun setWarpDomains(text: String) = viewModelScope.launch {
-        settingsRepository.setWarpDomains(
-            text.lines().map(String::trim).filter(String::isNotEmpty),
-        )
-    }
-
     fun setLearnBlockedSites(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setLearnBlockedSites(enabled)
     }

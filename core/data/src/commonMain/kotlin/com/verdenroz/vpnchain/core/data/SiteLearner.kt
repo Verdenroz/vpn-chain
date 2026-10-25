@@ -136,7 +136,6 @@ internal class SiteLearner(
     /** False for a domain checked recently, already routed, or paused by the user. */
     private suspend fun claim(domain: String): Boolean {
         val current = settings.first()
-        if (current.warpDomains.any { domain == it || domain.endsWith(".$it") }) return false
         // A double refusal recorded before failing open was on gets one more look.
         val recheck = current.failOpen && learned.sites.first()
             .any { it.domain == domain && it.route == LearnedRoute.RefusedByBoth }

@@ -21,17 +21,13 @@ sees the relay's address — never the device's.
 | Mode | What routes through WARP |
 |---|---|
 | `off` | Nothing. Traffic exits from the VPS, as it did before. |
-| `blocked sites` | The domains listed in the settings field, plus the sites the chain [learns](#automatic-detection) on its own. **The default.** Suffix matches, so `example.com` covers its subdomains. |
+| `automatic` | Sites the chain [learns](#automatic-detection) refuse the relay. **The default.** |
 | `everything` | All traffic. |
 
-The domain field is a list of overrides: an entry always takes the tail,
-whatever detection finds, so an entry for a site the tail also refuses keeps
-it pinned there and out of reach of [failing open](#failing-open). It starts
-empty. Installs that predate automatic detection had it seeded with Reddit's
-and ChatGPT's domains; a stored list that still equals that seed exactly reads
-as empty, and one the user edited is kept as it is. Paste what a URL bar
-shows — `https://Example.com/path` and `*.example.com` both normalise to
-`example.com`.
+There is no hand-kept domain list: detection replaces it. An earlier version
+had one, seeded with Reddit's and ChatGPT's domains. The stored list is
+dropped on first launch, whatever it held, and the old `blocked sites` mode
+reads as `automatic`.
 
 `everything` costs nothing measurable in speed — WARP rides Cloudflare's
 backbone, and on a non-Cloudflare target throughput was within noise of the
@@ -46,7 +42,7 @@ see the trade below.
   every destination it carries. It never sees the device, but it gets a
   durable pseudonym that resolves back to a box with a billing record.
   Rotating the key changes nothing; the source address is the constant.
-  This is why `blocked sites` is the default: it confines that view to the
+  This is why `automatic` is the default: it confines that view to the
   domains that actually forced the issue.
 - **The last hop is no longer a box you own.** In `everything` mode,
   destination knowledge moves off your VPS and onto a US company with far
@@ -54,7 +50,7 @@ see the trade below.
 - **Shared-IP reputation cuts both ways.** WARP addresses are shared by
   everyone using WARP. Some sites are stricter with them than with a quiet
   VPS: expect more CAPTCHAs, and some banks and streaming services block WARP
-  ranges outright. That is what `blocked sites` and `off` are for.
+  ranges outright. That is what `automatic` and `off` are for.
 - **Sites can still say no.** ChatGPT went from a hard `403` to intermittently
   allowed on the shared address. Reddit refuses WARP too: a plain `GET /`
   returns a proof-of-work interstitial, and the JSON endpoints and a real
@@ -67,7 +63,7 @@ see the trade below.
 
 ## Automatic detection
 
-With **Learn blocked sites** on (the default, in `blocked sites` mode), the
+With **Learn blocked sites** on (the default, in `automatic` mode), the
 chain finds the sites that refuse the relay without a list.
 
 **What is watched.** Destination names come from the engine's own connection
@@ -83,10 +79,10 @@ come out broader or narrower than ideal.
 browser User-Agent, through two loopback-only `mixed` inbounds that sing-box
 renders with a random port and credentials per config (`probe-relay` and
 `probe-warp`). Route rules on those inbounds sit ahead of every domain rule,
-so a probe exits where it asked to whatever the lists say. At most two probes
+so a probe exits where it asked to whatever has been learned. At most two probes
 run at once. Nothing is probed while the chain is down, on Android while the
 screen is off or the device is in Doze (names seen then wait in a bounded
-queue), or for a domain on the manual list or one the user removed.
+queue), or for a domain the user removed.
 
 1. The **relay** is probed first. The relay already sees every destination,
    so this tells it nothing new. If it answers, the site is left alone.
@@ -118,9 +114,8 @@ retried after 5 minutes. A learned site stays until the user removes it;
 removing one stops it being learned again for seven days.
 
 **How a learned site takes effect.** Learned domains live in a local sing-box
-rule-set file (source format, version 1) referenced by their own route rule
-beside the manual list's, because fields inside one rule are ANDed. sing-box
-reloads a local rule-set when its file changes (checked on 1.14.3 with a
+rule-set file (source format, version 1) referenced by a route rule of its
+own. sing-box reloads a local rule-set when its file changes (checked on 1.14.3 with a
 throwaway instance, including an atomic rename), so a learned site applies to
 new connections without a reconnect. The libbox 1.13.14 shipped on Android
 contains the same file watcher, but that has not been exercised on a device,

@@ -124,8 +124,6 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_fail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learn_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_all
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_detail
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_domains_hint
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_domains_label
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_window_title
 import kotlin.math.max
@@ -192,7 +190,6 @@ fun SettingsRoute(
         onToggleAllowLocalNetworks = viewModel::setAllowLocalNetworks,
         onSetDnsFilter = viewModel::setDnsFilter,
         onSetWarpMode = viewModel::setWarpMode,
-        onSetWarpDomains = viewModel::setWarpDomains,
         onToggleLearn = viewModel::setLearnBlockedSites,
         onToggleFailOpen = viewModel::setFailOpen,
         onRemoveLearned = viewModel::removeLearned,
@@ -230,7 +227,6 @@ fun SettingsScreen(
     onToggleAllowLocalNetworks: (Boolean) -> Unit,
     onSetDnsFilter: (DnsFilter) -> Unit,
     onSetWarpMode: (WarpMode) -> Unit,
-    onSetWarpDomains: (String) -> Unit,
     onToggleLearn: (Boolean) -> Unit,
     onToggleFailOpen: (Boolean) -> Unit,
     onRemoveLearned: (String) -> Unit,
@@ -460,13 +456,11 @@ fun SettingsScreen(
                     }
                     WarpSection(
                         mode = uiState.settings.warpMode,
-                        domains = uiState.settings.warpDomains,
                         learn = uiState.settings.learnBlockedSites,
                         failOpen = uiState.settings.failOpen,
                         learned = uiState.learned,
                         exits = uiState.exits,
                         onSetMode = onSetWarpMode,
-                        onSetDomains = onSetWarpDomains,
                         onToggleLearn = onToggleLearn,
                         onToggleFailOpen = onToggleFailOpen,
                         onRemoveLearned = onRemoveLearned,
@@ -535,35 +529,23 @@ fun SettingsScreen(
 }
 
 /**
- * The WARP tail: which traffic takes it, and — for the selective mode — what
- * is learned and the domains that always take it. The rest only appears for
- * that mode, since it decides nothing in the other two.
+ * The WARP tail: which traffic takes it and, in automatic mode, what has been
+ * learned. The rest only appears for that mode, since it decides nothing in
+ * the other two.
  */
 @Composable
 private fun WarpSection(
     mode: WarpMode,
-    domains: List<String>,
     learn: Boolean,
     failOpen: Boolean,
     learned: List<LearnedSite>,
     exits: Map<String, OutsideExit>,
     onSetMode: (WarpMode) -> Unit,
-    onSetDomains: (String) -> Unit,
     onToggleLearn: (Boolean) -> Unit,
     onToggleFailOpen: (Boolean) -> Unit,
     onRemoveLearned: (String) -> Unit,
 ) {
     val colors = PanelTheme.colors
-    var domainText by remember { mutableStateOf(domains.joinToString("\n")) }
-    // Re-seeded only when the stored list is something this field didn't type
-    // — blank lines are dropped on the way to storage, so echoing every write
-    // straight back would delete the newline the moment Enter was pressed.
-    LaunchedEffect(domains) {
-        if (domains != domainText.lines().map(String::trim).filter(String::isNotEmpty)) {
-            domainText = domains.joinToString("\n")
-        }
-    }
-
     Column {
         Text(
             stringResource(Res.string.settings_warp_title),
@@ -579,7 +561,7 @@ private fun WarpSection(
         Spacer(Modifier.height(12.dp))
         WarpModePicker(selected = mode, onSelect = onSetMode)
 
-        Reveal(visible = mode == WarpMode.BlockedSites) {
+        Reveal(visible = mode == WarpMode.Automatic) {
             Column {
                 Spacer(Modifier.height(14.dp))
                 SettingRow(
@@ -596,22 +578,6 @@ private fun WarpSection(
                     onCheckedChange = onToggleFailOpen,
                 )
                 LearnedSites(learned, exits, onRemoveLearned)
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    stringResource(Res.string.settings_warp_domains_hint),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.muted,
-                )
-                Spacer(Modifier.height(10.dp))
-                PanelField(
-                    label = stringResource(Res.string.settings_warp_domains_label),
-                    value = domainText,
-                    minLines = 3,
-                    onValueChange = {
-                        domainText = it
-                        onSetDomains(it)
-                    },
-                )
             }
         }
     }

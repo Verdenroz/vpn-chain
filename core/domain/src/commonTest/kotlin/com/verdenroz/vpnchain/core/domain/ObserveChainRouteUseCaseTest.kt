@@ -345,7 +345,6 @@ private class FakeSettings(settings: UserSettings) : SettingsRepository {
     override suspend fun setDnsFilter(filter: DnsFilter) = Unit
     override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
     override suspend fun setWarpMode(mode: WarpMode) = Unit
-    override suspend fun setWarpDomains(domains: List<String>) = Unit
     override suspend fun setLearnBlockedSites(enabled: Boolean) = Unit
     override suspend fun setFailOpen(enabled: Boolean) = Unit
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit

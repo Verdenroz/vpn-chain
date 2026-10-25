@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.preferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
@@ -26,29 +27,10 @@ class WarpSettingsTest {
      * refuse the relay keeps a box the user controls as the exit for the rest.
      */
     @Test
-    fun `a fresh install routes only blocked sites and lists none by hand`() = runTest {
+    fun `a fresh install routes only the sites detection finds`() = runTest {
         val settings = VpnChainPreferencesDataSource(newStore()).settings.first()
 
-        assertEquals(WarpMode.BlockedSites, settings.warpMode)
-        assertTrue(settings.warpDomains.isEmpty())
-    }
-
-    @Test
-    fun `a list that is still the old seed reads as empty`() = runTest {
-        val source = VpnChainPreferencesDataSource(newStore())
-
-        source.setWarpDomains(OLD_SEED)
-
-        assertTrue(source.settings.first().warpDomains.isEmpty())
-    }
-
-    @Test
-    fun `an edited copy of the old seed is kept`() = runTest {
-        val source = VpnChainPreferencesDataSource(newStore())
-
-        source.setWarpDomains(OLD_SEED + "mychart.chsli.org")
-
-        assertEquals(OLD_SEED + "mychart.chsli.org", source.settings.first().warpDomains)
+        assertEquals(WarpMode.Automatic, settings.warpMode)
     }
 
     @Test
@@ -66,29 +48,22 @@ class WarpSettingsTest {
         val store = newStore()
         store.edit { it[stringPreferencesKey("warp_mode")] = "SomethingRetired" }
 
-        assertEquals(WarpMode.BlockedSites, VpnChainPreferencesDataSource(store).settings.first().warpMode)
-    }
-
-    /**
-     * Emptying the list is a real choice — it means "route nothing" — so it has
-     * to survive, rather than being refilled from the built-in list next read.
-     */
-    @Test
-    fun `an emptied domain list stays empty`() = runTest {
-        val source = VpnChainPreferencesDataSource(newStore())
-
-        source.setWarpDomains(emptyList())
-
-        assertTrue(source.settings.first().warpDomains.isEmpty())
+        assertEquals(WarpMode.Automatic, VpnChainPreferencesDataSource(store).settings.first().warpMode)
     }
 
     @Test
-    fun `an edited domain list is stored as given`() = runTest {
-        val source = VpnChainPreferencesDataSource(newStore())
+    fun `the retired manual list is dropped and its mode renamed`() = runTest {
+        val before = preferencesOf(
+            stringPreferencesKey("warp_mode") to "BlockedSites",
+            stringPreferencesKey("warp_domains_json") to "[\"example.com\"]",
+        )
 
-        source.setWarpDomains(listOf("example.com"))
+        assertTrue(retiredSettingsMigration.shouldMigrate(before))
+        val after = retiredSettingsMigration.migrate(before)
 
-        assertEquals(listOf("example.com"), source.settings.first().warpDomains)
+        assertEquals("Automatic", after[stringPreferencesKey("warp_mode")])
+        assertEquals(null, after[stringPreferencesKey("warp_domains_json")])
+        assertEquals(false, retiredSettingsMigration.shouldMigrate(after))
     }
 
     @Test
@@ -133,14 +108,9 @@ class WarpSettingsTest {
         assertEquals(mapOf("example.com" to 99L), source.learnedSuppressions.first())
     }
 
-    private val OLD_SEED = listOf(
-        "reddit.com", "redd.it", "redditmedia.com", "redditstatic.com",
-        "chatgpt.com", "openai.com", "oaistatic.com", "oaiusercontent.com",
-    )
-
     private fun newStore(): DataStore<Preferences> {
         val file = File.createTempFile("warp-settings", ".preferences_pb").apply { delete() }
         file.deleteOnExit()
-        return PreferenceDataStoreFactory.createWithPath { file.absolutePath.toPath() }
+        return PreferenceDataStoreFactory.createWithPath(migrations = listOf(retiredSettingsMigration)) { file.absolutePath.toPath() }
     }
 }
