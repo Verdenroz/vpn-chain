@@ -11,21 +11,49 @@ import kotlin.test.assertEquals
 class SingBoxConfigGoldenTest {
 
     @Test
-    fun `relay only proxy config is unchanged`() {
+    fun `relay only proxy config with warp off is unchanged`() {
         val config = SingBoxConfigFactory.mixedProxyConfig(
             RELAY,
             clashApi = CLASH,
             warp = WARP,
-            warpMode = WarpMode.BlockedSites,
-            warpDomains = listOf("example.com"),
+            learnedWarpPath = "/run/learned-warp.json",
+            learnedOpenPath = "/run/learned-open.json",
+            failOpen = true,
         )
 
         assertEquals(MIXED_RELAY, config)
     }
 
     @Test
+    fun `relay only proxy config with automatic warp declares the tail and no domain rule`() {
+        val config = SingBoxConfigFactory.mixedProxyConfig(
+            RELAY,
+            clashApi = CLASH,
+            warp = WARP,
+            warpMode = WarpMode.Automatic,
+        )
+
+        assertEquals(MIXED_RELAY_AUTOMATIC, config)
+    }
+
+    @Test
     fun `relay only tun config is unchanged`() {
         assertEquals(TUN_RELAY, SingBoxConfigFactory.androidChainConfig(RELAY))
+    }
+
+    /** Off renders what it did before detection existed, whatever the detection settings say. */
+    @Test
+    fun `relay only tun config with warp off and fail-open on is unchanged`() {
+        val config = SingBoxConfigFactory.androidChainConfig(
+            RELAY,
+            warp = WARP,
+            learnedWarpPath = "/run/learned-warp.json",
+            learnedOpenPath = "/run/learned-open.json",
+            failOpen = true,
+            markDirect = true,
+        )
+
+        assertEquals(TUN_RELAY, config)
     }
 
     @Test
@@ -44,6 +72,26 @@ class SingBoxConfigGoldenTest {
     }
 
     @Test
+    fun `chain config with warp off and fail-open on is unchanged`() {
+        val config = SingBoxConfigFactory.androidChainConfig(
+            RELAY,
+            ENTRY,
+            clashApi = CLASH,
+            dnsFilter = DnsFilter.AdsAndTrackers,
+            cachePath = "/tmp/cache.db",
+            warp = WARP,
+            allowLocalNetworks = true,
+            logPath = "/tmp/relay.log",
+            learnedWarpPath = "/run/learned-warp.json",
+            learnedOpenPath = "/run/learned-open.json",
+            failOpen = true,
+            markDirect = true,
+        )
+
+        assertEquals(TUN_CHAIN, config)
+    }
+
+    @Test
     fun `chain config with a full warp tail is unchanged`() {
         val config = SingBoxConfigFactory.androidChainConfig(
             RELAY,
@@ -56,12 +104,11 @@ class SingBoxConfigGoldenTest {
     }
 
     @Test
-    fun `relay only tun config with a selective warp tail is unchanged`() {
+    fun `relay only tun config with automatic warp declares the tail and no domain rule`() {
         val config = SingBoxConfigFactory.androidChainConfig(
             RELAY,
             warp = WARP,
-            warpMode = WarpMode.BlockedSites,
-            warpDomains = listOf("example.com"),
+            warpMode = WarpMode.Automatic,
         )
 
         assertEquals(TUN_RELAY_WARP, config)
@@ -93,7 +140,7 @@ private val WARP = WarpExit(
 
 private val CLASH = ClashApi(port = 9090, secret = "s3cret")
 
-// Captured from the factory before WireGuard-only connections existed.
+// Captured from the factory before WireGuard-only connections existed, WARP off.
 private val MIXED_RELAY = """
 {
     "log": {
@@ -105,6 +152,79 @@ private val MIXED_RELAY = """
             "external_controller": "127.0.0.1:9090",
             "secret": "s3cret"
         }
+    },
+    "inbounds": [
+        {
+            "type": "mixed",
+            "tag": "proxy-in",
+            "listen": "127.0.0.1",
+            "listen_port": 1080
+        }
+    ],
+    "outbounds": [
+        {
+            "type": "vless",
+            "tag": "proxy",
+            "server": "203.0.113.10",
+            "server_port": 443,
+            "uuid": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+            "flow": "xtls-rprx-vision",
+            "network": "tcp",
+            "tls": {
+                "enabled": true,
+                "server_name": "www.example.com",
+                "utls": {
+                    "enabled": true,
+                    "fingerprint": "chrome"
+                },
+                "reality": {
+                    "enabled": true,
+                    "public_key": "relay-public-key",
+                    "short_id": "ab12"
+                }
+            },
+            "packet_encoding": "xudp"
+        },
+        {
+            "type": "direct",
+            "tag": "direct"
+        }
+    ],
+    "route": {
+        "auto_detect_interface": false,
+        "rules": [
+            {
+                "action": "sniff"
+            }
+        ],
+        "final": "proxy"
+    }
+}
+""".trimIndent()
+
+private val MIXED_RELAY_AUTOMATIC = """
+{
+    "log": {
+        "level": "info",
+        "timestamp": true
+    },
+    "experimental": {
+        "clash_api": {
+            "external_controller": "127.0.0.1:9090",
+            "secret": "s3cret"
+        }
+    },
+    "dns": {
+        "servers": [
+            {
+                "type": "https",
+                "tag": "dns-remote",
+                "server": "1.1.1.1",
+                "detour": "proxy"
+            }
+        ],
+        "final": "dns-remote",
+        "strategy": "ipv4_only"
     },
     "inbounds": [
         {
@@ -174,13 +294,6 @@ private val MIXED_RELAY = """
         "rules": [
             {
                 "action": "sniff"
-            },
-            {
-                "domain_suffix": [
-                    "example.com"
-                ],
-                "action": "route",
-                "outbound": "warp-exit"
             }
         ],
         "final": "proxy"
@@ -657,13 +770,6 @@ private val TUN_RELAY_WARP = """
                 "network": "udp",
                 "port": 443,
                 "action": "reject"
-            },
-            {
-                "domain_suffix": [
-                    "example.com"
-                ],
-                "action": "route",
-                "outbound": "warp-exit"
             }
         ],
         "final": "vless-proxy"
