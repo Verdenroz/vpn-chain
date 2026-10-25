@@ -13,11 +13,7 @@ import org.koin.dsl.module
 actual val dataStorePlatformModule: Module = module {
     single<DataStore<Preferences>> {
         PreferenceDataStoreFactory.createWithPath(
-            produceFile = {
-                val file = File(PrivateStorage.configDir(), "vpnchain.preferences_pb")
-                PrivateStorage.createFile(file)
-                file.absolutePath.toPath()
-            },
+            produceFile = { File(PrivateStorage.configDir, "vpnchain.preferences_pb").absolutePath.toPath() },
         )
     }
 }

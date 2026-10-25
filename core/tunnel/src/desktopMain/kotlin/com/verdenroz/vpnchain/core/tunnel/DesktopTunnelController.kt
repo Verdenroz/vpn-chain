@@ -419,8 +419,8 @@ class DesktopTunnelController(
     }
 
     private suspend fun startOwnedRelay(configJson: String): RelayProcess? {
-        // The rendered config carries credentials, so it never lands in a shared directory.
-        val cfgDir = if (System.getenv("XDG_RUNTIME_DIR") != null) runtimeDir.apply { mkdirs() } else PrivateStorage.configDir()
+        // Carries credentials. XDG_RUNTIME_DIR is a tmpfs, so a crash leaves no copy on disk.
+        val cfgDir = System.getenv("XDG_RUNTIME_DIR")?.let { runtimeDir.apply { mkdirs() } }
         val cfg = PrivateStorage.createTempFile(cfgDir, "vpn-chain-", ".json").apply {
             deleteOnExit()
             writeText(configJson)

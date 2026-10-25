@@ -48,9 +48,7 @@ actual fun renderPlatformTunnelConfig(
  * Beside the rest of our state rather than in sing-box's working directory,
  * which is whatever the app was launched with — `/` for a login item.
  */
-private fun cacheFilePath(): String {
-    return File(PrivateStorage.configDir(), "singbox-cache.db").absolutePath
-}
+private fun cacheFilePath(): String = File(PrivateStorage.configDir, "singbox-cache.db").absolutePath
 
 /**
  * A fresh port and secret per rendered config. There is a window between

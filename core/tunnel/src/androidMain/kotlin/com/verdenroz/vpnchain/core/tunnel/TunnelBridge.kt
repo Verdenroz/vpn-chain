@@ -105,7 +105,7 @@ internal object TunnelBridge {
     /** Engine error text can name the server and ports, so only [summary] reaches logcat. */
     fun logFailure(summary: String, detail: String?) {
         Log.i(TAG, "$summary, see Logs")
-        logs.tryEmit("$summary: $detail")
+        logs.tryEmit(if (detail == null) summary else "$summary: $detail")
     }
 
     /**
