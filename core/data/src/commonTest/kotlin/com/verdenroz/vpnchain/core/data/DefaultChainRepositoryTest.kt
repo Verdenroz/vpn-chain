@@ -154,6 +154,19 @@ class DefaultChainRepositoryTest {
     }
 
     @Test
+    fun `a WireGuard-only connection renders no tail, probes, learned sites or mark`() = runTest {
+        val store = CountingRuleSetStore()
+        val world = RepositoryWorld(backgroundScope, store = store)
+        world.profiles.stored.value = WIREGUARD_PROFILE
+        runCurrent()
+
+        val config = world.controller.configProvider?.invoke().orEmpty()
+
+        listOf("warp-exit", "probe-", "learned-", "routing_mark").forEach { assertFalse(it in config, it) }
+        assertEquals(0, store.writes)
+    }
+
+    @Test
     fun `release stops the controller without touching intent`() = runTest {
         val world = RepositoryWorld(backgroundScope)
         world.preferences.setConnectionIntent(true)
@@ -180,6 +193,17 @@ private val REPOSITORY_PROFILE = SavedProfile(
     ),
 )
 
+private val WIREGUARD_PROFILE = SavedProfile(
+    id = "w",
+    name = "w",
+    wireGuard = WireGuardEntry(
+        privateKey = "priv",
+        address = "10.2.0.2/32",
+        peerPublicKey = "peer",
+        endpointHost = "198.51.100.7",
+    ),
+)
+
 private class RepositoryWorld(scope: CoroutineScope, store: LearnedRuleSetStore = StubRuleSetStore()) {
     val controller = FakeTunnelController()
     val profiles = StubProfileRepository()
@@ -200,6 +224,14 @@ private class RepositoryWorld(scope: CoroutineScope, store: LearnedRuleSetStore 
 private class StubRuleSetStore : LearnedRuleSetStore {
     override fun path(kind: RuleSetKind) = "/dev/null"
     override fun write(kind: RuleSetKind, domains: List<String>) = Unit
+}
+
+private class CountingRuleSetStore : LearnedRuleSetStore {
+    var writes = 0
+    override fun path(kind: RuleSetKind) = "/learned"
+    override fun write(kind: RuleSetKind, domains: List<String>) {
+        writes++
+    }
 }
 
 private class ThrowingRuleSetStore : LearnedRuleSetStore {

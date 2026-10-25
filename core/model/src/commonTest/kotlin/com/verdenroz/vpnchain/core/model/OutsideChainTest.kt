@@ -11,13 +11,17 @@ private val ENTRY = WireGuardEntry(
     endpointHost = "198.51.100.20",
 )
 
-private fun profile(entry: WireGuardEntry? = null) = ChainProfile(
-    vpsIp = "203.0.113.10",
-    vlessUuid = "uuid",
-    realityPublicKey = "pubkey",
-    shortId = "shortid",
-    serverPort = 443,
-    entryHop = entry,
+private fun profile(entry: WireGuardEntry? = null) = SavedProfile(
+    id = "p",
+    name = "p",
+    relay = ChainProfile(
+        vpsIp = "203.0.113.10",
+        vlessUuid = "uuid",
+        realityPublicKey = "pubkey",
+        shortId = "shortid",
+        serverPort = 443,
+    ),
+    wireGuard = entry,
 )
 
 private val OPEN_SITE = LearnedSite("example.com", BlockReason.Forbidden, 0L, LearnedRoute.FailOpen)
@@ -51,5 +55,10 @@ class OutsideChainTest {
         listOf(LearnedRoute.Warp, LearnedRoute.RefusedByBoth, LearnedRoute.RefusedEverywhere).forEach {
             assertNull(OPEN_SITE.copy(route = it).outsideExit(UserSettings(), profile(ENTRY)), "$it")
         }
+    }
+
+    @Test
+    fun `nothing fails open on a WireGuard-only connection`() {
+        assertNull(OPEN_SITE.outsideExit(UserSettings(), SavedProfile(id = "w", name = "w", wireGuard = ENTRY)))
     }
 }

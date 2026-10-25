@@ -12,9 +12,11 @@ enum class OutsideExit {
 /**
  * The way [this] leaves outside the chain under [settings], or null when it
  * still goes through the relay. Reads the topology as dialled, so a disabled
- * entry hop reads as the bare link.
+ * entry hop reads as the bare link. A WireGuard-only connection has no relay
+ * to bypass, so nothing on it fails open.
  */
-fun LearnedSite.outsideExit(settings: UserSettings, profile: ChainProfile?): OutsideExit? {
+fun LearnedSite.outsideExit(settings: UserSettings, profile: SavedProfile?): OutsideExit? {
     if (route != LearnedRoute.FailOpen || !settings.failOpenActive) return null
-    return if (profile?.effectiveFor(settings)?.entryHop != null) OutsideExit.EntryHop else OutsideExit.Direct
+    if (profile != null && !profile.supportsWarpExit) return null
+    return if (profile?.effectiveFor(settings)?.wireGuard != null) OutsideExit.EntryHop else OutsideExit.Direct
 }

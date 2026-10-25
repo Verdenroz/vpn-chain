@@ -140,9 +140,10 @@ internal class DefaultChainRepository(
         val warp = if (wantsTail) warpRepository.exit() else null
         // Like the tail, a failure here costs the learned sites, never the connect.
         val learned = learnedStore.takeIf {
-            runCatching { learnedSites.syncRuleSets() }
-                .onFailure { logger.w(TAG, "learned rule-set write failed: ${it.message}") }
-                .isSuccess
+            profile.supportsWarpExit &&
+                runCatching { learnedSites.syncRuleSets() }
+                    .onFailure { logger.w(TAG, "learned rule-set write failed: ${it.message}") }
+                    .isSuccess
         }
         return runCatching { renderPlatformTunnelConfig(profile.effectiveFor(settings), settings, warp, learned) }
             .onFailure { logger.e(TAG, "config render failed", it) }

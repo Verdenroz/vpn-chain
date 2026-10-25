@@ -28,7 +28,7 @@ private class RecordingStore : LearnedRuleSetStore {
     }
 }
 
-private class MemoryPreferences : DataStore<Preferences> {
+private class LearnedSitesPreferences : DataStore<Preferences> {
     private val state = MutableStateFlow(emptyPreferences())
     override val data: Flow<Preferences> = state
     override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
@@ -39,7 +39,7 @@ class DefaultLearnedSitesRepositoryTest {
     private var clock = 1_000L
     private val store = RecordingStore()
     private val repository = DefaultLearnedSitesRepository(
-        preferences = VpnChainPreferencesDataSource(MemoryPreferences()),
+        preferences = VpnChainPreferencesDataSource(LearnedSitesPreferences()),
         store = store,
         now = { clock },
     )

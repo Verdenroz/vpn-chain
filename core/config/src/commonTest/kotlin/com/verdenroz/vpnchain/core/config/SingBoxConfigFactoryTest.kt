@@ -651,7 +651,7 @@ class SingBoxConfigFactoryTest {
     fun `the fallback probe leaves by the entry hop when there is one`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile(entry()),
+                profile(), entry(),
                 warp = warp(),
                 warpMode = WarpMode.Automatic,
                 probe = probe(),
@@ -683,7 +683,7 @@ class SingBoxConfigFactoryTest {
     @Test
     fun `no fallback probe exists unless failing open is on`() {
         val raw = SingBoxConfigFactory.androidChainConfig(
-            profile(entry()),
+            profile(), entry(),
             warp = warp(),
             warpMode = WarpMode.Automatic,
             probe = probe(),
@@ -710,7 +710,7 @@ class SingBoxConfigFactoryTest {
     fun `sites that fail open leave by the entry hop beside the relay's learned list`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile(entry()),
+                profile(), entry(),
                 warp = warp(),
                 warpMode = WarpMode.Automatic,
                 learnedWarpPath = "/run/learned-warp.json",
@@ -745,7 +745,7 @@ class SingBoxConfigFactoryTest {
     @Test
     fun `nothing fails open unless the setting is on`() {
         val raw = SingBoxConfigFactory.androidChainConfig(
-            profile(entry()),
+            profile(), entry(),
             warp = warp(),
             warpMode = WarpMode.Automatic,
             learnedOpenPath = "/run/learned-open.json",
@@ -758,7 +758,7 @@ class SingBoxConfigFactoryTest {
     fun `failing open never touches the tail or the entry hop's own detour`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile(entry()),
+                profile(), entry(),
                 warp = warp(),
                 warpMode = WarpMode.Automatic,
                 learnedWarpPath = "/run/learned-warp.json",
@@ -773,9 +773,9 @@ class SingBoxConfigFactoryTest {
 
     @Test
     fun `the direct outbound is marked only when a chain without an entry hop fails open`() {
-        fun mark(profile: ChainProfile, failOpen: Boolean = true, markDirect: Boolean = true) = parse(
+        fun mark(entry: WireGuardEntry? = null, failOpen: Boolean = true, markDirect: Boolean = true) = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile,
+                profile(), entry,
                 warpMode = WarpMode.Automatic,
                 learnedOpenPath = "/run/learned-open.json",
                 failOpen = failOpen,
@@ -783,10 +783,10 @@ class SingBoxConfigFactoryTest {
             ),
         ).array("outbounds").taggedWith("direct")?.get("routing_mark")?.jsonPrimitive?.int
 
-        assertEquals(0x760000, mark(profile()))
-        assertEquals(null, mark(profile(entry())))
-        assertEquals(null, mark(profile(), failOpen = false))
-        assertEquals(null, mark(profile(), markDirect = false))
+        assertEquals(0x760000, mark())
+        assertEquals(null, mark(entry()))
+        assertEquals(null, mark(failOpen = false))
+        assertEquals(null, mark(markDirect = false))
     }
 }
 
