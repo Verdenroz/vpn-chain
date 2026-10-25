@@ -54,6 +54,7 @@ jetbrains-navigation-compose = { group = "org.jetbrains.androidx.navigation", na
 androidx-datastore-preferences-core = { group = "androidx.datastore", name = "datastore-preferences-core", version.ref = "androidxDataStore" }
 androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "androidxGlance" }
 okio = { group = "com.squareup.okio", name = "okio", version.ref = "okio" }
+okio-fakefilesystem = { group = "com.squareup.okio", name = "okio-fakefilesystem", version.ref = "okio" }
 libbox = { group = "com.github.singbox-android", name = "libbox", version.ref = "libbox" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }

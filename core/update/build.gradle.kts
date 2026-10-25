@@ -13,5 +13,8 @@ kotlin {
             implementation(libs.okio)
             implementation(libs.koin.core)
         }
+        commonTest.dependencies {
+            implementation(libs.okio.fakefilesystem)
+        }
     }
 }
