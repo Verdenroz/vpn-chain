@@ -47,6 +47,7 @@ data class MapNode(
 /**
  * The route over a simplified world map, fitted to its hops. Nothing animates
  * while idle: the view eases only when the hops or the connection change.
+ * Decorative: the same facts are in the hop rows beside it.
  */
 @Composable
 fun RouteMap(
@@ -66,6 +67,7 @@ fun RouteMap(
 
     BoxWithConstraints(modifier) {
         val camera = fit(nodes, aspect = maxWidth / maxHeight)
+        val wrapped = camera.wrapped
         val spec = tween<Float>(CAMERA_MS)
         val centerLon by animateFloatAsState(camera.centerLon, spec, label = "camera-lon")
         val centerLat by animateFloatAsState(camera.centerLat, spec, label = "camera-lat")
@@ -74,7 +76,7 @@ fun RouteMap(
         Canvas(Modifier.fillMaxSize()) {
             val pxPerDegree = size.width / spanLon
             fun project(node: MapNode) = Offset(
-                x = (node.lon.toFloat() - centerLon) * pxPerDegree + size.width / 2f,
+                x = (unwrap(node.lon, wrapped) - centerLon) * pxPerDegree + size.width / 2f,
                 y = (centerLat - node.lat.toFloat()) * pxPerDegree + size.height / 2f,
             )
 
@@ -84,9 +86,12 @@ fun RouteMap(
                     y = (centerLat - 90f) * pxPerDegree + size.height / 2f,
                 )
                 clipRect(top = worldTopLeft.y + (90f - NORTH) * pxPerDegree, bottom = worldTopLeft.y + (90f - SOUTH) * pxPerDegree) {
-                    translate(worldTopLeft.x, worldTopLeft.y) {
-                        with(landmass) {
-                            draw(Size(360f * pxPerDegree, 180f * pxPerDegree), colorFilter = ColorFilter.tint(colors.land))
+                    val copies = if (wrapped) listOf(0f, 360f * pxPerDegree) else listOf(0f)
+                    copies.forEach { offset ->
+                        translate(worldTopLeft.x + offset, worldTopLeft.y) {
+                            with(landmass) {
+                                draw(Size(360f * pxPerDegree, 180f * pxPerDegree), colorFilter = ColorFilter.tint(colors.land))
+                            }
                         }
                     }
                 }
@@ -122,11 +127,21 @@ fun RouteMap(
     }
 }
 
-private class Camera(val centerLon: Float, val centerLat: Float, val spanLon: Float)
+internal class Camera(
+    val centerLon: Float,
+    val centerLat: Float,
+    val spanLon: Float,
+    /** Western longitudes are read as 180..360 so a route over the Pacific takes the short way round. */
+    val wrapped: Boolean,
+)
 
-private fun fit(nodes: List<MapNode>, aspect: Float): Camera {
-    if (nodes.isEmpty()) return Camera(0f, LAT_MID, MAX_SPAN)
-    val lons = nodes.map { it.lon.toFloat() }
+private fun unwrap(lon: Double, wrapped: Boolean): Float = (if (wrapped && lon < 0) lon + 360.0 else lon).toFloat()
+
+internal fun fit(nodes: List<MapNode>, aspect: Float): Camera {
+    if (nodes.isEmpty()) return Camera(0f, LAT_MID, MAX_SPAN, wrapped = false)
+    val raw = nodes.map { it.lon.toFloat() }
+    val wrapped = raw.max() - raw.min() > 180f
+    val lons = nodes.map { unwrap(it.lon, wrapped) }
     val lats = nodes.map { it.lat.toFloat() }
     val needLon = (lons.max() - lons.min()) / (1f - 2f * SIDE_PAD)
     val needLat = (lats.max() - lats.min()) / (1f - 2f * VERTICAL_PAD)
@@ -137,6 +152,7 @@ private fun fit(nodes: List<MapNode>, aspect: Float): Camera {
         centerLon = (lons.max() + lons.min()) / 2f,
         centerLat = if (halfLat >= LAT_RANGE / 2f) LAT_MID else centerLat.coerceIn(SOUTH + halfLat, NORTH - halfLat),
         spanLon = spanLon,
+        wrapped = wrapped,
     )
 }
 
