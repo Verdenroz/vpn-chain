@@ -35,9 +35,14 @@ sealed interface ProbeOutcome {
 
 /**
  * The relay is probed first, because the relay already sees every destination:
- * that probe tells it nothing new. WARP is only asked once the relay refuses,
- * and the fail-open path only once both have, since failing open would expose
- * the site to that path anyway. A site that every path refuses stays put.
+ * that probe tells it nothing new. WARP is only asked once the relay refuses or
+ * challenges, and the fail-open path only once WARP has too, since failing open
+ * would expose the site to that path anyway.
+ *
+ * WARP has to answer cleanly to take a site: a challenge there is the shared
+ * address being suspect, not the site being reachable. The fail-open path
+ * takes a site it merely challenges, since a browser passes a challenge from an
+ * ordinary address, and refuses one it blocks outright.
  */
 class SiteProber(private val fetcher: SiteFetcher) {
 
@@ -45,12 +50,13 @@ class SiteProber(private val fetcher: SiteFetcher) {
         val relayReason = when (val relay = verdict(host, proxy.relayPort, proxy)) {
             ExitVerdict.Open -> return ProbeOutcome.Reachable
             ExitVerdict.Inconclusive -> return ProbeOutcome.Unknown
+            ExitVerdict.Challenged -> BlockReason.Challenge
             is ExitVerdict.Blocked -> relay.reason
         }
         if (proxy.warpPort == 0) return ProbeOutcome.Unknown
-        return when (verdict(host, proxy.warpPort, proxy)) {
+        return when (verdict(host, proxy.warpPort, proxy, clean = true)) {
             ExitVerdict.Open -> ProbeOutcome.WarpOnly(relayReason)
-            is ExitVerdict.Blocked -> viaFallback(host, proxy, relayReason)
+            ExitVerdict.Challenged, is ExitVerdict.Blocked -> viaFallback(host, proxy, relayReason)
             ExitVerdict.Inconclusive -> ProbeOutcome.Unknown
         }
     }
@@ -58,12 +64,16 @@ class SiteProber(private val fetcher: SiteFetcher) {
     private suspend fun viaFallback(host: String, proxy: ProbeProxy, reason: BlockReason): ProbeOutcome {
         if (proxy.fallbackPort == 0) return ProbeOutcome.RefusedByBoth(reason)
         return when (verdict(host, proxy.fallbackPort, proxy)) {
-            ExitVerdict.Open -> ProbeOutcome.FallbackOpen(reason)
+            ExitVerdict.Open, ExitVerdict.Challenged -> ProbeOutcome.FallbackOpen(reason)
             is ExitVerdict.Blocked -> ProbeOutcome.RefusedEverywhere(reason)
             ExitVerdict.Inconclusive -> ProbeOutcome.Unknown
         }
     }
 
-    private suspend fun verdict(host: String, port: Int, proxy: ProbeProxy): ExitVerdict =
-        fetcher.get(host, port, proxy)?.let(SiteClassifier::classify) ?: ExitVerdict.Inconclusive
+    /** With [clean], an answer is only open when it is a 2xx or 3xx. */
+    private suspend fun verdict(host: String, port: Int, proxy: ProbeProxy, clean: Boolean = false): ExitVerdict {
+        val response = fetcher.get(host, port, proxy) ?: return ExitVerdict.Inconclusive
+        val verdict = SiteClassifier.classify(response)
+        return if (clean && verdict == ExitVerdict.Open && response.status !in 200..399) ExitVerdict.Inconclusive else verdict
+    }
 }

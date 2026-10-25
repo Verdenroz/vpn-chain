@@ -76,31 +76,39 @@ second levels (`example.co.uk`), not the public suffix list, so a rule may
 come out broader or narrower than ideal.
 
 **How a site is probed.** Each new domain is fetched once, `GET /` with a
-browser User-Agent, through two loopback-only `mixed` inbounds that sing-box
-renders with a random port and credentials per config (`probe-relay` and
-`probe-warp`). Route rules on those inbounds sit ahead of every domain rule,
-so a probe exits where it asked to whatever has been learned. At most two probes
-run at once. Nothing is probed while the chain is down, on Android while the
-screen is off or the device is in Doze (names seen then wait in a bounded
-queue), or for a domain the user removed.
+browser User-Agent, through loopback-only `mixed` inbounds that sing-box renders with a random
+port and credentials per config (`probe-relay`, `probe-warp`, and
+`probe-fallback` while failing open is on). Route rules on those inbounds sit
+ahead of every other rule, so a probe exits where it asked to whatever has
+been learned. At most two probes run at once. Nothing is probed while the
+chain is down, on Android while the screen is off or the device is in Doze
+(names seen then wait in a bounded queue), or for a domain the user removed.
 
 1. The **relay** is probed first. The relay already sees every destination,
    so this tells it nothing new. If it answers, the site is left alone.
-2. Only if the relay refuses, **WARP** is probed. Cloudflare sees that
-   destination only at that point, and the relay's address, never the device.
-3. If WARP answers, the site is **learned for WARP** and routed there.
-4. If WARP refuses too, the site is recorded as refused by both. See
-   [failing open](#failing-open).
+2. Only if the relay refuses or challenges, **WARP** is probed. Cloudflare
+   sees that destination only at that point, and the relay's address, never
+   the device.
+3. If WARP answers **cleanly** (a 2xx or 3xx with no challenge), the site is
+   **learned for WARP** and routed there.
+4. Otherwise the **fail-open path** is probed (see [failing open](#failing-open)).
 
-**What counts as refused.** `403`, `429` and `451`, or a known marker in a
-page that arrived whole or came with an error status: "blocked by network
-security", a Cloudflare challenge, or a `js_challenge` form field (Reddit's
-interstitial answers `200`). A long page that merely quotes a marker is not a
-block, and server errors say nothing about the address. The rules are a pure
-function over the response (`SiteClassifier`) and are tested against recorded
-samples. They are heuristics: a site that refuses every non-browser client
-reads as refused on every exit, which is why a double refusal is checked on
-the fail-open path before anything moves.
+**What the classifier says.** Each answer is one of four things. *Blocked* is a
+`403`, `429` or `451`, or a block page ("blocked by network security").
+*Challenged* is a challenge page a real browser would pass: a `js_challenge`
+form field (Reddit's proof-of-work interstitial answers `200`), a Cloudflare
+challenge, or `cf-mitigated: challenge`. A block page outranks a challenge
+marker, and a challenge marker outranks the status it came with. *Open* is
+anything else below `500`, and a server error is inconclusive. Markers are only
+read in a page that arrived whole or came with an error status, so a long
+article that quotes one is not a block. The rules are a pure function over the
+response (`SiteClassifier`) tested against recorded samples. They are
+heuristics.
+
+A challenge on WARP does not make a site reachable there: WARP's shared address
+is the suspect, and a challenge is not an answer a plain client can use. So
+WARP takes a site only on a clean answer, and a challenge on WARP counts as a
+refusal.
 
 **What leaks to which exit.** A domain name reaches the relay as the probe's
 connect target (it sees the destination anyway), reaches WARP only after the
@@ -136,9 +144,12 @@ network's own address, instead of the relay's. That is a deliberate step out
 of the chain, so the app says so per site: the learned-sites list and the
 chain state (`OutsideChainSite`) carry which way each site leaves.
 
-Before a site moves, the same probe is run down that path. A site that refuses
-a non-browser client wherever it comes from also fails there, and then it is
-recorded as refused on every path and stays on the relay. The fail-open probe
+Before a site moves, the same probe is run down that path, and the site fails
+open when that path answers or merely challenges it, since a real browser
+passes a challenge from an ordinary address. A site the path blocks outright (a
+`403`, `451` or a block page) is recorded as refused on every path and stays on
+the relay. That check is what keeps a site refusing every non-browser client,
+whatever its source address, from being moved for nothing. The fail-open probe
 inbound only exists while the setting is on.
 
 The relay still sees the DNS lookup for a site that fails open; only the

@@ -106,4 +106,93 @@ class SiteProberTest {
         )
         assertEquals(listOf(1), fetcher.ports)
     }
+
+    @Test
+    fun `a warp challenge is not an open warp`() = runTest {
+        val challenge = ProbeResponse(200, emptyMap(), "<input name=\"js_challenge\">", complete = true)
+        val fetcher = FakeFetcher(mapOf(1 to REFUSED, 2 to challenge, 3 to OPEN))
+
+        assertEquals(
+            ProbeOutcome.FallbackOpen(BlockReason.Forbidden),
+            SiteProber(fetcher).probe("example.com", PROXY),
+        )
+    }
+
+    @Test
+    fun `warp has to answer with a 2xx or 3xx to take a site`() = runTest {
+        val notFound = ProbeResponse(404, emptyMap(), "", complete = true)
+        val fetcher = FakeFetcher(mapOf(1 to REFUSED, 2 to notFound, 3 to OPEN))
+
+        assertEquals(ProbeOutcome.Unknown, SiteProber(fetcher).probe("example.com", PROXY))
+        assertEquals(listOf(1, 2), fetcher.ports)
+    }
+
+    @Test
+    fun `a relay challenge is enough to try warp`() = runTest {
+        val challenge = ProbeResponse(200, emptyMap(), "<input name=\"js_challenge\">", complete = true)
+        val fetcher = FakeFetcher(mapOf(1 to challenge, 2 to OPEN))
+
+        assertEquals(
+            ProbeOutcome.WarpOnly(BlockReason.Challenge),
+            SiteProber(fetcher).probe("example.com", PROXY),
+        )
+    }
+
+    @Test
+    fun `reddit blocks the relay, challenges warp, and passes a plain page on the fallback so it fails open`() = runTest {
+        val fetcher = FakeFetcher(
+            mapOf(
+                1 to response(REDDIT_BLOCK_PAGE),
+                2 to response(REDDIT_POW_INTERSTITIAL),
+                3 to response(ORDINARY_PAGE),
+            ),
+        )
+
+        assertEquals(
+            ProbeOutcome.FallbackOpen(BlockReason.NetworkSecurity),
+            SiteProber(fetcher).probe("www.reddit.com", PROXY),
+        )
+    }
+
+    @Test
+    fun `reddit with a challenge on the fallback still fails open`() = runTest {
+        val fetcher = FakeFetcher(
+            mapOf(
+                1 to response(REDDIT_BLOCK_PAGE),
+                2 to response(REDDIT_POW_INTERSTITIAL),
+                3 to response(REDDIT_POW_INTERSTITIAL),
+            ),
+        )
+
+        assertEquals(
+            ProbeOutcome.FallbackOpen(BlockReason.NetworkSecurity),
+            SiteProber(fetcher).probe("www.reddit.com", PROXY),
+        )
+    }
+
+    @Test
+    fun `a block page on the fallback keeps the site on the relay`() = runTest {
+        val fetcher = FakeFetcher(
+            mapOf(
+                1 to response(REDDIT_BLOCK_PAGE),
+                2 to response(REDDIT_POW_INTERSTITIAL),
+                3 to response(REDDIT_BLOCK_PAGE),
+            ),
+        )
+
+        assertEquals(
+            ProbeOutcome.RefusedEverywhere(BlockReason.NetworkSecurity),
+            SiteProber(fetcher).probe("www.reddit.com", PROXY),
+        )
+    }
+
+    @Test
+    fun `a hard 403 on the fallback keeps the site on the relay`() = runTest {
+        val fetcher = FakeFetcher(mapOf(1 to REFUSED, 2 to response(CLOUDFLARE_CHALLENGE), 3 to REFUSED))
+
+        assertEquals(
+            ProbeOutcome.RefusedEverywhere(BlockReason.Forbidden),
+            SiteProber(fetcher).probe("example.com", PROXY),
+        )
+    }
 }

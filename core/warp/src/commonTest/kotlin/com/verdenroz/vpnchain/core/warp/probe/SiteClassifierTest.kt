@@ -4,7 +4,7 @@ import com.verdenroz.vpnchain.core.model.BlockReason
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-private const val REDDIT_POW_INTERSTITIAL = """HTTP/2 200
+internal const val REDDIT_POW_INTERSTITIAL = """HTTP/2 200
 content-type: text/html
 cache-control: private, no-store
 server: snooserv
@@ -20,7 +20,7 @@ server: snooserv
 </form></body></html>
 """
 
-private const val REDDIT_BLOCK_PAGE = """HTTP/2 403
+internal const val REDDIT_BLOCK_PAGE = """HTTP/2 403
 content-type: text/html
 server: snooserv
 
@@ -28,7 +28,7 @@ server: snooserv
 <div class="text-16"><div class=pt-md>If you think you've been blocked by mistake, file a ticket below and we'll look into it.</div></div></div></body>
 """
 
-private const val CLOUDFLARE_CHALLENGE = """HTTP/2 403
+internal const val CLOUDFLARE_CHALLENGE = """HTTP/2 403
 cf-mitigated: challenge
 content-type: text/html; charset=UTF-8
 server: cloudflare
@@ -37,14 +37,14 @@ server: cloudflare
 <body><script src="/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1"></script></body></html>
 """
 
-private const val ORDINARY_PAGE = """HTTP/2 200
+internal const val ORDINARY_PAGE = """HTTP/2 200
 content-type: text/html
 server: nginx
 
 <!DOCTYPE html><html><head><title>Example</title></head><body><h1>Hello</h1></body></html>
 """
 
-private fun response(sample: String, complete: Boolean = true): ProbeResponse =
+internal fun response(sample: String, complete: Boolean = true): ProbeResponse =
     checkNotNull(ProbeResponse.parse(sample.replace("\n", "\r\n"), complete))
 
 private fun verdict(status: Int, body: String = "", complete: Boolean = true, headers: Map<String, String> = emptyMap()) =
@@ -55,7 +55,7 @@ class SiteClassifierTest {
     @Test
     fun `reddit's proof-of-work interstitial is blocked even though it answers 200`() {
         assertEquals(
-            ExitVerdict.Blocked(BlockReason.Challenge),
+            ExitVerdict.Challenged,
             SiteClassifier.classify(response(REDDIT_POW_INTERSTITIAL)),
         )
     }
@@ -71,14 +71,26 @@ class SiteClassifierTest {
     @Test
     fun `a cloudflare challenge is blocked`() {
         assertEquals(
-            ExitVerdict.Blocked(BlockReason.Challenge),
+            ExitVerdict.Challenged,
             SiteClassifier.classify(response(CLOUDFLARE_CHALLENGE)),
         )
     }
 
     @Test
+    fun `a block page wins over a challenge marker`() {
+        val both = ProbeResponse(200, emptyMap(), "js_challenge blocked by network security", complete = true)
+
+        assertEquals(ExitVerdict.Blocked(BlockReason.NetworkSecurity), SiteClassifier.classify(both))
+    }
+
+    @Test
     fun `an ordinary page is open`() {
         assertEquals(ExitVerdict.Open, SiteClassifier.classify(response(ORDINARY_PAGE)))
+    }
+
+    @Test
+    fun `a challenge served as a 403 is still a challenge`() {
+        assertEquals(ExitVerdict.Challenged, verdict(403, "<title>Just a moment...</title>"))
     }
 
     @Test
@@ -116,7 +128,7 @@ class SiteClassifierTest {
     @Test
     fun `the cloudflare mitigation header alone marks a challenge`() {
         assertEquals(
-            ExitVerdict.Blocked(BlockReason.Challenge),
+            ExitVerdict.Challenged,
             verdict(200, headers = mapOf("cf-mitigated" to "challenge")),
         )
     }
