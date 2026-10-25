@@ -535,9 +535,9 @@ fun SettingsScreen(
 }
 
 /**
- * The WARP tail: which traffic takes it, and — for the selective mode — the
- * domains to add to the built-in list. The field only appears for that mode,
- * since it decides nothing in the other two.
+ * The WARP tail: which traffic takes it, and — for the selective mode — what
+ * is learned and the domains that always take it. The rest only appears for
+ * that mode, since it decides nothing in the other two.
  */
 @Composable
 private fun WarpSection(

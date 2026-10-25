@@ -15,7 +15,6 @@ interface LearnedSitesRepository {
 
     suspend fun isSuppressed(domain: String): Boolean
 
-    /** A suppressed domain is left alone. */
     suspend fun learn(domain: String, route: LearnedRoute, reason: BlockReason)
 
     /** Drops the entry and keeps it from being learned again for a week. */
