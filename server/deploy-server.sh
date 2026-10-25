@@ -6,7 +6,8 @@
 # It also switches the kernel to BBR + fq: the default cubic backs off hard on
 # every loss, which cripples throughput over a lossy long-RTT path.
 #
-# Run as root ON THE VPS:  bash deploy-server.sh
+# Run as root ON THE VPS from a copy of the whole server/ directory:
+#   bash deploy-server.sh
 # Re-runnable: rebuilds the config from your answers but keeps the REALITY
 # keypair, devices and short IDs. FRESH=1 wipes them and starts over.
 #
@@ -17,15 +18,13 @@ set -euo pipefail
 
 # ---- config knobs (env-overridable) --------------------------------------
 XRAY_CONFIG="${XRAY_CONFIG:-/usr/local/etc/xray/config.json}"
-SIDECAR="${SIDECAR:-$(dirname "$XRAY_CONFIG")/devices.json}"
+CFG="$XRAY_CONFIG"
+SETTLE="${SETTLE:-1}"
 DEVICE_NAME="${DEVICE_NAME:-device1}"
 DEVICE_FILE_DIR="${DEVICE_FILE_DIR:-/root}"
 API_PORT="${API_PORT:-10085}"                # loopback stats API (per-device traffic)
 FRESH="${FRESH:-0}"
 DEPLOY_SKIP_INSTALL="${DEPLOY_SKIP_INSTALL:-0}"   # tests: no apt, xray installer, ufw or systemctl enable
-RELOAD_CMD="${RELOAD_CMD:-systemctl restart xray}"
-ACTIVE_CMD="${ACTIVE_CMD:-systemctl is-active --quiet xray}"
-TAG="vless-reality-443"
 # REALITY needs a "borrowed" TLS site: TLS1.3 + HTTP/2, not a CDN that blocks,
 # ideally hosted outside your VPS's own network. Good stable picks below.
 SNI="${SNI:-www.samsung.com}"          # <-- the domain you impersonate
@@ -41,6 +40,9 @@ EXIT_WG_ENDPOINT="${EXIT_WG_ENDPOINT:-}"           # [Peer] Endpoint  host:port
 EXIT_WG_MTU="${EXIT_WG_MTU:-1280}"
 EXIT_WG_DNS="${EXIT_WG_DNS:-10.2.0.1}"     # Proton internal resolver (applies NetShield)
 # --------------------------------------------------------------------------
+
+# shellcheck source=server/lib/xray-common.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/xray-common.sh"
 
 log() { printf '\033[1;36m[deploy]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -73,16 +75,25 @@ fi
 
 XRAY_BIN="${XRAY_BIN:-$(command -v xray || echo /usr/local/bin/xray)}"
 [ -x "$XRAY_BIN" ] || die "xray not found after install"
+XRAY="$XRAY_BIN"
+
+lock
+load
+fold_stats
 
 # ---- identity: keep what is there unless FRESH=1 --------------------------
 KEEP=0
-if [ "$FRESH" != 1 ] && [ -f "$XRAY_CONFIG" ] && jq -e --arg tag "$TAG" '
-    .inbounds[] | select(.tag == $tag)
-    | (.settings.clients | length > 0)
-      and (.streamSettings.realitySettings.privateKey | length > 0)
-      and (.streamSettings.realitySettings.shortIds | (length > 0) and all(.[]; . != ""))' \
-    "$XRAY_CONFIG" >/dev/null 2>&1; then
+if [ "$FRESH" != 1 ] && [ -f "$XRAY_CONFIG" ]; then
+  PROBLEM="$(jq -r --arg tag "$TAG" '
+    (.inbounds // [] | map(select(.tag == $tag))[0]) as $in
+    | if $in == null then "no \($tag) inbound"
+      elif ($in.streamSettings.realitySettings.privateKey // "") == "" then "no REALITY private key"
+      elif ($in.streamSettings.realitySettings.shortIds // [] | (length == 0) or any(.[]; . == "")) then "short IDs missing or empty"
+      else empty end' "$XRAY_CONFIG" 2>/dev/null)" || PROBLEM="not valid JSON"
+  [ -z "$PROBLEM" ] || die "$XRAY_CONFIG cannot be kept ($PROBLEM); fix it, or set FRESH=1 to wipe devices and keys"
   KEEP=1
+fi
+if [ "$KEEP" = 1 ]; then
   log "Keeping the existing REALITY keypair, devices and short IDs (FRESH=1 to start over)."
   PRIV="$(jq -r --arg tag "$TAG" '.inbounds[] | select(.tag == $tag) | .streamSettings.realitySettings.privateKey' "$XRAY_CONFIG")"
   CLIENTS="$(jq -c --arg tag "$TAG" '.inbounds[] | select(.tag == $tag) | .settings.clients' "$XRAY_CONFIG")"
@@ -153,20 +164,10 @@ build_config() {
 }'
 }
 
-log "Writing $XRAY_CONFIG ..."
 mkdir -p "$(dirname "$XRAY_CONFIG")" /var/log/xray
-NEW_CONFIG="$(mktemp --suffix=.json "$(dirname "$XRAY_CONFIG")/config.XXXXXX")"
-build_config > "$NEW_CONFIG"
-"$XRAY_BIN" -test -config "$NEW_CONFIG" >/dev/null || { rm -f "$NEW_CONFIG"; die "xray config failed validation"; }
-[ ! -f "$XRAY_CONFIG" ] || cp -p "$XRAY_CONFIG" "$XRAY_CONFIG.bak.$(date +%s)"
-mv "$NEW_CONFIG" "$XRAY_CONFIG"; chmod 644 "$XRAY_CONFIG"   # mktemp is 600; service user must read it
-
 if [ "$KEEP" != 1 ]; then
   [ ! -f "$SIDECAR" ] || cp -p "$SIDECAR" "$SIDECAR.bak.$(date +%s)"
-  SIDECAR_TMP="$(mktemp "$SIDECAR.XXXXXX")"
-  jq -n --arg n "$DEVICE_NAME" --arg sid "$SHORT_ID" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{($n): {shortId:$sid, added:$now}}' > "$SIDECAR_TMP"
-  chmod 600 "$SIDECAR_TMP"; mv "$SIDECAR_TMP" "$SIDECAR"
+  SC="$(jq -nc --arg n "$DEVICE_NAME" --arg sid "$SHORT_ID" --arg now "$(now)" '{($n): {shortId:$sid, added:$now}}')"
 fi
 
 if [ "$DEPLOY_SKIP_INSTALL" != 1 ]; then
@@ -177,10 +178,8 @@ if [ "$DEPLOY_SKIP_INSTALL" != 1 ]; then
   systemctl enable xray >/dev/null 2>&1 || true
 fi
 
-log "Starting xray..."
-bash -c "$RELOAD_CMD"
-sleep 1
-bash -c "$ACTIVE_CMD" || die "xray failed to start; check: journalctl -u xray -e"
+log "Writing $XRAY_CONFIG and starting xray..."
+swap_config "$(build_config)"
 
 VPS_IP="${VPS_IP:-$(curl -fsSL https://api.ipify.org || echo YOUR_VPS_IP)}"
 EXIT_PATH="$([ "$FINAL_OUT" = exit-wg ] && echo "your machine -> VPS -> ProtonVPN -> internet" || echo "your machine -> VPS (direct exit)")"

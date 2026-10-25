@@ -80,6 +80,41 @@ check "Proton config passes xray -test" valid
 check "Proton chain is the catch-all exit" test "$(jq -r '.routing.rules[-1].outboundTag' "$CFG")" = exit-wg
 check "device file named after the device" test -f "$W/vpn-chain-laptop.env"
 
+# ---- unkeepable and emptied configs --------------------------------------
+setup
+printf '{ "inbounds": [\n' > "$CFG"
+cp "$CFG" "$W/before"
+deploy
+check "corrupt config refused" test "$RC" -ne 0
+check "refusal names FRESH=1" bash -c 'grep -q "FRESH=1" <<<"$1"' _ "$ALL"
+check "corrupt config left untouched" cmp "$CFG" "$W/before"
+FRESH=1 deploy
+check "FRESH=1 replaces a corrupt config" test "$RC" -eq 0
+
+setup
+jq '.inbounds[0].streamSettings.realitySettings.shortIds = []' "$FIX/today.json" > "$CFG"
+cp "$CFG" "$W/before"
+deploy
+check "config without short IDs refused" test "$RC" -ne 0
+check "config without short IDs left untouched" cmp "$CFG" "$W/before"
+
+setup
+deploy
+PRIV="$(inb '.streamSettings.realitySettings.privateKey')"
+bash "$SERVER/xray-clients.sh" revoke device1 --force >/dev/null 2>&1
+deploy
+check "re-run after revoking every device exits 0" test "$RC" -eq 0
+check "re-run keeps the keypair with no devices" test "$(inb '.streamSettings.realitySettings.privateKey')" = "$PRIV"
+check "re-run leaves no clients" test "$(jq '.inbounds[0].settings.clients | length' "$CFG")" -eq 0
+
+setup
+deploy
+cat > "$W/stats.json" <<'JSON'
+{"stat":[{"name":"user>>>device1>>>traffic>>>uplink","value":"8192"}]}
+JSON
+STATS_CMD="cat $W/stats.json" deploy
+check "re-run folds the counters into the sidecar before restarting" test "$(jq -r .device1.up "$SIDECAR")" = 8192
+
 # ---- legacy config -------------------------------------------------------
 setup
 cp "$FIX/today.json" "$CFG"
