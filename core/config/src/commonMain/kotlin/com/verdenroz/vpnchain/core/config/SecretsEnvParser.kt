@@ -11,7 +11,10 @@ import com.verdenroz.vpnchain.core.model.WireGuardEntry
  */
 object SecretsEnvParser {
 
-    fun parse(text: String): Result<ChainProfile> {
+    /** What `secrets.env` carries: the relay and, when all `ENTRY_*` keys are given, its entry hop. */
+    data class Parsed(val relay: ChainProfile, val entryHop: WireGuardEntry?)
+
+    fun parse(text: String): Result<Parsed> {
         val values = text.lineSequence()
             .map(String::trim)
             .filter { it.isNotEmpty() && !it.startsWith("#") && "=" in it }
@@ -28,19 +31,17 @@ object SecretsEnvParser {
             )
         }
 
-        return Result.success(
-            ChainProfile(
-                vpsIp = values.getValue("VPS_IP"),
-                vlessUuid = values.getValue("VLESS_UUID"),
-                realityPublicKey = values.getValue("REALITY_PUBKEY"),
-                shortId = values.getValue("SHORT_ID"),
-                sni = values["SNI"]?.takeIf(String::isNotBlank) ?: ChainProfile.DEFAULT_SNI,
-                serverPort = values["SERVER_PORT"]?.toIntOrNull() ?: ChainProfile.DEFAULT_SERVER_PORT,
-                localProxyPort = values["LOCAL_PROXY_PORT"]?.toIntOrNull()
-                    ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT,
-                entryHop = parseEntryHop(values),
-            ),
+        val relay = ChainProfile(
+            vpsIp = values.getValue("VPS_IP"),
+            vlessUuid = values.getValue("VLESS_UUID"),
+            realityPublicKey = values.getValue("REALITY_PUBKEY"),
+            shortId = values.getValue("SHORT_ID"),
+            sni = values["SNI"]?.takeIf(String::isNotBlank) ?: ChainProfile.DEFAULT_SNI,
+            serverPort = values["SERVER_PORT"]?.toIntOrNull() ?: ChainProfile.DEFAULT_SERVER_PORT,
+            localProxyPort = values["LOCAL_PROXY_PORT"]?.toIntOrNull()
+                ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT,
         )
+        return Result.success(Parsed(relay, parseEntryHop(values)))
     }
 
     /** Present only when all required WireGuard keys are supplied. */
@@ -63,7 +64,8 @@ object SecretsEnvParser {
      * Keys already equal to [parse]'s own fallback are omitted: every byte dropped
      * lowers the QR's module count, and a denser code is a harder camera target.
      */
-    fun format(profile: ChainProfile): String = buildString {
+    fun format(parsed: Parsed): String = buildString {
+        val (profile, entryHop) = parsed
         appendLine("VPS_IP=${profile.vpsIp}")
         appendLine("VLESS_UUID=${profile.vlessUuid}")
         appendLine("REALITY_PUBKEY=${profile.realityPublicKey}")
@@ -75,7 +77,7 @@ object SecretsEnvParser {
             profile.localProxyPort,
             ChainProfile.DEFAULT_LOCAL_PROXY_PORT,
         )
-        profile.entryHop?.let { entry ->
+        entryHop?.let { entry ->
             appendLine("ENTRY_PRIVKEY=${entry.privateKey}")
             appendLine("ENTRY_ADDRESS=${entry.address}")
             appendLine("ENTRY_PEER_PUBKEY=${entry.peerPublicKey}")

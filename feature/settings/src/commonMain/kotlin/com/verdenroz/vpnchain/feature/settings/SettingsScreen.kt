@@ -48,6 +48,7 @@ import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.WarpMode
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.ui.ScreenNameplate
 import com.verdenroz.vpnchain.core.ui.SectionCard
 import com.verdenroz.vpnchain.core.ui.asString
@@ -182,7 +183,7 @@ fun SettingsScreen(
     uiState: SettingsUiState,
     snackbarHostState: SnackbarHostState,
     onSelectTheme: (ThemeConfig) -> Unit,
-    onSaveProfile: (ChainProfile) -> Unit,
+    onSaveProfile: (ChainProfile, WireGuardEntry?) -> Unit,
     onClearProfile: () -> Unit,
     onImportText: (String) -> Unit,
     onImportDefault: () -> Unit,
@@ -245,7 +246,7 @@ fun SettingsScreen(
             SectionCard(title = stringResource(Res.string.settings_chain_identity_title)) {
                 Text(
                     if (hasProfile) {
-                        stringResource(Res.string.settings_configured_for, uiState.profile?.vpsIp ?: "")
+                        stringResource(Res.string.settings_configured_for, uiState.profile?.host.orEmpty())
                     } else {
                         stringResource(Res.string.settings_no_profile_yet)
                     },
@@ -303,7 +304,7 @@ fun SettingsScreen(
                 }
                 Reveal(visible = qrExpanded && uiState.profile != null) {
                     Spacer(Modifier.height(16.dp))
-                    uiState.profile?.let { QrPairingPanel(it) }
+                    uiState.profile?.relay?.let { QrPairingPanel(it, uiState.profile?.wireGuard) }
                 }
             }
 
@@ -363,7 +364,7 @@ fun SettingsScreen(
             // Always rendered: the WARP tail applies to every chain, including
             // an Android profile with no entry hop to configure.
             SectionCard(title = stringResource(Res.string.settings_routing_title)) {
-                val profileHasEntry = uiState.profile?.entryHop != null
+                val profileHasEntry = uiState.profile?.wireGuard != null
                 // Android has no proxy-only mode — the tunnel is always TUN —
                 // so this toggle would be a no-op there.
                 if (currentPlatform == Platform.Desktop) {
@@ -618,9 +619,9 @@ private fun ImportSection(
 
 /** Renders the current profile as a scannable QR — desktop side of device pairing. */
 @Composable
-private fun QrPairingPanel(profile: ChainProfile) {
+private fun QrPairingPanel(profile: ChainProfile, entryHop: WireGuardEntry?) {
     val colors = PanelTheme.colors
-    val bitmap = remember(profile) { renderQrCode(SecretsEnvParser.format(profile)) }
+    val bitmap = remember(profile) { renderQrCode(SecretsEnvParser.format(SecretsEnvParser.Parsed(profile, entryHop))) }
     Column {
         Text(
             stringResource(Res.string.settings_qr_warning),

@@ -21,6 +21,7 @@ import com.verdenroz.vpnchain.core.designsystem.component.PanelButton
 import com.verdenroz.vpnchain.core.designsystem.component.PanelField
 import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.ui.SectionLabel
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
@@ -48,35 +49,35 @@ import org.jetbrains.compose.resources.stringResource
 /** Editable chain identity; credential fields are masked. */
 @Composable
 fun ProfileForm(
-    initial: ChainProfile?,
-    onSave: (ChainProfile) -> Unit,
+    initial: SavedProfile?,
+    onSave: (ChainProfile, WireGuardEntry?) -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = PanelTheme.colors
-    var vpsIp by remember(initial) { mutableStateOf(initial?.vpsIp ?: "") }
-    var uuid by remember(initial) { mutableStateOf(initial?.vlessUuid ?: "") }
-    var pubKey by remember(initial) { mutableStateOf(initial?.realityPublicKey ?: "") }
-    var shortId by remember(initial) { mutableStateOf(initial?.shortId ?: "") }
-    var sni by remember(initial) { mutableStateOf(initial?.sni ?: ChainProfile.DEFAULT_SNI) }
+    var vpsIp by remember(initial) { mutableStateOf(initial?.relay?.vpsIp ?: "") }
+    var uuid by remember(initial) { mutableStateOf(initial?.relay?.vlessUuid ?: "") }
+    var pubKey by remember(initial) { mutableStateOf(initial?.relay?.realityPublicKey ?: "") }
+    var shortId by remember(initial) { mutableStateOf(initial?.relay?.shortId ?: "") }
+    var sni by remember(initial) { mutableStateOf(initial?.relay?.sni ?: ChainProfile.DEFAULT_SNI) }
     var port by remember(initial) {
-        mutableStateOf((initial?.serverPort ?: ChainProfile.DEFAULT_SERVER_PORT).toString())
+        mutableStateOf((initial?.relay?.serverPort ?: ChainProfile.DEFAULT_SERVER_PORT).toString())
     }
     var proxyPort by remember(initial) {
-        mutableStateOf((initial?.localProxyPort ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT).toString())
+        mutableStateOf((initial?.relay?.localProxyPort ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT).toString())
     }
     // Optional TUN-mode WireGuard entry hop, used on Android and on
     // desktop when system-wide TUN is on. Empty = relay-only.
-    var wgPrivKey by remember(initial) { mutableStateOf(initial?.entryHop?.privateKey ?: "") }
-    var wgAddress by remember(initial) { mutableStateOf(initial?.entryHop?.address ?: "") }
-    var wgPeerKey by remember(initial) { mutableStateOf(initial?.entryHop?.peerPublicKey ?: "") }
-    var wgHost by remember(initial) { mutableStateOf(initial?.entryHop?.endpointHost ?: "") }
+    var wgPrivKey by remember(initial) { mutableStateOf(initial?.wireGuard?.privateKey ?: "") }
+    var wgAddress by remember(initial) { mutableStateOf(initial?.wireGuard?.address ?: "") }
+    var wgPeerKey by remember(initial) { mutableStateOf(initial?.wireGuard?.peerPublicKey ?: "") }
+    var wgHost by remember(initial) { mutableStateOf(initial?.wireGuard?.endpointHost ?: "") }
     var wgPort by remember(initial) {
         mutableStateOf(
-            (initial?.entryHop?.endpointPort ?: WireGuardEntry.DEFAULT_ENDPOINT_PORT).toString(),
+            (initial?.wireGuard?.endpointPort ?: WireGuardEntry.DEFAULT_ENDPOINT_PORT).toString(),
         )
     }
-    var wgDns by remember(initial) { mutableStateOf(initial?.entryHop?.dns ?: "") }
+    var wgDns by remember(initial) { mutableStateOf(initial?.wireGuard?.dns ?: "") }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -153,6 +154,9 @@ fun ProfileForm(
                             endpointPort = wgPort.toIntOrNull()
                                 ?: WireGuardEntry.DEFAULT_ENDPOINT_PORT,
                             dns = wgDns.trim().ifBlank { null },
+                            presharedKey = initial?.wireGuard?.presharedKey,
+                            mtu = initial?.wireGuard?.mtu,
+                            keepaliveSeconds = initial?.wireGuard?.keepaliveSeconds,
                         )
                     } else {
                         null
@@ -167,8 +171,8 @@ fun ProfileForm(
                             serverPort = port.toIntOrNull() ?: ChainProfile.DEFAULT_SERVER_PORT,
                             localProxyPort = proxyPort.toIntOrNull()
                                 ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT,
-                            entryHop = entry,
                         ),
+                        entry,
                     )
                 },
             )

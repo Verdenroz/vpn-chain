@@ -8,6 +8,7 @@ import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.TunnelState
@@ -319,12 +320,14 @@ private fun settings(
     autoReconnect = autoReconnect,
 )
 
-private val SUPERVISED_PROFILE = ChainProfile(
+private val SUPERVISED_RELAY = ChainProfile(
     vpsIp = "203.0.113.10",
     vlessUuid = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
     realityPublicKey = "key",
     shortId = "ab",
 )
+
+private val SUPERVISED_PROFILE = SavedProfile(id = "a", name = "a", relay = SUPERVISED_RELAY)
 
 private class SupervisorWorld(
     private val scope: TestScope,
@@ -397,17 +400,17 @@ private class FakeChainRepository(initialState: TunnelState) : ChainRepository {
 }
 
 private class FakeProfileRepository : ProfileRepository {
-    val stored = MutableStateFlow<ChainProfile?>(SUPERVISED_PROFILE)
-    override val profile: Flow<ChainProfile?> = stored
+    val stored = MutableStateFlow<SavedProfile?>(SUPERVISED_PROFILE)
+    override val profile: Flow<SavedProfile?> = stored
     override val profiles: Flow<List<SavedProfile>> = MutableStateFlow(emptyList())
     override val activeProfileId: Flow<String?> = MutableStateFlow(null)
-    override suspend fun save(profile: ChainProfile) = Unit
-    override suspend fun add(name: String, profile: ChainProfile) = "id"
+    override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = Unit
+    override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = "id"
     override suspend fun rename(id: String, name: String) = Unit
     override suspend fun delete(id: String) = Unit
     override suspend fun setActive(id: String) = Unit
     override suspend fun clear() = Unit
-    override suspend fun importFromSecretsEnv(text: String) = Result.success(SUPERVISED_PROFILE)
+    override suspend fun importFromSecretsEnv(text: String) = Result.success(SUPERVISED_RELAY)
 }
 
 private class FakeSettingsRepository(value: UserSettings) : SettingsRepository {

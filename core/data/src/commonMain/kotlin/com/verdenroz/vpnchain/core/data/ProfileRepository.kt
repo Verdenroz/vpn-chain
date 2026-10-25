@@ -4,6 +4,7 @@ import com.verdenroz.vpnchain.core.config.SecretsEnvParser
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.SavedProfile
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlin.random.Random
@@ -17,14 +18,14 @@ import kotlin.random.Random
  */
 interface ProfileRepository {
     val profiles: Flow<List<SavedProfile>>
-    val profile: Flow<ChainProfile?>
+    val profile: Flow<SavedProfile?>
     val activeProfileId: Flow<String?>
 
-    /** Replaces the active profile in place, keeping its id and name. */
-    suspend fun save(profile: ChainProfile)
+    /** Replaces the active profile's relay and entry hop in place, keeping its id and name. */
+    suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?)
 
     /** @return the id of the newly added profile, which becomes active. */
-    suspend fun add(name: String, profile: ChainProfile): String
+    suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?): String
     suspend fun rename(id: String, name: String)
     suspend fun delete(id: String)
     suspend fun setActive(id: String)
@@ -41,25 +42,25 @@ internal class DefaultProfileRepository(
 ) : ProfileRepository {
 
     override val profiles: Flow<List<SavedProfile>> = preferences.profiles
-    override val profile: Flow<ChainProfile?> = preferences.profile
+    override val profile: Flow<SavedProfile?> = preferences.profile
     override val activeProfileId: Flow<String?> = preferences.activeProfileId
 
-    override suspend fun save(profile: ChainProfile) {
+    override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) {
         val saved = preferences.profiles.first()
         val activeId = preferences.activeProfileId.first()
         if (saved.isEmpty() || activeId == null) {
-            add(name = profile.vpsIp, profile = profile)
+            add(name = relay.vpsIp, relay = relay, wireGuard = entryHop)
             return
         }
         preferences.setProfiles(
-            saved.map { if (it.id == activeId) it.copy(profile = profile) else it },
+            saved.map { if (it.id == activeId) it.copy(relay = relay, wireGuard = entryHop) else it },
         )
     }
 
-    override suspend fun add(name: String, profile: ChainProfile): String {
+    override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?): String {
         val id = newId()
         preferences.setProfiles(
-            preferences.profiles.first() + SavedProfile(id = id, name = name, profile = profile),
+            preferences.profiles.first() + SavedProfile(id = id, name = name, relay = relay, wireGuard = wireGuard),
         )
         preferences.setActiveProfileId(id)
         return id
@@ -86,7 +87,9 @@ internal class DefaultProfileRepository(
     override suspend fun clear() = preferences.clearProfile()
 
     override suspend fun importFromSecretsEnv(text: String): Result<ChainProfile> =
-        SecretsEnvParser.parse(text).onSuccess { add(name = it.vpsIp, profile = it) }
+        SecretsEnvParser.parse(text)
+            .onSuccess { add(name = it.relay.vpsIp, relay = it.relay, wireGuard = it.entryHop) }
+            .map { it.relay }
 }
 
 /**

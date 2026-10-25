@@ -1,6 +1,6 @@
 package com.verdenroz.vpnchain.core.config
 
-import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpExit
 
@@ -17,7 +17,7 @@ import com.verdenroz.vpnchain.core.model.WarpExit
  * without a tail rather than refusing to render at all.
  */
 expect fun renderPlatformTunnelConfig(
-    profile: ChainProfile,
+    profile: SavedProfile,
     settings: UserSettings,
     warp: WarpExit?,
 ): String

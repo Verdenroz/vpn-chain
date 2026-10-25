@@ -5,7 +5,6 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DEFAULT_WARP_DOMAINS
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
@@ -16,6 +15,14 @@ import com.verdenroz.vpnchain.core.model.WarpMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Preference-backed storage for the chain profile and app settings.
@@ -30,10 +37,10 @@ class VpnChainPreferencesDataSource(
     val profiles: Flow<List<SavedProfile>> = dataStore.data.map(::readProfiles)
 
     /** The selected profile, or the first one when the selection is stale. */
-    val profile: Flow<ChainProfile?> = dataStore.data.map { prefs ->
+    val profile: Flow<SavedProfile?> = dataStore.data.map { prefs ->
         val saved = readProfiles(prefs)
         val activeId = prefs[ACTIVE_PROFILE_ID_KEY]
-        (saved.firstOrNull { it.id == activeId } ?: saved.firstOrNull())?.profile
+        saved.firstOrNull { it.id == activeId } ?: saved.firstOrNull()
     }
 
     val activeProfileId: Flow<String?> = dataStore.data.map { prefs ->
@@ -50,14 +57,44 @@ class VpnChainPreferencesDataSource(
      */
     private fun readProfiles(prefs: Preferences): List<SavedProfile> {
         prefs[PROFILES_KEY]?.let { raw ->
-            runCatching { json.decodeFromString<List<SavedProfile>>(raw) }
+            runCatching { decodeProfiles(raw) }
                 .getOrNull()
                 ?.let { return it }
         }
-        val legacy = prefs[PROFILE_KEY]
-            ?.let { raw -> runCatching { json.decodeFromString<ChainProfile>(raw) }.getOrNull() }
-            ?: return emptyList()
-        return listOf(SavedProfile(id = LEGACY_PROFILE_ID, name = legacy.vpsIp, profile = legacy))
+        return prefs[PROFILE_KEY]
+            ?.let { raw -> runCatching { listOf(decodeLegacyProfile(raw)) }.getOrNull() }
+            ?: emptyList()
+    }
+
+    private fun decodeProfiles(raw: String): List<SavedProfile> {
+        val upgraded = JsonArray(json.parseToJsonElement(raw).jsonArray.map(::upgradeProfileShape))
+        return json.decodeFromJsonElement(upgraded)
+    }
+
+    private fun decodeLegacyProfile(raw: String): SavedProfile {
+        val profile = json.parseToJsonElement(raw).jsonObject
+        val wrapped = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive(LEGACY_PROFILE_ID),
+                "name" to profile.getValue("vpsIp"),
+                "profile" to profile,
+            ),
+        )
+        return json.decodeFromJsonElement(upgradeProfileShape(wrapped))
+    }
+
+    /**
+     * Profiles stored before connections could be WireGuard-only nest the relay
+     * under `profile`, with the entry hop inside it.
+     */
+    private fun upgradeProfileShape(element: JsonElement): JsonElement {
+        val saved = element.jsonObject
+        val profile = saved["profile"]?.jsonObject ?: return element
+        val entry = profile["entryHop"]?.takeIf { it !is JsonNull }
+        return JsonObject(
+            saved - "profile" + ("relay" to JsonObject(profile - "entryHop")) +
+                listOfNotNull(entry?.let { "wireGuard" to it }),
+        )
     }
 
     val settings: Flow<UserSettings> = dataStore.data.map { prefs ->

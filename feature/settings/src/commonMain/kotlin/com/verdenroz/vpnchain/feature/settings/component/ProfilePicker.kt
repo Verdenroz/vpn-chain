@@ -67,7 +67,7 @@ internal fun ProfilePicker(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        saved.profile.vpsIp,
+                        saved.host,
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.muted,
                         maxLines = 1,

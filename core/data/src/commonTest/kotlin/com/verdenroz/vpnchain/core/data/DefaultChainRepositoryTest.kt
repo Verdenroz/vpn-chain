@@ -9,6 +9,7 @@ import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
@@ -115,13 +116,17 @@ class DefaultChainRepositoryTest {
     }
 }
 
-private val REPOSITORY_PROFILE = ChainProfile(
-    vpsIp = "203.0.113.10",
-    serverPort = 443,
-    vlessUuid = "8f1c6d2e-4b7a-4c31-9f0e-2a5d6c8b1e33",
-    realityPublicKey = "0KcF1hV0Qm5wZ1YHc2xJ8s3nT4pR7uD9eA2bC6gK1lM",
-    shortId = "a1b2c3d4",
-    sni = "www.example.com",
+private val REPOSITORY_PROFILE = SavedProfile(
+    id = "a",
+    name = "a",
+    relay = ChainProfile(
+        vpsIp = "203.0.113.10",
+        serverPort = 443,
+        vlessUuid = "8f1c6d2e-4b7a-4c31-9f0e-2a5d6c8b1e33",
+        realityPublicKey = "0KcF1hV0Qm5wZ1YHc2xJ8s3nT4pR7uD9eA2bC6gK1lM",
+        shortId = "a1b2c3d4",
+        sni = "www.example.com",
+    ),
 )
 
 private class RepositoryWorld(scope: CoroutineScope) {
@@ -169,12 +174,12 @@ private class FakeTunnelController : TunnelController {
 }
 
 private class StubProfileRepository : ProfileRepository {
-    val stored = MutableStateFlow<ChainProfile?>(null)
-    override val profile: Flow<ChainProfile?> = stored
+    val stored = MutableStateFlow<SavedProfile?>(null)
+    override val profile: Flow<SavedProfile?> = stored
     override val profiles: Flow<List<SavedProfile>> = MutableStateFlow(emptyList())
     override val activeProfileId: Flow<String?> = MutableStateFlow(null)
-    override suspend fun save(profile: ChainProfile) = Unit
-    override suspend fun add(name: String, profile: ChainProfile) = "id"
+    override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = Unit
+    override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = "id"
     override suspend fun rename(id: String, name: String) = Unit
     override suspend fun delete(id: String) = Unit
     override suspend fun setActive(id: String) = Unit

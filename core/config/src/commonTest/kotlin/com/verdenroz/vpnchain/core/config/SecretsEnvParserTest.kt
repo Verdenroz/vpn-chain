@@ -23,12 +23,12 @@ class SecretsEnvParserTest {
     fun `parses the four required keys and defaults the rest`() {
         val profile = SecretsEnvParser.parse(RELAY_ONLY).getOrThrow()
 
-        assertEquals("203.0.113.10", profile.vpsIp)
-        assertEquals("3f7b1c2e-0000-4444-8888-aabbccddeeff", profile.vlessUuid)
-        assertEquals("Zx9-publickey", profile.realityPublicKey)
-        assertEquals("a1b2c3d4", profile.shortId)
-        assertEquals(ChainProfile.DEFAULT_SNI, profile.sni)
-        assertEquals(ChainProfile.DEFAULT_SERVER_PORT, profile.serverPort)
+        assertEquals("203.0.113.10", profile.relay.vpsIp)
+        assertEquals("3f7b1c2e-0000-4444-8888-aabbccddeeff", profile.relay.vlessUuid)
+        assertEquals("Zx9-publickey", profile.relay.realityPublicKey)
+        assertEquals("a1b2c3d4", profile.relay.shortId)
+        assertEquals(ChainProfile.DEFAULT_SNI, profile.relay.sni)
+        assertEquals(ChainProfile.DEFAULT_SERVER_PORT, profile.relay.serverPort)
         assertNull(profile.entryHop)
     }
 
@@ -46,8 +46,8 @@ class SecretsEnvParserTest {
             """.trimIndent(),
         ).getOrThrow()
 
-        assertEquals("203.0.113.10", profile.vpsIp)
-        assertEquals("short", profile.shortId)
+        assertEquals("203.0.113.10", profile.relay.vpsIp)
+        assertEquals("short", profile.relay.shortId)
     }
 
     @Test
@@ -133,7 +133,7 @@ class SecretsEnvParserTest {
     fun `falls back to defaults when ports are not numbers`() {
         val profile = SecretsEnvParser.parse("$RELAY_ONLY\nSERVER_PORT=https").getOrThrow()
 
-        assertEquals(ChainProfile.DEFAULT_SERVER_PORT, profile.serverPort)
+        assertEquals(ChainProfile.DEFAULT_SERVER_PORT, profile.relay.serverPort)
     }
 
     /** format() feeds the QR pairing payload, so an entry DNS value must
@@ -162,9 +162,9 @@ class SecretsEnvParserTest {
             "$RELAY_ONLY\nSNI=example.org\nSERVER_PORT=8443\nLOCAL_PROXY_PORT=1081",
         ).getOrThrow()
 
-        assertEquals("example.org", profile.sni)
-        assertEquals(8443, profile.serverPort)
-        assertEquals(1081, profile.localProxyPort)
+        assertEquals("example.org", profile.relay.sni)
+        assertEquals(8443, profile.relay.serverPort)
+        assertEquals(1081, profile.relay.localProxyPort)
     }
 
     /** Each omitted line shrinks the QR, and a smaller code is what an

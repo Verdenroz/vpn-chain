@@ -3,20 +3,23 @@ package com.verdenroz.vpnchain.core.model
 import kotlinx.serialization.Serializable
 
 /**
- * WireGuard peer dialled as the TUN-mode entry hop — any provider's config, or
- * your own box. sing-box dials it directly (no separate VPN app needed); use a
- * device-specific config so it stays independently revocable. Optional —
- * omitting it makes the TUN chain relay-only, exposing the real IP to the VPS.
+ * WireGuard peer dialled by sing-box directly (no separate VPN app needed) —
+ * any provider's config, or your own box. As the TUN-mode entry hop of a chain
+ * it is optional: omitting it makes the chain relay-only, exposing the real IP
+ * to the VPS. Use a device-specific config so it stays independently revocable.
  */
 @Serializable
 data class WireGuardEntry(
     val privateKey: String,
-    /** Interface address with prefix, e.g. `10.2.0.2/32`. */
+    /** Interface addresses with prefix, comma-separated, e.g. `10.2.0.2/32,fd00::2/128`. */
     val address: String,
     val peerPublicKey: String,
     val endpointHost: String,
     val endpointPort: Int = DEFAULT_ENDPOINT_PORT,
     val dns: String? = null,
+    val presharedKey: String? = null,
+    val mtu: Int? = null,
+    val keepaliveSeconds: Int? = null,
 ) {
     companion object {
         const val DEFAULT_ENDPOINT_PORT = 51820
@@ -24,7 +27,7 @@ data class WireGuardEntry(
 }
 
 /**
- * Identifiers for the VLESS+REALITY relay and the optional WireGuard entry hop.
+ * Identifiers for the VLESS+REALITY relay.
  * Real values are supplied at runtime (never hardcoded in the repo).
  */
 @Serializable
@@ -37,8 +40,6 @@ data class ChainProfile(
     val serverPort: Int = DEFAULT_SERVER_PORT,
     /** Local SOCKS/HTTP proxy the rendered relay listens on. */
     val localProxyPort: Int = DEFAULT_LOCAL_PROXY_PORT,
-    /** TUN-mode entry hop; null = relay-only. Ignored by the SOCKS-proxy chain. */
-    val entryHop: WireGuardEntry? = null,
 ) {
     companion object {
         const val DEFAULT_SNI = "www.samsung.com"

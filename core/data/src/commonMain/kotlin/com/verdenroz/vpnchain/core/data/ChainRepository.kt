@@ -3,9 +3,9 @@ package com.verdenroz.vpnchain.core.data
 import com.verdenroz.vpnchain.core.config.renderPlatformTunnelConfig
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.logging.Logger
-import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.effectiveFor
+import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.WarpMode
@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Drives the tunnel from the stored [ChainProfile]. This is the seam the UI
+ * Drives the tunnel from the active [SavedProfile]. This is the seam the UI
  * talks to; it renders the sing-box config and hands it to the controller so
  * features never touch config JSON or credentials directly.
  */
@@ -110,7 +110,7 @@ internal class DefaultChainRepository(
 
     /** @return null when there is nothing to dial, or the render itself failed. */
     private suspend fun renderConfig(): String? {
-        val profile: ChainProfile = profileRepository.profile.first() ?: return null
+        val profile = profileRepository.profile.first() ?: return null
         val settings = settingsRepository.settings.first()
         // Registration talks to Cloudflare over the untunnelled link, so it
         // happens here rather than at render time — and a failure costs the

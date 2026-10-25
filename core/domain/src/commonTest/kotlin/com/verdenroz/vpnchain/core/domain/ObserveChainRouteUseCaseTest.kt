@@ -255,12 +255,16 @@ class ObserveChainRouteUseCaseTest {
 private fun connectedStatus(exitIp: String?) =
     ChainStatus(state = TunnelState.Connected, exitIp = exitIp)
 
-private fun profile(entry: WireGuardEntry? = defaultEntry()) = ChainProfile(
-    vpsIp = VPS_IP,
-    vlessUuid = "uuid",
-    realityPublicKey = "pubkey",
-    shortId = "shortid",
-    entryHop = entry,
+private fun profile(entry: WireGuardEntry? = defaultEntry()) = SavedProfile(
+    id = "a",
+    name = "a",
+    relay = ChainProfile(
+        vpsIp = VPS_IP,
+        vlessUuid = "uuid",
+        realityPublicKey = "pubkey",
+        shortId = "shortid",
+    ),
+    wireGuard = entry,
 )
 
 private fun defaultEntry() = WireGuardEntry(
@@ -273,7 +277,7 @@ private fun defaultEntry() = WireGuardEntry(
 /** The five collaborators the use case needs, wired to a controllable clock. */
 private class TestWorld(
     status: ChainStatus,
-    profile: ChainProfile? = profile(),
+    profile: SavedProfile? = profile(),
     lastOrigin: String? = null,
     settings: UserSettings = UserSettings(),
 ) {
@@ -315,12 +319,12 @@ private class FakeOrigins(initial: String?) : OriginRepository {
     }
 }
 
-private class FakeProfiles(profile: ChainProfile?) : ProfileRepository {
-    override val profile: Flow<ChainProfile?> = MutableStateFlow(profile)
+private class FakeProfiles(profile: SavedProfile?) : ProfileRepository {
+    override val profile: Flow<SavedProfile?> = MutableStateFlow(profile)
     override val profiles: Flow<List<SavedProfile>> = MutableStateFlow(emptyList())
     override val activeProfileId: Flow<String?> = MutableStateFlow(null)
-    override suspend fun save(profile: ChainProfile) = Unit
-    override suspend fun add(name: String, profile: ChainProfile) = "id"
+    override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = Unit
+    override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = "id"
     override suspend fun rename(id: String, name: String) = Unit
     override suspend fun delete(id: String) = Unit
     override suspend fun setActive(id: String) = Unit

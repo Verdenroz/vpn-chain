@@ -19,14 +19,13 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-private fun profile(entry: WireGuardEntry? = null) = ChainProfile(
+private fun profile() = ChainProfile(
     vpsIp = "203.0.113.10",
     vlessUuid = "uuid",
     realityPublicKey = "pubkey",
     shortId = "shortid",
     serverPort = 443,
     localProxyPort = 1080,
-    entryHop = entry,
 )
 
 private fun entry(dns: String? = null) = WireGuardEntry(
@@ -149,7 +148,7 @@ class SingBoxConfigFactoryTest {
 
     @Test
     fun `mtu drops to fit inside the wireguard entry when one is configured`() {
-        val withEntry = parse(SingBoxConfigFactory.androidChainConfig(profile(entry())))
+        val withEntry = parse(SingBoxConfigFactory.androidChainConfig(profile(), entry()))
         val relayOnly = parse(SingBoxConfigFactory.androidChainConfig(profile()))
 
         assertEquals(1280, withEntry.array("inbounds").single().jsonObject.getValue("mtu").jsonPrimitive.int)
@@ -158,7 +157,7 @@ class SingBoxConfigFactoryTest {
 
     @Test
     fun `the relay detours through the entry hop only when one is configured`() {
-        val withEntry = parse(SingBoxConfigFactory.androidChainConfig(profile(entry())))
+        val withEntry = parse(SingBoxConfigFactory.androidChainConfig(profile(), entry()))
         val relayOnly = parse(SingBoxConfigFactory.androidChainConfig(profile()))
 
         assertEquals(
@@ -171,7 +170,7 @@ class SingBoxConfigFactoryTest {
 
     @Test
     fun `the wireguard endpoint routes everything through the peer`() {
-        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(entry())))
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(), entry()))
 
         val peer = config.array("endpoints").single().jsonObject.array("peers").single().jsonObject
         assertEquals("198.51.100.20", peer.getValue("address").jsonPrimitive.content)
@@ -183,7 +182,7 @@ class SingBoxConfigFactoryTest {
      *  browsers back onto TCP rather than letting page loads stall. */
     @Test
     fun `tun config rejects udp 443`() {
-        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(entry())))
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(), entry()))
 
         val rules = config.getValue("route").jsonObject.array("rules").map { it.jsonObject }
         val quic = rules.firstOrNull { it["port"]?.jsonPrimitive?.int == 443 }
@@ -193,7 +192,7 @@ class SingBoxConfigFactoryTest {
 
     @Test
     fun `dns is resolved through the relay when no entry dns is configured`() {
-        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(entry())))
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(), entry()))
 
         val dns = config.getValue("dns").jsonObject
         val server = dns.array("servers").single().jsonObject
@@ -206,7 +205,7 @@ class SingBoxConfigFactoryTest {
      *  lives on the peer's internal network, so it must dial through it. */
     @Test
     fun `entry dns is resolved through the entry peer, not the relay`() {
-        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(entry(dns = "10.2.0.1"))))
+        val config = parse(SingBoxConfigFactory.androidChainConfig(profile(), entry(dns = "10.2.0.1")))
 
         val dns = config.getValue("dns").jsonObject
         val server = dns.array("servers").single().jsonObject
@@ -322,7 +321,7 @@ class SingBoxConfigFactoryTest {
         )
         val withEntry = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile(entry(dns = "10.2.0.1")),
+                profile(), entry(dns = "10.2.0.1"),
                 dnsFilter = DnsFilter.AdsAndTrackers,
             ),
         )
@@ -347,7 +346,7 @@ class SingBoxConfigFactoryTest {
     fun `the warp tail is dialled through the relay and carries both families`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile(entry()),
+                profile(), entry(),
                 warp = warp(),
                 warpMode = WarpMode.AllTraffic,
             ),
@@ -371,7 +370,7 @@ class SingBoxConfigFactoryTest {
     fun `all-traffic mode sends everything out through the tail`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile(entry()),
+                profile(), entry(),
                 warp = warp(),
                 warpMode = WarpMode.AllTraffic,
             ),
@@ -387,7 +386,7 @@ class SingBoxConfigFactoryTest {
     fun `blocked-sites mode routes only the listed names and leaves the exit alone`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile(entry()),
+                profile(), entry(),
                 warp = warp(),
                 warpMode = WarpMode.BlockedSites,
                 warpDomains = DEFAULT_WARP_DOMAINS,
@@ -461,7 +460,7 @@ class SingBoxConfigFactoryTest {
     fun `blocked-sites mode with an empty list renders no tail at all`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile(entry()),
+                profile(), entry(),
                 warp = warp(),
                 warpMode = WarpMode.BlockedSites,
                 warpDomains = emptyList(),
@@ -478,7 +477,7 @@ class SingBoxConfigFactoryTest {
     fun `mode off renders no tail even with credentials in hand`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile(entry()),
+                profile(), entry(),
                 warp = warp(),
                 warpMode = WarpMode.Off,
             ),
@@ -496,7 +495,7 @@ class SingBoxConfigFactoryTest {
     fun `a missing registration degrades to the relay exit instead of breaking`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(
-                profile(entry()),
+                profile(), entry(),
                 warp = null,
                 warpMode = WarpMode.AllTraffic,
             ),

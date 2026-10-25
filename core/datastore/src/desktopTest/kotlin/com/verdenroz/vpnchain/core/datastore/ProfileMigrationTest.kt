@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.ConnectionKind
 import com.verdenroz.vpnchain.core.model.SavedProfile
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import okio.Path.Companion.toPath
@@ -31,8 +33,8 @@ class ProfileMigrationTest {
         val profiles = source.profiles.first()
 
         assertEquals(1, profiles.size)
-        assertEquals("203.0.113.10", profiles.single().profile.vpsIp)
-        assertEquals("203.0.113.10", source.profile.first()?.vpsIp)
+        assertEquals("203.0.113.10", profiles.single().relay?.vpsIp)
+        assertEquals("203.0.113.10", source.profile.first()?.relay?.vpsIp)
     }
 
     /** Read-time only: a failed upgrade must be able to roll back. */
@@ -54,7 +56,7 @@ class ProfileMigrationTest {
         store.edit { it[LEGACY_KEY] = LEGACY_JSON }
         val source = VpnChainPreferencesDataSource(store)
 
-        source.setProfiles(listOf(SavedProfile(id = "a", name = "one", profile = profile("10.0.0.1"))))
+        source.setProfiles(listOf(SavedProfile(id = "a", name = "one", relay = profile("10.0.0.1"))))
 
         assertNull(store.data.first()[LEGACY_KEY])
         assertEquals(1, source.profiles.first().size)
@@ -65,14 +67,14 @@ class ProfileMigrationTest {
         val source = VpnChainPreferencesDataSource(newStore())
         source.setProfiles(
             listOf(
-                SavedProfile(id = "a", name = "one", profile = profile("10.0.0.1")),
-                SavedProfile(id = "b", name = "two", profile = profile("10.0.0.2")),
+                SavedProfile(id = "a", name = "one", relay = profile("10.0.0.1")),
+                SavedProfile(id = "b", name = "two", relay = profile("10.0.0.2")),
             ),
         )
 
         source.setActiveProfileId("b")
 
-        assertEquals("10.0.0.2", source.profile.first()?.vpsIp)
+        assertEquals("10.0.0.2", source.profile.first()?.relay?.vpsIp)
         assertEquals("b", source.activeProfileId.first())
     }
 
@@ -83,11 +85,71 @@ class ProfileMigrationTest {
     @Test
     fun `a stale selection falls back to the first profile`() = runTest {
         val source = VpnChainPreferencesDataSource(newStore())
-        source.setProfiles(listOf(SavedProfile(id = "a", name = "one", profile = profile("10.0.0.1"))))
+        source.setProfiles(listOf(SavedProfile(id = "a", name = "one", relay = profile("10.0.0.1"))))
         source.setActiveProfileId("gone")
 
-        assertEquals("10.0.0.1", source.profile.first()?.vpsIp)
+        assertEquals("10.0.0.1", source.profile.first()?.relay?.vpsIp)
         assertEquals("a", source.activeProfileId.first())
+    }
+
+    @Test
+    fun `a legacy profile with an entry hop moves it to the wireguard part`() = runTest {
+        val store = newStore()
+        store.edit { it[LEGACY_KEY] = LEGACY_WITH_ENTRY_JSON }
+
+        val saved = VpnChainPreferencesDataSource(store).profiles.first().single()
+
+        assertEquals(ConnectionKind.Chain, saved.kind)
+        assertEquals("legacy", saved.id)
+        assertEquals("203.0.113.10", saved.name)
+        assertEquals("203.0.113.10", saved.relay?.vpsIp)
+        assertEquals("203.0.113.9", saved.wireGuard?.endpointHost)
+        assertEquals("10.2.0.1", saved.wireGuard?.dns)
+    }
+
+    @Test
+    fun `a stored list in the nested shape keeps its entry hop`() = runTest {
+        val store = newStore()
+        store.edit { it[LIST_KEY] = """[{"id":"a","name":"one","profile":$LEGACY_WITH_ENTRY_JSON}]""" }
+
+        val saved = VpnChainPreferencesDataSource(store).profiles.first().single()
+
+        assertEquals("a", saved.id)
+        assertEquals("203.0.113.10", saved.relay?.vpsIp)
+        assertEquals("203.0.113.9", saved.wireGuard?.endpointHost)
+    }
+
+    @Test
+    fun `a stored list in the nested shape without an entry hop is relay only`() = runTest {
+        val store = newStore()
+        store.edit { it[LIST_KEY] = """[{"id":"a","name":"one","profile":$LEGACY_JSON}]""" }
+
+        val saved = VpnChainPreferencesDataSource(store).profiles.first().single()
+
+        assertEquals(ConnectionKind.Relay, saved.kind)
+        assertNull(saved.wireGuard)
+    }
+
+    @Test
+    fun `reading the nested shape does not rewrite storage`() = runTest {
+        val store = newStore()
+        val raw = """[{"id":"a","name":"one","profile":$LEGACY_JSON}]"""
+        store.edit { it[LIST_KEY] = raw }
+
+        VpnChainPreferencesDataSource(store).profiles.first()
+
+        assertEquals(raw, store.data.first()[LIST_KEY])
+    }
+
+    @Test
+    fun `a wireguard only connection survives a write and read`() = runTest {
+        val source = VpnChainPreferencesDataSource(newStore())
+        val wireGuard = SavedProfile(id = "w", name = "Proton", wireGuard = entry())
+
+        source.setProfiles(listOf(wireGuard))
+
+        assertEquals(wireGuard, source.profiles.first().single())
+        assertEquals(ConnectionKind.WireGuard, source.profile.first()?.kind)
     }
 
     @Test
@@ -118,8 +180,23 @@ private fun profile(ip: String) = ChainProfile(
     shortId = "short",
 )
 
+private fun entry() = WireGuardEntry(
+    privateKey = "priv",
+    address = "10.2.0.2/32",
+    peerPublicKey = "peer",
+    endpointHost = "203.0.113.9",
+)
+
+private val LIST_KEY = stringPreferencesKey("chain_profiles_json")
+
 private val LEGACY_KEY = stringPreferencesKey("chain_profile_json")
 
 private val LEGACY_JSON = """
     {"vpsIp":"203.0.113.10","vlessUuid":"uuid","realityPublicKey":"pubkey","shortId":"short"}
 """.trimIndent()
+
+private val LEGACY_WITH_ENTRY_JSON = """
+    {"vpsIp":"203.0.113.10","vlessUuid":"uuid","realityPublicKey":"pubkey","shortId":"short",
+    "entryHop":{"privateKey":"priv","address":"10.2.0.2/32","peerPublicKey":"peer",
+    "endpointHost":"203.0.113.9","endpointPort":51820,"dns":"10.2.0.1"}}
+""".trimIndent().replace("\n", "")

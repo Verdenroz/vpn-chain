@@ -70,11 +70,12 @@ object SingBoxConfigFactory {
 
     /**
      * Full TUN chain: TUN → (optional WireGuard entry hop) → VLESS relay.
-     * When [ChainProfile.entryHop] is null the chain is relay-only (VLESS
+     * When [entry] is null the chain is relay-only (VLESS
      * dialed directly), which is simpler but exposes the device's IP to the VPS.
      */
     fun androidChainConfig(
         profile: ChainProfile,
+        entry: WireGuardEntry? = null,
         clashApi: ClashApi? = null,
         dnsFilter: DnsFilter = DnsFilter.Off,
         cachePath: String? = null,
@@ -84,7 +85,6 @@ object SingBoxConfigFactory {
         allowLocalNetworks: Boolean = false,
         logPath: String? = null,
     ): String {
-        val entry = profile.entryHop
         val filtering = dnsFilter != DnsFilter.Off
         val tailDomains = warpDomains.mapNotNull(::normalizeSuffix).distinct()
         // No credentials means no tail, whatever the mode says: registration

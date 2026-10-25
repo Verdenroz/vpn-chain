@@ -1,6 +1,6 @@
 package com.verdenroz.vpnchain.core.config
 
-import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpExit
 
@@ -8,11 +8,12 @@ import com.verdenroz.vpnchain.core.model.WarpExit
 // sing-box a working directory of its own, so the rule-set cache needs no
 // explicit path here.
 actual fun renderPlatformTunnelConfig(
-    profile: ChainProfile,
+    profile: SavedProfile,
     settings: UserSettings,
     warp: WarpExit?,
 ): String = SingBoxConfigFactory.androidChainConfig(
-    profile = profile,
+    profile = requireNotNull(profile.relay),
+    entry = profile.wireGuard,
     dnsFilter = settings.dnsFilter,
     warp = warp,
     warpMode = settings.warpMode,

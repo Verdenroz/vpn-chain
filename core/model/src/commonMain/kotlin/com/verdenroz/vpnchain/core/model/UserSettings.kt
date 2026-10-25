@@ -89,5 +89,5 @@ data class UserSettings(
  * Every consumer of the topology — config rendering, the route readout —
  * must go through this, or a disabled entry hop would still be drawn.
  */
-fun ChainProfile.effectiveFor(settings: UserSettings): ChainProfile =
-    if (settings.entryHopEnabled) this else copy(entryHop = null)
+fun SavedProfile.effectiveFor(settings: UserSettings): SavedProfile =
+    if (settings.entryHopEnabled || relay == null) this else copy(wireGuard = null)

@@ -7,8 +7,8 @@ import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.geoip.NetworkProbe
 import com.verdenroz.vpnchain.core.geoip.RouteGeolocator
-import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.effectiveFor
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
@@ -48,7 +48,7 @@ class ObserveChainRouteUseCase(
     private var lastSample: Sample? = null
 
     /** The topology as dialed, not as stored — a disabled entry hop is not a hop. */
-    private val effectiveProfile: Flow<ChainProfile?> =
+    private val effectiveProfile: Flow<SavedProfile?> =
         combine(profileRepository.profile, settingsRepository.settings) { profile, settings ->
             profile?.effectiveFor(settings)
         }
@@ -67,7 +67,7 @@ class ObserveChainRouteUseCase(
             .mapLatest { render(it) }
 
     private data class Inputs(
-        val profile: ChainProfile?,
+        val profile: SavedProfile?,
         val status: ChainStatus,
         val lastOrigin: String?,
         val sample: Sample?,
@@ -113,7 +113,7 @@ class ObserveChainRouteUseCase(
      * Re-probed immediately when the path changes, and otherwise throttled: a
      * public IP changes far more slowly than the panel refreshes.
      */
-    private suspend fun currentSample(connected: Boolean, profile: ChainProfile?): Sample? {
+    private suspend fun currentSample(connected: Boolean, profile: SavedProfile?): Sample? {
         val cached = lastSample
         val takenAt = now()
         val stillGood = cached != null &&
@@ -127,7 +127,7 @@ class ObserveChainRouteUseCase(
         // Guard against recording the relay's own address as this machine's:
         // a tunnel that came up outside the app can be live before the status
         // catches up, and that answer would be indistinguishable otherwise.
-        if (!connected && taken.ip != profile?.vpsIp) originRepository.record(taken.ip)
+        if (!connected && taken.ip != profile?.relay?.vpsIp) originRepository.record(taken.ip)
         return taken
     }
 
@@ -136,7 +136,7 @@ class ObserveChainRouteUseCase(
         connected: Boolean,
         sample: Sample?,
         lastOrigin: String?,
-        profile: ChainProfile?,
+        profile: SavedProfile?,
         status: ChainStatus,
     ): ChainHop {
         // Probing while connected only re-reads the exit — hiding this address
@@ -144,7 +144,7 @@ class ObserveChainRouteUseCase(
         val measured = sample?.takeIf { !connected && !it.throughChain }?.ip
         // A recalled value that matches an exit isn't an origin, whatever the
         // store says: it was captured through a tunnel the app hadn't noticed.
-        val recalled = lastOrigin?.takeIf { it != profile?.vpsIp && it != status.exitIp }
+        val recalled = lastOrigin?.takeIf { it != profile?.relay?.vpsIp && it != status.exitIp }
         val ip = measured ?: recalled
         return ChainHop(
             role = HopRole.Origin,
@@ -160,8 +160,8 @@ class ObserveChainRouteUseCase(
     }
 
     /** Absent entirely on a relay-only chain — there is no second hop to draw. */
-    private suspend fun entryHop(profile: ChainProfile?, connected: Boolean): ChainHop? {
-        val entry = profile?.entryHop ?: return null
+    private suspend fun entryHop(profile: SavedProfile?, connected: Boolean): ChainHop? {
+        val entry = profile?.wireGuard ?: return null
         return ChainHop(
             role = HopRole.Entry,
             ip = entry.endpointHost,
@@ -173,7 +173,7 @@ class ObserveChainRouteUseCase(
     }
 
     private suspend fun exitHop(
-        profile: ChainProfile?,
+        profile: SavedProfile?,
         status: ChainStatus,
         sample: Sample?,
         connected: Boolean,
@@ -181,19 +181,19 @@ class ObserveChainRouteUseCase(
     ): ChainHop? {
         // While connected, our own sample *is* the exit as the world sees it.
         val measured = sample?.takeIf { connected && it.throughChain }?.ip ?: status.exitIp
-        val ip = measured ?: profile?.vpsIp ?: return null
+        val ip = measured ?: profile?.relay?.vpsIp ?: return null
         // Named only on evidence: the tail is configured *and* the address the
         // world reports is not the relay's. Registration can fail silently, and
         // a hop that isn't carrying must never be drawn as though it were.
         val tailCarrying = settings.warpMode != WarpMode.Off &&
-            measured != null && measured != profile?.vpsIp
+            measured != null && measured != profile?.relay?.vpsIp
         return ChainHop(
             role = HopRole.Exit,
             ip = ip,
             location = geolocator.locate(ip),
             evidence = if (measured != null) HopEvidence.Measured else HopEvidence.Configured,
             carrying = connected,
-            via = profile?.let {
+            via = profile?.relay?.let {
                 if (tailCarrying) "vless · reality → warp" else "vless · reality · tcp ${it.serverPort}"
             },
         )

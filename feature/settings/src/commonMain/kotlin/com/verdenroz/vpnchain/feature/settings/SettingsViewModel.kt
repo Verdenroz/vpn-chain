@@ -14,6 +14,7 @@ import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_failed
@@ -33,7 +34,7 @@ import kotlinx.coroutines.launch
 
 data class SettingsUiState(
     val settings: UserSettings = UserSettings(),
-    val profile: ChainProfile? = null,
+    val profile: SavedProfile? = null,
     val killSwitchGuidanceSupported: Boolean = false,
     val alwaysOnDetected: Boolean = false,
     val autostartSupported: Boolean = false,
@@ -161,8 +162,8 @@ class SettingsViewModel(
         profileRepository.delete(id)
     }
 
-    fun saveProfile(profile: ChainProfile) = viewModelScope.launch {
-        profileRepository.save(profile)
+    fun saveProfile(relay: ChainProfile, entryHop: WireGuardEntry?) = viewModelScope.launch {
+        profileRepository.save(relay, entryHop)
         _message.value = SettingsMessage.Info(UiText.Resource(Res.string.settings_profile_saved))
     }
 
