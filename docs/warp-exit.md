@@ -172,7 +172,8 @@ user sent direct, or one failing open through the entry hop.
 
 The learner uses the fallback probe only when both ends agree: the running
 config routes `probe-fallback` to the entry hop, and the active connection
-dials one.
+dials one. Changing failing open, the entry hop or the WARP mode
+while connected restarts the tunnel, so what the app shows is what is running.
 
 The two lists are separate files: `learned-open.json` holds sites failing open
 through the entry hop plus the sites sent direct, and is rendered only with an

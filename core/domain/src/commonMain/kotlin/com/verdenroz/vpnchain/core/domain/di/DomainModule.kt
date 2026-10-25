@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.core.domain.di
 import com.verdenroz.vpnchain.core.common.di.applicationScopeQualifier
 import com.verdenroz.vpnchain.core.data.di.dataModule
 import com.verdenroz.vpnchain.core.domain.ChainSupervisor
+import com.verdenroz.vpnchain.core.domain.ChangeRoutingUseCase
 import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
@@ -26,6 +27,7 @@ val domainModule = module {
     factory { ImportProfileUseCase(get()) }
     factory { ImportWireGuardConfUseCase(get(), get()) }
     factory { SwitchProfileUseCase(get(), get()) }
+    factory { ChangeRoutingUseCase(get(), get()) }
     // Singleton so origin-probe throttling holds across collectors.
     single { ObserveChainRouteUseCase(get(), get(), get(), get(), get(), get()) }
     // Eager and app-scoped: it has to be watching before the first drop, and it

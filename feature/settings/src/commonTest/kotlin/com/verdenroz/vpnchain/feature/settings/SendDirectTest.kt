@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.feature.settings
 
+import com.verdenroz.vpnchain.core.domain.ChangeRoutingUseCase
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
 import com.verdenroz.vpnchain.core.domain.ImportWireGuardConfUseCase
 import com.verdenroz.vpnchain.core.domain.SwitchProfileUseCase
@@ -51,14 +52,16 @@ class SendDirectTest {
     private fun viewModel(): SettingsViewModel {
         val profiles = FakeProfiles(log)
         val chain = FakeChain(TunnelState.Disconnected, log)
+        val settings = FakeSettings()
         return SettingsViewModel(
             profileRepository = profiles,
-            settingsRepository = FakeSettings(),
+            settingsRepository = settings,
             importProfile = ImportProfileUseCase(profiles),
             importWireGuardConf = ImportWireGuardConfUseCase(profiles, chain),
             switchProfile = SwitchProfileUseCase(profiles, chain),
             chainRepository = chain,
             learnedSites = FakeLearnedSites(log),
+            changeRouting = ChangeRoutingUseCase(settings, chain),
         )
     }
 }

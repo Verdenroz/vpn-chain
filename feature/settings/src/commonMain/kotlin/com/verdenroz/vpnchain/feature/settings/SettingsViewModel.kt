@@ -8,6 +8,7 @@ import com.verdenroz.vpnchain.core.config.WireGuardConfParser
 import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
+import com.verdenroz.vpnchain.core.domain.ChangeRoutingUseCase
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
 import com.verdenroz.vpnchain.core.domain.ImportWireGuardConfUseCase
 import com.verdenroz.vpnchain.core.domain.SwitchProfileUseCase
@@ -93,6 +94,7 @@ class SettingsViewModel(
     private val switchProfile: SwitchProfileUseCase,
     private val chainRepository: ChainRepository,
     private val learnedSites: LearnedSitesRepository,
+    private val changeRouting: ChangeRoutingUseCase,
 ) : ViewModel() {
 
     val uiState: StateFlow<SettingsUiState> =
@@ -158,11 +160,11 @@ class SettingsViewModel(
     }
 
     fun setEntryHopEnabled(enabled: Boolean) = viewModelScope.launch {
-        settingsRepository.setEntryHopEnabled(enabled)
+        changeRouting.setEntryHopEnabled(enabled).reportReconnect()
     }
 
     fun setWarpMode(mode: WarpMode) = viewModelScope.launch {
-        settingsRepository.setWarpMode(mode)
+        changeRouting.setWarpMode(mode).reportReconnect()
     }
 
     fun setLearnBlockedSites(enabled: Boolean) = viewModelScope.launch {
@@ -170,7 +172,11 @@ class SettingsViewModel(
     }
 
     fun setFailOpen(enabled: Boolean) = viewModelScope.launch {
-        settingsRepository.setFailOpen(enabled)
+        changeRouting.setFailOpen(enabled).reportReconnect()
+    }
+
+    private fun Result<Unit>.reportReconnect() {
+        onFailure { _message.value = it.toError(Res.string.settings_switch_failed) }
     }
 
     fun removeLearned(domain: String) = viewModelScope.launch {

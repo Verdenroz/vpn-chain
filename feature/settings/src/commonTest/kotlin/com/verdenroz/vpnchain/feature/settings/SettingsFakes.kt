@@ -74,10 +74,16 @@ internal class FakeSettings : SettingsRepository {
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
     override suspend fun setAllowLocalNetworks(enabled: Boolean) = Unit
     override suspend fun setDnsFilter(filter: DnsFilter) = Unit
-    override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
-    override suspend fun setWarpMode(mode: WarpMode) = Unit
+    override suspend fun setEntryHopEnabled(enabled: Boolean) {
+        settings.value = settings.value.copy(entryHopEnabled = enabled)
+    }
+    override suspend fun setWarpMode(mode: WarpMode) {
+        settings.value = settings.value.copy(warpMode = mode)
+    }
     override suspend fun setLearnBlockedSites(enabled: Boolean) = Unit
-    override suspend fun setFailOpen(enabled: Boolean) = Unit
+    override suspend fun setFailOpen(enabled: Boolean) {
+        settings.value = settings.value.copy(failOpen = enabled)
+    }
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
     override suspend fun setCloseToTray(enabled: Boolean) = Unit
