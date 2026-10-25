@@ -47,7 +47,8 @@ net.ipv4.tcp_congestion_control=bbr
 net.core.wmem_max=33554432
 net.ipv4.tcp_wmem=4096 65536 33554432
 EOF
-  sysctl --system >/dev/null
+  sysctl -p /etc/sysctl.d/99-vpn-chain-bbr.conf >/dev/null \
+    || log "WARNING: BBR sysctls failed to apply; continuing without them."
 else
   log "WARNING: tcp_bbr module unavailable; leaving congestion control unchanged."
 fi
