@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -82,12 +83,13 @@ internal fun ChainDetails(
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    fillHeight: Boolean = false,
 ) {
     val status = uiState.status
     val connected = status.state == TunnelState.Connected
     val exit = uiState.route.hop(HopRole.Exit)
 
-    Column(modifier.fillMaxWidth()) {
+    Column(if (fillHeight) modifier.fillMaxSize() else modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             StateLine(status.state, uiState.route.throughRttMs)
             Text(
@@ -114,7 +116,7 @@ internal fun ChainDetails(
         KillSwitchRow(status)
         Notices(status, connected)
 
-        Spacer(Modifier.height(16.dp))
+        if (fillHeight) Spacer(Modifier.weight(1f)) else Spacer(Modifier.height(16.dp))
         if (uiState.hasProfile) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionButton(

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">vpn-chain</string>
     <string name="nav_chain">Chain</string>
     <string name="nav_logs">Logs</string>
     <string name="nav_settings">Settings</string>

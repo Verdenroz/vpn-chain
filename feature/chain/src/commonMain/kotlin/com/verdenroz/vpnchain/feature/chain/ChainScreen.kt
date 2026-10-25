@@ -1,14 +1,21 @@
 package com.verdenroz.vpnchain.feature.chain
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.verdenroz.vpnchain.core.designsystem.component.InfoCard
@@ -48,13 +55,40 @@ fun ChainScreen(
     val nodes = remember(uiState.route) { uiState.route.toMapNodes() }
     val connected = uiState.status.state == TunnelState.Connected
 
-    Column(modifier.fillMaxSize().background(VpnChainTheme.colors.background)) {
-        RouteMap(nodes, connected, Modifier.weight(1f).fillMaxWidth())
-        InfoCard(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp).fillMaxWidth()) {
-            ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings)
+    BoxWithConstraints(modifier.fillMaxSize().background(VpnChainTheme.colors.background)) {
+        if (maxWidth >= WIDE_BREAKPOINT) {
+            Row(Modifier.fillMaxSize()) {
+                RouteMap(nodes, connected, Modifier.weight(1f).fillMaxHeight())
+                SidePanel {
+                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, fillHeight = true)
+                }
+            }
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                RouteMap(nodes, connected, Modifier.weight(1f).fillMaxWidth())
+                InfoCard(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp).fillMaxWidth()) {
+                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings)
+                }
+            }
         }
     }
 }
+
+@Composable
+private fun SidePanel(content: @Composable ColumnScope.() -> Unit) {
+    val colors = VpnChainTheme.colors
+    Column(
+        Modifier
+            .width(360.dp)
+            .fillMaxHeight()
+            .background(colors.surface)
+            .drawBehind { drawLine(colors.line, Offset(0f, 0f), Offset(0f, size.height), 1f) }
+            .padding(24.dp),
+        content = content,
+    )
+}
+
+private val WIDE_BREAKPOINT = 600.dp
 
 private fun ChainRoute.toMapNodes(): List<MapNode> = hops.mapNotNull { hop ->
     val location = hop.location ?: return@mapNotNull null
