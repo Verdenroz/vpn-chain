@@ -23,7 +23,9 @@ internal class FakeProfiles(private val log: MutableList<String>) : ProfileRepos
     override val activeProfileId = MutableStateFlow<String?>("a")
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = Unit
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = "b"
-    override suspend fun rename(id: String, name: String) = Unit
+    override suspend fun rename(id: String, name: String) {
+        log += "rename:$id:$name"
+    }
     override suspend fun delete(id: String) = Unit
     override suspend fun setActive(id: String) = Unit
     override suspend fun clear() = Unit

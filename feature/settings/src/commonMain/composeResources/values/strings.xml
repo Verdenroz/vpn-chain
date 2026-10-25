@@ -4,6 +4,11 @@
     <string name="settings_chain_identity_title">chain identity</string>
     <string name="settings_profiles_title">profiles</string>
     <string name="settings_profile_delete">delete</string>
+    <string name="settings_profile_rename">rename</string>
+    <string name="settings_profile_rename_save">save name</string>
+    <string name="settings_profile_name">name</string>
+    <string name="settings_profile_renamed">Renamed to %1$s</string>
+    <string name="settings_profile_name_blank">A name can't be blank.</string>
     <string name="settings_profile_switched">Switched to %1$s</string>
     <string name="settings_wireguard_summary">%1$s · WireGuard · %2$s</string>
     <string name="settings_configured_for">Configured for %1$s</string>

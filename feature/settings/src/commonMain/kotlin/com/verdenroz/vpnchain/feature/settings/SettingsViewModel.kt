@@ -25,6 +25,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_imported_profile
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_secrets_env_found
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_cleared
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_name_blank
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_renamed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_saved
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_switched
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_switch_failed
@@ -168,6 +170,16 @@ class SettingsViewModel(
             },
             onFailure = { _message.value = it.toError(Res.string.settings_switch_failed) },
         )
+    }
+
+    fun renameProfile(id: String, name: String) = viewModelScope.launch {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) {
+            _message.value = SettingsMessage.Error(UiText.Resource(Res.string.settings_profile_name_blank))
+            return@launch
+        }
+        profileRepository.rename(id, trimmed)
+        _message.value = SettingsMessage.Info(UiText.Resource(Res.string.settings_profile_renamed, listOf(trimmed)))
     }
 
     fun deleteProfile(id: String) = viewModelScope.launch {

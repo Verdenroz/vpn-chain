@@ -192,6 +192,7 @@ fun SettingsRoute(
         onToggleCloseToTray = viewModel::setCloseToTray,
         onSelectProfile = viewModel::selectProfile,
         onDeleteProfile = viewModel::deleteProfile,
+        onRenameProfile = viewModel::renameProfile,
         onOpenSystemVpnSettings = viewModel::openSystemVpnSettings,
         modifier = modifier,
     )
@@ -226,6 +227,7 @@ fun SettingsScreen(
     onToggleCloseToTray: (Boolean) -> Unit,
     onSelectProfile: (String) -> Unit,
     onDeleteProfile: (String) -> Unit,
+    onRenameProfile: (String, String) -> Unit,
     onOpenSystemVpnSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -257,15 +259,14 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            // Only worth a card once there is a choice to make; a single
-            // profile is fully described by the identity card below.
-            if (uiState.profiles.size > 1) {
+            if (uiState.profiles.isNotEmpty()) {
                 SectionCard(title = stringResource(Res.string.settings_profiles_title)) {
                     ProfilePicker(
                         profiles = uiState.profiles,
                         activeProfileId = uiState.activeProfileId,
                         onSelect = onSelectProfile,
                         onDelete = onDeleteProfile,
+                        onRename = onRenameProfile,
                     )
                 }
             }
