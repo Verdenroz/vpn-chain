@@ -46,8 +46,15 @@ tar -xzf "$work/app.tar.gz" -C "$partial"
 
 rm -rf "${versions:?}/$version"
 mv "$partial" "$versions/$version"
+previous="$(readlink "$root/current" 2>/dev/null || true)"
 ln -sfn "versions/$version" "$root/.current-tmp"
 mv -T "$root/.current-tmp" "$root/current"
+
+# Keep the new version and the one it replaces; the app may still be running from that one.
+for dir in "$versions"/*/; do
+  dir="${dir%/}"
+  [ "${dir##*/}" = "$version" ] || [ "versions/${dir##*/}" = "$previous" ] || rm -rf "$dir"
+done
 
 ln -sfn "$root/current/vpn-chain/bin/vpn-chain" "$bin_dir/vpn-chain-gui"
 cat >"$data_home/applications/vpn-chain.desktop" <<EOF
@@ -64,3 +71,4 @@ Keywords=vpn;wireguard;vless;proxy;tunnel;
 EOF
 
 echo "installed vpn-chain $version; run vpn-chain-gui (make sure $bin_dir is on PATH)"
+echo "menu entry: $data_home/applications/vpn-chain.desktop (replaces one from installDesktopEntry)"
