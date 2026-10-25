@@ -7,6 +7,7 @@ import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
 import com.verdenroz.vpnchain.core.domain.ObserveChainRouteUseCase
+import com.verdenroz.vpnchain.core.domain.SwitchProfileUseCase
 import com.verdenroz.vpnchain.core.geoip.DefaultRouteGeolocator
 import com.verdenroz.vpnchain.core.geoip.NetworkProbe
 import com.verdenroz.vpnchain.core.geoip.RouteGeolocator
@@ -22,6 +23,7 @@ val domainModule = module {
     factory { ConnectChainUseCase(get()) }
     factory { DisconnectChainUseCase(get()) }
     factory { ImportProfileUseCase(get()) }
+    factory { SwitchProfileUseCase(get(), get()) }
     // Singleton so origin-probe throttling holds across collectors.
     single { ObserveChainRouteUseCase(get(), get(), get(), get(), get(), get()) }
     // Eager and app-scoped: it has to be watching before the first drop, and it

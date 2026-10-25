@@ -6,10 +6,10 @@ import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
+import com.verdenroz.vpnchain.core.domain.SwitchProfileUseCase
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
-import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.model.UserSettings
@@ -52,6 +52,7 @@ class SettingsViewModel(
     private val profileRepository: ProfileRepository,
     private val settingsRepository: SettingsRepository,
     private val importProfile: ImportProfileUseCase,
+    private val switchProfile: SwitchProfileUseCase,
     private val chainRepository: ChainRepository,
 ) : ViewModel() {
 
@@ -139,18 +140,8 @@ class SettingsViewModel(
         }
     }
 
-    /**
-     * A live tunnel is still running the old chain, so switching means taking
-     * it down and bringing it back up rather than reconfiguring in place.
-     */
     fun selectProfile(id: String) = viewModelScope.launch {
-        if (id == profileRepository.activeProfileId.first()) return@launch
-        val wasConnected = chainRepository.status.first().state == TunnelState.Connected
-        profileRepository.setActive(id)
-        if (wasConnected) {
-            chainRepository.disconnect()
-            chainRepository.connect()
-        }
+        switchProfile(id)
         profileRepository.profiles.first().firstOrNull { it.id == id }?.let { switched ->
             _message.value = SettingsMessage.Info(
                 UiText.Resource(Res.string.settings_profile_switched, listOf(switched.name)),
