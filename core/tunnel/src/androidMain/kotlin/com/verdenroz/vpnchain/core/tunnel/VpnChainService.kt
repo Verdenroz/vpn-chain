@@ -49,6 +49,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -251,7 +253,13 @@ class VpnChainService : VpnService(), CommandServerHandler {
     private fun startHealthWatch(gen: Int) {
         healthJob?.cancel()
         healthJob = serviceScope.launch {
-            launch { networkMonitor.linkChanges.collect { verifyCarrying(gen) } }
+            launch {
+                networkMonitor.linkChanges.collectLatest {
+                    // The callback can beat validation, which is what flips online.
+                    online.first { it }
+                    verifyCarrying(gen)
+                }
+            }
             launch { screenWakes().collect { verifyCarrying(gen) } }
             while (isActive) {
                 delay(HEALTH_INTERVAL_MS)

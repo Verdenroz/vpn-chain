@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Connectivity from [ConnectivityManager]'s callbacks rather than a poll, so a
@@ -68,26 +67,23 @@ internal class AndroidNetworkMonitor(private val context: Context) : NetworkMoni
      * interface is: once our own TUN is up it is itself a network, and counting
      * it would report a change every time the chain came up or went down.
      *
-     * The first network seen is not an event — it is the state collection
-     * started in, and treating it as a change would fire a probe at every
-     * connect.
+     * The first network seen is not an event, but one returning after an outage
+     * is: counting the first would fire a probe at every connect, and missing
+     * the second leaves recovery to the health interval.
      */
     override val linkChanges: Flow<Unit> = callbackFlow {
         val manager = context.getSystemService(ConnectivityManager::class.java)
-        val current = AtomicReference<Network?>(null)
-
-        fun observe(network: Network) {
-            val previous = current.getAndSet(network)
-            if (previous != null && previous != network) trySend(Unit)
-        }
+        val tracker = LinkTracker<Network>()
 
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = observe(network)
+            override fun onAvailable(network: Network) {
+                if (tracker.available(network)) trySend(Unit)
+            }
 
             // A link we are not on going away says nothing; on API 31+ this only
             // ever fires for the best-matching one, which is the one we are on.
             override fun onLost(network: Network) {
-                if (current.compareAndSet(network, null)) trySend(Unit)
+                if (tracker.lost(network)) trySend(Unit)
             }
         }
 
