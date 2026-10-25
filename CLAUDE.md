@@ -1,132 +1,90 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## What this is
-
-A layered, censorship-resistant VPN chain (`you → WireGuard entry hop →
-VLESS+REALITY relay VPS → internet`) built two ways: a bash CLI
-(`cli/vpn-chain`) and a Kotlin Multiplatform GUI (Android + desktop) that
-shares one core. Real credentials never live in the repo — see the README's
-"Secrets" section for the `secrets.env` flow before touching anything that
-reads config.
+Guidance for coding agents. vpn-chain is `you → WireGuard entry hop →
+VLESS+REALITY relay VPS → internet`, as a bash CLI (`cli/vpn-chain`) and a Kotlin
+Multiplatform app (Android and desktop) sharing one core. Real credentials never
+live in the repo: read the README's "Set up a connection" before touching
+anything that reads config.
 
 ## Commands
 
-Gradle must **run** on JDK 17–21 (not 22+); `gradle.properties` pins
-`org.gradle.java.home` to a local JDK 21 install, so if a build fails with a
-JDK version error first check that path is still valid on your machine.
-
 ```
-./gradlew :desktopApp:run                    # run the desktop app
-./gradlew :androidApp:assembleDebug           # build the Android debug APK
-./gradlew test                                # all commonTest/desktopTest suites
-./gradlew :core:config:test                   # single module's tests
-./gradlew :core:config:desktopTest --tests "*.SingBoxConfigFactoryTest"   # single test class
-./gradlew :desktopApp:installDesktopEntry     # install a wofi/rofi launcher entry + icons
+./gradlew :desktopApp:run                    # desktop app
+./gradlew :androidApp:assembleDebug          # Android debug APK
+./gradlew test                               # all commonTest and desktopTest
+./gradlew :core:config:test                  # one module
+./gradlew :core:config:desktopTest --tests "*.SingBoxConfigFactoryTest"   # one class
+./gradlew :desktopApp:installDesktopEntry    # launcher entry for a source build
 ```
 
-There is no Android instrumented/emulator test suite in the repo — module
-tests run on the `desktopTest` JVM source set (both KMP targets are JVM, so
-`commonTest` runs unchanged there without a device).
+- Gradle must run on JDK 17 to 21. `gradle.properties` pins
+  `org.gradle.java.home`; on a JDK version error, check that path first.
+- Tests run on the `desktopTest` JVM source set. There is no instrumented Android suite.
+- Release builds are CI only (`.github/workflows/release.yml`, on a `v*` tag).
+  The version lives in `vpnchain.version` in `gradle.properties`.
+- Namespace: `com.verdenroz.vpnchain.<layer>.<module>`.
 
-Release builds (`packageReleaseDeb`, `packageReleaseMsi`, `packageReleaseDmg`,
-`assembleRelease`) are driven by `.github/workflows/release.yml` on a `v*` tag
-push; see the README's "Releases" section. The single version source is
-`vpnchain.version` in `gradle.properties`.
+## Modules
 
-## Architecture
+| Module | Role |
+|---|---|
+| `core/model` | Data classes |
+| `core/config` | `SingBoxConfigFactory`: profile to sing-box JSON; `renderPlatformTunnelConfig` per platform |
+| `core/datastore` | Profile and settings persistence |
+| `core/tunnel` | `TunnelController`: Android `VpnChainService` (libbox), desktop `sing-box` process |
+| `core/warp` | WARP registration, site probing and classification |
+| `core/update` | In-app updater |
+| `core/data`, `core/domain` | Repositories, use cases, `ChainSupervisor` |
+| `core/designsystem`, `core/ui` | Theme, map, shared composables |
+| `feature/{chain,settings,logs}` | Compose screens and ViewModels |
+| `app-common` | Shell, nav, Koin aggregation |
+| `androidApp`, `desktopApp` | Platform entry points |
 
-Kotlin Multiplatform monorepo following [Now in Android](https://github.com/android/nowinandroid)'s
-`core` / `feature` / app layering, adapted with **Koin** for DI instead of
-Hilt (so `commonMain` code works unmodified on both Android and desktop —
-no codegen dependent on an Android context).
+Also `core/common`, `core/logging`, `core/geoip`. Full table:
+[docs/architecture.md](docs/architecture.md). Apply a convention plugin from
+`build-logic/convention/` to a new module instead of configuring Gradle by hand.
 
-**Layering rule**: dependencies flow one way — `feature/*` depends on
-`core/domain`, `core/data`, `core/designsystem`, `core/ui`; `core/domain`
-depends on `core/data`'s repository interfaces; `core/data` depends on
-`core/datastore`/`core/tunnel`/`core/config`. Each module wires its own Koin
-module under `.../di/*Module.kt`, aggregated in
-`app-common/.../app/di/AppModules.kt`. When a module needs
-platform-specific behavior, it's expressed as `expect`/`actual` (or a
-platform-suffixed Koin module, e.g. `TunnelModule.android.kt` /
-`TunnelModule.desktop.kt`) rather than a runtime `if (platform)` branch.
+## Invariants
 
-**Module map** (see the README for the full table): `core/model` (data
-classes) → `core/config` (`SingBoxConfigFactory`: profile → sing-box JSON,
-`renderPlatformTunnelConfig` branches per platform) → `core/datastore`
-(profile/settings persistence) → `core/tunnel` (`TunnelController`: Android =
-`VpnChainService` wrapping libbox's `CommandServer`, desktop = spawns the
-`sing-box` binary) → `core/warp` (registers the Cloudflare WARP tail exit) →
-`core/data` (repositories) → `core/domain` (use cases) →
-`feature/{chain,settings,logs}` (Compose UI + ViewModels) → `app-common`
-(themed shell, bottom-nav `NavHost`, Koin graph aggregation) →
-`androidApp`/`desktopApp` (thin platform entry points).
+Check each before changing the area. Breaking one reintroduces a failure that is
+invisible in testing.
 
-**WARP tail exit** (`core/warp` + the `warp-exit` endpoint in
-`SingBoxConfigFactory`): an optional Cloudflare hop *after* the relay, for
-sites that refuse the VPS's datacenter address outright. Defaults to those
-sites only, not all traffic — the tail is dialled through the relay, so
-Cloudflare would otherwise see the VPS's unique address against every
-destination. Two invariants worth keeping: the endpoint always
-carries `detour` to the relay outbound (dialled through the chain, never
-around it — on desktop a bare-link handshake is rejected by the kill switch),
-and it is never added to the kill switch's exemption list. Sites are learned by probing through loopback-only inbounds, and a site both exits refuse may fail open past the relay. Read
-**[docs/warp-exit.md](docs/warp-exit.md)** before changing it. Note that
-`RelayConfig` now distinguishes endpoints *by tag*: both hops are WireGuard,
-so "a wireguard endpoint exists" no longer means "an entry hop exists".
+**Structure** ([architecture](docs/architecture.md))
+- [ ] Dependencies flow `feature/* → core/domain, data, designsystem, ui`;
+      `domain → data`; `data → datastore, tunnel, config`. No reverse imports.
+- [ ] Platform behavior is `expect`/`actual` or a platform-suffixed Koin module,
+      never a runtime `if (platform)`.
+- [ ] Each module wires its own Koin module under `.../di/*Module.kt`.
+- [ ] A bare WireGuard peer has no relay: nothing that needs the relay (WARP,
+      probes) may assume one. Endpoints are told apart by tag, not by "a wireguard
+      endpoint exists".
 
-**Convention plugins** (`build-logic/convention/`) centralize per-module
-Gradle config instead of repeating it: `vpnchain.kmp.library` (KMP + Android
-library, compileSdk 36/minSdk 26, JVM 17), `vpnchain.kmp.feature` (adds
-Compose + the standard feature deps: model/domain/designsystem/ui, ViewModel,
-navigation, Koin), `vpnchain.compose.multiplatform`, `vpnchain.android.application`.
-Apply the closest-matching one to a new module rather than configuring
-Kotlin/Android/Compose by hand.
+**WARP tail** ([warp-exit](docs/warp-exit.md))
+- [ ] The `warp-exit` endpoint always carries `detour` to the relay outbound.
+- [ ] It is never in the kill switch's exemption list.
+- [ ] Probe inbounds listen on loopback only, with per-config random port and credentials.
+- [ ] The bare link is never probed, and a site goes there only on the user's
+      "Send direct" tap, matched by exact host.
+- [ ] WARP keys and probe credentials are never logged or exported.
 
-**Desktop vs. Android tunnel divergence** (`core/tunnel`): Desktop runs the
-external `sing-box` binary as a subprocess and coordinates with the CLI via a
-shared pidfile (`$XDG_RUNTIME_DIR/vpn-chain/relay.pid`) so the GUI can adopt a
-relay the CLI already started. Android runs sing-box in-process via the
-prebuilt `libbox` AAR inside a `VpnService` (`VpnChainService` +
-`VpnPlatformInterface` implementing libbox's `PlatformInterface`) — see
-`docs/android.md` for the full wiring, and note Android's one-VPN-at-a-time
-constraint means the app performs *both* chain hops itself instead of
-delegating the entry hop to a separate VPN app.
+**Kill switch, desktop** ([kill-switch](docs/kill-switch.md))
+- [ ] The helper takes a fixed argv, no shell, strictly validated arguments.
+- [ ] Firewall rules, not routing-table changes (sing-box's interface detection reads the routes).
+- [ ] `reject`, not `drop`; keep the `tun0` exemption.
+- [ ] Torn down on Disconnect, not on a crash.
+- [ ] The fail-open mark exists only on desktop, in `automatic` mode, with no entry hop.
 
-**Android connection resilience** (`VpnChainService`, `ChainProbe`,
-`AndroidWakeGuard`, `NetworkMonitor.linkChanges`, `ChainSupervisor`): four
-invariants keep a long-running session alive, and breaking any one of them
-reintroduces a failure that is invisible in testing and obvious in a pocket.
-(1) The service's lifetime is the *user's* intent, not the engine's — a drop
-keeps the foreground service, because stopping it leaves the process cached for
-Doze to kill and makes the Android 12+ background FGS start illegal. (2)
-Connected means the chain carries traffic, proven by a real request through the
-TUN — libbox's status stream is loopback and stays healthy through a dead
-tunnel. (3) `linkChanges` (link *identity*, not the boolean `online`) is what
-catches a Wi-Fi/cellular handover. (4) A wake lock spans the dial and the health
-probe so Doze cannot suspend either half-done — and, the measured corollary,
-the supervisor waits for a usable link before dialling, because an attempt that
-cannot succeed still holds that lock until its readiness gate times out. Read
-**[docs/android.md](docs/android.md)**'s "Staying connected" before touching any
-of it.
+**Android resilience** ([android](docs/android.md#staying-connected))
+- [ ] The service's lifetime is the user's intent, not the engine's: a drop keeps the foreground service.
+- [ ] Connected means a real request through the TUN succeeded, not that libbox is healthy.
+- [ ] `linkChanges` (link identity), not the boolean `online`, detects a Wi-Fi/cellular handover.
+- [ ] A wake lock spans the dial and the health probe, and the supervisor waits for a usable link before dialling.
+- [ ] An update restarts the chain when the connection intent is on.
 
-**Kill switch** has two independent implementations depending on platform and
-mode — Android relies on OS-level Always-on VPN (no app code can enable it,
-only detect it), desktop's WireGuard-entry-hop mode uses a narrow setuid-free
-C helper (`cli/killswitch/vpn-chain-killswitch`) that installs an nftables
-OUTPUT-reject table via a fixed argv (no shell). Read
-**[docs/kill-switch.md](docs/kill-switch.md)** in full before modifying
-either — the nftables rule design (reject vs. drop, the `tun0` exemption, why
-it doesn't touch the routing table) encodes several non-obvious constraints
-from sing-box's own interface auto-detection.
+**Secrets**
+- [ ] Credentials never reach the repo, logs, clash API output or import strings. Fixtures use documentation addresses (`203.0.113.x`).
+- [ ] Android kill switch is the OS Always-on VPN: the app can detect it, never enable it.
 
-**Design system**: `.impeccable.md` at the repo root captures the UI's brand
-direction (a map with a status bar, plain copy, light and dark following the
-system) for the `impeccable`/`frontend-design` skills. Read it before touching `core/designsystem` or any feature's Compose
-UI.
-
-## Package/namespace
-
-All Kotlin source lives under `com.verdenroz.vpnchain.<layer>.<module>`
-(e.g. `com.verdenroz.vpnchain.core.tunnel`, `com.verdenroz.vpnchain.feature.chain`).
+**Docs**
+- [ ] Read the linked doc before changing WARP, the kill switch, or Android resilience.
+- [ ] Read [.impeccable.md](.impeccable.md) before touching `core/designsystem` or a feature's Compose UI.
