@@ -17,9 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.verdenroz.vpnchain.core.common.Platform
 import com.verdenroz.vpnchain.core.common.currentPlatform
-import com.verdenroz.vpnchain.core.designsystem.component.PanelButton
-import com.verdenroz.vpnchain.core.designsystem.component.PanelField
-import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
+import com.verdenroz.vpnchain.core.designsystem.component.ActionButton
+import com.verdenroz.vpnchain.core.designsystem.component.ActionTone
+import com.verdenroz.vpnchain.core.designsystem.component.ValueField
+import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
@@ -54,7 +55,7 @@ fun ProfileForm(
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = PanelTheme.colors
+    val colors = VpnChainTheme.colors
     var vpsIp by remember(initial) { mutableStateOf(initial?.relay?.vpsIp ?: "") }
     var uuid by remember(initial) { mutableStateOf(initial?.relay?.vlessUuid ?: "") }
     var pubKey by remember(initial) { mutableStateOf(initial?.relay?.realityPublicKey ?: "") }
@@ -83,17 +84,17 @@ fun ProfileForm(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        PanelField(stringResource(Res.string.settings_field_vps_ip), vpsIp) { vpsIp = it }
-        PanelField(stringResource(Res.string.settings_field_vless_uuid), uuid, masked = true) { uuid = it }
-        PanelField(
+        ValueField(stringResource(Res.string.settings_field_vps_ip), vpsIp) { vpsIp = it }
+        ValueField(stringResource(Res.string.settings_field_vless_uuid), uuid, masked = true) { uuid = it }
+        ValueField(
             stringResource(Res.string.settings_field_reality_public_key),
             pubKey,
             masked = true,
         ) { pubKey = it }
-        PanelField(stringResource(Res.string.settings_field_short_id), shortId, masked = true) { shortId = it }
-        PanelField(stringResource(Res.string.settings_field_sni), sni) { sni = it }
-        PanelField(stringResource(Res.string.settings_field_server_port), port, numeric = true) { port = it }
-        PanelField(
+        ValueField(stringResource(Res.string.settings_field_short_id), shortId, masked = true) { shortId = it }
+        ValueField(stringResource(Res.string.settings_field_sni), sni) { sni = it }
+        ValueField(stringResource(Res.string.settings_field_server_port), port, numeric = true) { port = it }
+        ValueField(
             stringResource(Res.string.settings_field_local_proxy_port),
             proxyPort,
             numeric = true,
@@ -114,33 +115,34 @@ fun ProfileForm(
                 stringResource(Res.string.settings_entry_hop_detail_desktop)
             },
             style = MaterialTheme.typography.bodyMedium,
-            color = colors.muted,
+            color = colors.inkMuted,
         )
 
-        PanelField(stringResource(Res.string.settings_field_wg_private_key), wgPrivKey, masked = true) {
+        ValueField(stringResource(Res.string.settings_field_wg_private_key), wgPrivKey, masked = true) {
             wgPrivKey = it
         }
-        PanelField(stringResource(Res.string.settings_field_wg_address), wgAddress) { wgAddress = it }
-        PanelField(stringResource(Res.string.settings_field_wg_peer_public_key), wgPeerKey, masked = true) {
+        ValueField(stringResource(Res.string.settings_field_wg_address), wgAddress) { wgAddress = it }
+        ValueField(stringResource(Res.string.settings_field_wg_peer_public_key), wgPeerKey, masked = true) {
             wgPeerKey = it
         }
-        PanelField(stringResource(Res.string.settings_field_wg_endpoint_host), wgHost) { wgHost = it }
-        PanelField(
+        ValueField(stringResource(Res.string.settings_field_wg_endpoint_host), wgHost) { wgHost = it }
+        ValueField(
             stringResource(Res.string.settings_field_wg_endpoint_port),
             wgPort,
             numeric = true,
         ) { wgPort = it }
-        PanelField(stringResource(Res.string.settings_field_wg_dns), wgDns) { wgDns = it }
+        ValueField(stringResource(Res.string.settings_field_wg_dns), wgDns) { wgDns = it }
 
         val valid = vpsIp.isNotBlank() && uuid.isNotBlank() &&
             pubKey.isNotBlank() && shortId.isNotBlank()
 
         Spacer(Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PanelButton(
+            ActionButton(
+                compact = true,
                 text = stringResource(Res.string.settings_save),
                 enabled = valid,
-                prominent = true,
+                tone = ActionTone.Primary,
                 onClick = {
                     val entry = if (
                         wgPrivKey.isNotBlank() && wgAddress.isNotBlank() &&
@@ -178,7 +180,7 @@ fun ProfileForm(
                     )
                 },
             )
-            PanelButton(text = stringResource(Res.string.settings_clear), onClick = onClear)
+            ActionButton(text = stringResource(Res.string.settings_clear), onClick = onClear, compact = true)
         }
     }
 }

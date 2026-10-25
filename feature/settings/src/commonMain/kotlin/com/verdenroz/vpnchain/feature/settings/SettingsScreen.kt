@@ -40,11 +40,12 @@ import com.verdenroz.vpnchain.core.common.currentPlatform
 import com.verdenroz.vpnchain.core.common.systemTrayAvailable
 import com.verdenroz.vpnchain.core.config.SecretsEnvParser
 import com.verdenroz.vpnchain.core.config.WireGuardConfParser
-import com.verdenroz.vpnchain.core.designsystem.component.IndicatorLamp
-import com.verdenroz.vpnchain.core.designsystem.component.PanelButton
-import com.verdenroz.vpnchain.core.designsystem.component.PanelField
-import com.verdenroz.vpnchain.core.designsystem.component.PanelToggle
-import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
+import com.verdenroz.vpnchain.core.designsystem.component.StatusDot
+import com.verdenroz.vpnchain.core.designsystem.component.ActionButton
+import com.verdenroz.vpnchain.core.designsystem.component.ActionTone
+import com.verdenroz.vpnchain.core.designsystem.component.ValueField
+import com.verdenroz.vpnchain.core.designsystem.component.VpnSwitch
+import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ConnectionKind
 import com.verdenroz.vpnchain.core.model.DnsFilter
@@ -53,7 +54,7 @@ import com.verdenroz.vpnchain.core.model.OutsideExit
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
-import com.verdenroz.vpnchain.core.ui.ScreenNameplate
+import com.verdenroz.vpnchain.core.ui.ScreenTitle
 import com.verdenroz.vpnchain.core.ui.SectionCard
 import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.settings.component.DnsFilterPicker
@@ -240,7 +241,7 @@ fun SettingsScreen(
     onOpenSystemVpnSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = PanelTheme.colors
+    val colors = VpnChainTheme.colors
     val hasProfile = uiState.profile != null
     // Saving the relay form must never attach a relay to a WireGuard-only connection.
     val wireGuardOnly = uiState.profile?.kind == ConnectionKind.WireGuard
@@ -253,12 +254,10 @@ fun SettingsScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(colors.shellDeep)
+            .background(colors.background)
             .padding(horizontal = 18.dp, vertical = 20.dp),
     ) {
-        ScreenNameplate(title = stringResource(Res.string.settings_title)) {
-            IndicatorLamp(color = colors.lampWhite, lit = hasProfile, size = 9.dp)
-        }
+        ScreenTitle(title = stringResource(Res.string.settings_title))
 
         Spacer(Modifier.height(18.dp))
 
@@ -295,26 +294,29 @@ fun SettingsScreen(
                         stringResource(Res.string.settings_no_profile_yet)
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (hasProfile) colors.readout else colors.muted,
+                    color = if (hasProfile) colors.ink else colors.inkMuted,
                 )
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PanelButton(
+                    ActionButton(
+                        compact = true,
                         text = if (importExpanded) {
                             stringResource(Res.string.settings_hide_import)
                         } else {
                             stringResource(Res.string.settings_import)
                         },
                         onClick = { importExpanded = !importExpanded },
-                        prominent = !hasProfile,
+                        tone = if (hasProfile) ActionTone.Outlined else ActionTone.Primary,
                     )
                     if (wireGuardOnly) {
-                        PanelButton(
+                        ActionButton(
+                            compact = true,
                             text = stringResource(Res.string.settings_profile_delete),
                             onClick = { uiState.activeProfileId?.let(onDeleteProfile) },
                         )
                     } else {
-                        PanelButton(
+                        ActionButton(
+                            compact = true,
                             text = when {
                                 formExpanded -> stringResource(Res.string.settings_hide_fields)
                                 hasProfile -> stringResource(Res.string.settings_edit_fields)
@@ -326,7 +328,8 @@ fun SettingsScreen(
                     // Pairing source, not a sink — only worth offering once there's a
                     // profile to show, and only desktop can render one.
                     if (hasProfile && !wireGuardOnly && currentPlatform == Platform.Desktop) {
-                        PanelButton(
+                        ActionButton(
+                            compact = true,
                             text = if (qrExpanded) {
                                 stringResource(Res.string.settings_hide_qr)
                             } else {
@@ -504,13 +507,13 @@ fun SettingsScreen(
                     Text(
                         stringResource(Res.string.settings_dns_filter_title),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = colors.readout,
+                        color = colors.ink,
                     )
                     Spacer(Modifier.height(5.dp))
                     Text(
                         stringResource(Res.string.settings_dns_filter_detail),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = colors.muted,
+                        color = colors.inkMuted,
                     )
                     Spacer(Modifier.height(12.dp))
                     DnsFilterPicker(
@@ -545,18 +548,18 @@ private fun WarpSection(
     onToggleFailOpen: (Boolean) -> Unit,
     onRemoveLearned: (String) -> Unit,
 ) {
-    val colors = PanelTheme.colors
+    val colors = VpnChainTheme.colors
     Column {
         Text(
             stringResource(Res.string.settings_warp_title),
             style = MaterialTheme.typography.bodyLarge,
-            color = colors.readout,
+            color = colors.ink,
         )
         Spacer(Modifier.height(5.dp))
         Text(
             stringResource(Res.string.settings_warp_detail),
             style = MaterialTheme.typography.bodyMedium,
-            color = colors.muted,
+            color = colors.inkMuted,
         )
         Spacer(Modifier.height(12.dp))
         WarpModePicker(selected = mode, onSelect = onSetMode)
@@ -583,7 +586,7 @@ private fun WarpSection(
     }
 }
 
-/** Label, rationale, and the switch that acts on it — the panel's one setting shape. */
+/** Label, rationale, and the switch that acts on it. */
 @Composable
 private fun SettingRow(
     title: String,
@@ -591,30 +594,26 @@ private fun SettingRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    val colors = PanelTheme.colors
+    val colors = VpnChainTheme.colors
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f).padding(end = 16.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.readout)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.ink)
             if (detail != null) {
                 Spacer(Modifier.height(5.dp))
                 SelectionContainer {
-                    Text(detail, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+                    Text(detail, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
                 }
             }
         }
-        PanelToggle(checked = checked, onCheckedChange = onCheckedChange)
+        VpnSwitch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
 @Composable
 private fun AlwaysOnGuidance(detected: Boolean, onOpenSystemVpnSettings: () -> Unit) {
-    val colors = PanelTheme.colors
+    val colors = VpnChainTheme.colors
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IndicatorLamp(
-            color = if (detected) colors.lampGreen else colors.lampAmber,
-            lit = true,
-            size = 8.dp,
-        )
+        StatusDot(if (detected) colors.connectedText else colors.rerouted)
         SelectionContainer(Modifier.weight(1f)) {
             Text(
                 if (detected) {
@@ -623,7 +622,7 @@ private fun AlwaysOnGuidance(detected: Boolean, onOpenSystemVpnSettings: () -> U
                     stringResource(Res.string.settings_always_on_not_armed)
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (detected) colors.readout else colors.muted,
+                color = if (detected) colors.ink else colors.inkMuted,
                 modifier = Modifier.padding(start = 4.dp, end = 12.dp),
             )
         }
@@ -631,7 +630,7 @@ private fun AlwaysOnGuidance(detected: Boolean, onOpenSystemVpnSettings: () -> U
         // toggle mirrors real status, and either direction opens system VPN
         // settings rather than changing anything here. Always visible (not just
         // while unarmed) so there's a way back to turn it off too.
-        PanelToggle(checked = detected, onCheckedChange = { onOpenSystemVpnSettings() })
+        VpnSwitch(checked = detected, onCheckedChange = { onOpenSystemVpnSettings() })
     }
 }
 
@@ -644,7 +643,7 @@ private fun ImportReview(
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val colors = PanelTheme.colors
+    val colors = VpnChainTheme.colors
     Column {
         Text(
             when (pending) {
@@ -661,21 +660,26 @@ private fun ImportReview(
                 } ?: stringResource(Res.string.settings_import_review_relay, pending.relay.vpsIp)
             },
             style = MaterialTheme.typography.bodyMedium,
-            color = colors.readout,
+            color = colors.ink,
         )
         Spacer(Modifier.height(5.dp))
         Text(
             stringResource(Res.string.settings_import_review_detail),
             style = MaterialTheme.typography.bodyMedium,
-            color = colors.muted,
+            color = colors.inkMuted,
         )
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PanelButton(text = stringResource(Res.string.settings_import_use), onClick = onUse, prominent = true)
+            ActionButton(
+                text = stringResource(Res.string.settings_import_use),
+                onClick = onUse,
+                compact = true,
+                tone = ActionTone.Primary,
+            )
             if (canSaveOnly) {
-                PanelButton(text = stringResource(Res.string.settings_import_save), onClick = onSave)
+                ActionButton(text = stringResource(Res.string.settings_import_save), onClick = onSave, compact = true)
             }
-            PanelButton(text = stringResource(Res.string.settings_import_cancel), onClick = onCancel)
+            ActionButton(text = stringResource(Res.string.settings_import_cancel), onClick = onCancel, compact = true)
         }
     }
 }
@@ -690,17 +694,18 @@ private fun ImportSection(
     onImportDefault: () -> Unit,
     onScanQr: () -> Unit,
 ) {
-    val colors = PanelTheme.colors
+    val colors = VpnChainTheme.colors
     var pasted by remember(clearKey) { mutableStateOf("") }
 
     Column {
         // Typing 12 secret fields on a phone keyboard is miserable — scanning the
         // desktop app's QR is the path Android users actually want.
         if (currentPlatform == Platform.Android) {
-            PanelButton(
+            ActionButton(
+                compact = true,
                 text = stringResource(Res.string.settings_scan_qr),
                 onClick = onScanQr,
-                prominent = true,
+                tone = ActionTone.Primary,
             )
             Spacer(Modifier.height(12.dp))
         }
@@ -711,10 +716,10 @@ private fun ImportSection(
                 stringResource(Res.string.settings_import_hint_desktop)
             },
             style = MaterialTheme.typography.bodyMedium,
-            color = colors.muted,
+            color = colors.inkMuted,
         )
         Spacer(Modifier.height(12.dp))
-        PanelField(
+        ValueField(
             label = stringResource(Res.string.settings_secrets_env_label),
             value = pasted,
             minLines = 4,
@@ -723,20 +728,22 @@ private fun ImportSection(
         )
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PanelButton(
+            ActionButton(
+                compact = true,
                 text = stringResource(Res.string.settings_import_pasted),
                 onClick = { onImportText(pasted) },
                 enabled = pasted.isNotBlank(),
-                prominent = currentPlatform == Platform.Desktop,
+                tone = if (currentPlatform == Platform.Desktop) ActionTone.Primary else ActionTone.Outlined,
             )
             if (onImportAsEntryHop != null && WireGuardConfParser.looksLikeConf(pasted)) {
-                PanelButton(
+                ActionButton(
                     text = stringResource(Res.string.settings_import_as_entry_hop),
                     onClick = { onImportAsEntryHop(pasted) },
+                    compact = true,
                 )
             }
             if (currentPlatform == Platform.Desktop) {
-                PanelButton(text = stringResource(Res.string.settings_import_from_disk), onClick = onImportDefault)
+                ActionButton(text = stringResource(Res.string.settings_import_from_disk), onClick = onImportDefault, compact = true)
             }
         }
     }
@@ -745,13 +752,13 @@ private fun ImportSection(
 /** Renders the current profile as a scannable QR — desktop side of device pairing. */
 @Composable
 private fun QrPairingPanel(profile: ChainProfile, entryHop: WireGuardEntry?) {
-    val colors = PanelTheme.colors
+    val colors = VpnChainTheme.colors
     val bitmap = remember(profile, entryHop) { renderQrCode(SecretsEnvParser.format(SecretsEnvParser.Parsed(profile, entryHop))) }
     Column {
         Text(
             stringResource(Res.string.settings_qr_warning),
             style = MaterialTheme.typography.bodyMedium,
-            color = colors.lampAmber,
+            color = colors.rerouted,
         )
         Spacer(Modifier.height(12.dp))
         bitmap?.let {

@@ -166,20 +166,20 @@ private fun PrimaryAction(
             stringResource(Res.string.chain_disconnect),
             onClick = onDisconnect,
             modifier = modifier,
-            tone = ActionTone.Disconnect,
+            tone = ActionTone.Danger,
         )
         TunnelState.Connecting -> ActionButton(
             stringResource(Res.string.chain_state_connecting),
             onClick = {},
             modifier = modifier,
-            tone = ActionTone.Connect,
+            tone = ActionTone.Primary,
             enabled = false,
         )
         TunnelState.Disconnected, TunnelState.Error -> ActionButton(
             stringResource(Res.string.chain_connect),
             onClick = onConnect,
             modifier = modifier,
-            tone = ActionTone.Connect,
+            tone = ActionTone.Primary,
         )
     }
 }

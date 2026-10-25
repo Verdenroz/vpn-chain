@@ -31,7 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
-import com.verdenroz.vpnchain.core.designsystem.component.PanelButton
+import com.verdenroz.vpnchain.core.designsystem.component.ActionButton
+import com.verdenroz.vpnchain.core.designsystem.component.ActionTone
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan_cancel
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan_hint
@@ -103,7 +104,7 @@ private fun FullScreenOverlay(onDismiss: () -> Unit, content: @Composable () -> 
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             content()
-            PanelButton(text = stringResource(Res.string.settings_scan_cancel), onClick = onDismiss)
+            ActionButton(text = stringResource(Res.string.settings_scan_cancel), onClick = onDismiss, compact = true)
         }
     }
 }

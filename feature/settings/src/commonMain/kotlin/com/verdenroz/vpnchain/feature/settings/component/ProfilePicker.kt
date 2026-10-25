@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.feature.settings.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,13 +19,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.verdenroz.vpnchain.core.designsystem.component.IndicatorLamp
-import com.verdenroz.vpnchain.core.designsystem.component.PanelButton
-import com.verdenroz.vpnchain.core.designsystem.component.PanelField
-import com.verdenroz.vpnchain.core.designsystem.component.machinedSurface
-import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
+import com.verdenroz.vpnchain.core.designsystem.component.StatusDot
+import com.verdenroz.vpnchain.core.designsystem.component.ActionButton
+import com.verdenroz.vpnchain.core.designsystem.component.ActionTone
+import com.verdenroz.vpnchain.core.designsystem.component.ValueField
+import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_cancel
@@ -34,7 +37,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_prof
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The saved chains, one per row, with a lit lamp on the active one.
+ * The saved chains, one per row, with a dot on the active one.
  *
  * Selection is the whole row rather than a control at its edge: picking a
  * profile is the common action here, deleting one is not.
@@ -48,7 +51,7 @@ internal fun ProfilePicker(
     onRename: (String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = PanelTheme.colors
+    val colors = VpnChainTheme.colors
     var renaming by remember { mutableStateOf<String?>(null) }
     Column(modifier.fillMaxWidth()) {
         profiles.forEachIndexed { index, saved ->
@@ -68,35 +71,32 @@ internal fun ProfilePicker(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .machinedSurface(
-                        colors,
-                        corner = 2.dp,
-                        recessed = !active,
-                        fill = if (active) colors.shellRaised else colors.shellDeep,
-                    )
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (active) colors.selected else colors.background)
                     .clickable(enabled = !active) { onSelect(saved.id) }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IndicatorLamp(color = colors.lampGreen, lit = active, size = 7.dp)
+                StatusDot(if (active) colors.connectedText else colors.line)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         saved.name,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = if (active) colors.readout else colors.muted,
+                        color = if (active) colors.ink else colors.inkMuted,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         saved.host,
                         style = MaterialTheme.typography.bodySmall,
-                        color = colors.muted,
+                        color = colors.inkMuted,
                         maxLines = 1,
                     )
                 }
                 Spacer(Modifier.width(10.dp))
-                PanelButton(
+                ActionButton(
+                    compact = true,
                     text = stringResource(Res.string.settings_profile_rename),
                     onClick = { renaming = saved.id },
                 )
@@ -104,7 +104,8 @@ internal fun ProfilePicker(
                 // row undeletable stops the list from silently emptying itself.
                 if (profiles.size > 1) {
                     Spacer(Modifier.width(10.dp))
-                    PanelButton(
+                    ActionButton(
+                        compact = true,
                         text = stringResource(Res.string.settings_profile_delete),
                         onClick = { onDelete(saved.id) },
                     )
@@ -118,21 +119,22 @@ internal fun ProfilePicker(
 private fun RenameRow(initial: String, onSave: (String) -> Unit, onCancel: () -> Unit) {
     var name by remember { mutableStateOf(initial) }
     Column(Modifier.fillMaxWidth()) {
-        PanelField(
+        ValueField(
             label = stringResource(Res.string.settings_profile_name),
             value = name,
             onValueChange = { name = it },
         )
         Spacer(Modifier.height(8.dp))
         Row {
-            PanelButton(
+            ActionButton(
+                compact = true,
                 text = stringResource(Res.string.settings_profile_rename_save),
                 onClick = { onSave(name) },
                 enabled = name.isNotBlank(),
-                prominent = true,
+                tone = ActionTone.Primary,
             )
             Spacer(Modifier.width(10.dp))
-            PanelButton(text = stringResource(Res.string.settings_import_cancel), onClick = onCancel)
+            ActionButton(compact = true, text = stringResource(Res.string.settings_import_cancel), onClick = onCancel)
         }
     }
 }

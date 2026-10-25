@@ -2,7 +2,7 @@ package com.verdenroz.vpnchain.feature.settings.component
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.verdenroz.vpnchain.core.designsystem.component.PanelSelector
+import com.verdenroz.vpnchain.core.designsystem.component.SegmentedSelector
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_ads
@@ -11,7 +11,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** The two filter levels and off, as three stops on the panel's one selector. */
+/** The two filter levels and off. */
 @Composable
 fun DnsFilterPicker(
     selected: DnsFilter,
@@ -19,7 +19,7 @@ fun DnsFilterPicker(
     modifier: Modifier = Modifier,
 ) {
     val options = DnsFilter.entries
-    PanelSelector(
+    SegmentedSelector(
         options = options.map { stringResource(it.labelRes()) },
         selectedIndex = options.indexOf(selected),
         onSelect = { onSelect(options[it]) },

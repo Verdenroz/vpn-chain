@@ -2,7 +2,7 @@ package com.verdenroz.vpnchain.feature.settings.component
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.verdenroz.vpnchain.core.designsystem.component.PanelSelector
+import com.verdenroz.vpnchain.core.designsystem.component.SegmentedSelector
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_all
@@ -19,7 +19,7 @@ fun WarpModePicker(
     modifier: Modifier = Modifier,
 ) {
     val options = WarpMode.entries
-    PanelSelector(
+    SegmentedSelector(
         options = options.map { stringResource(it.labelRes()) },
         selectedIndex = options.indexOf(selected),
         onSelect = { onSelect(options[it]) },

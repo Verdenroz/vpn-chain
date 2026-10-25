@@ -8,14 +8,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.verdenroz.vpnchain.core.designsystem.theme.PanelTheme
+import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 
-/**
- * The badge struck into the enclosure. Every tab is another faceplate on the
- * same device, so they all carry the same nameplate treatment.
- */
 @Composable
-fun ScreenNameplate(
+fun ScreenTitle(
     title: String,
     modifier: Modifier = Modifier,
     trailing: @Composable () -> Unit = {},
@@ -25,11 +21,7 @@ fun ScreenNameplate(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            title.uppercase(),
-            style = MaterialTheme.typography.headlineMedium,
-            color = PanelTheme.colors.readout,
-        )
+        Text(title, style = MaterialTheme.typography.headlineMedium, color = VpnChainTheme.colors.ink)
         trailing()
     }
 }
