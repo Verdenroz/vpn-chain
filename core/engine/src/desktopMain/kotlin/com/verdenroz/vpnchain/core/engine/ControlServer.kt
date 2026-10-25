@@ -4,6 +4,7 @@ import com.verdenroz.vpnchain.core.logging.Logger
 import java.io.IOException
 import java.net.StandardProtocolFamily
 import java.net.UnixDomainSocketAddress
+import java.nio.channels.ClosedChannelException
 import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
 import java.nio.file.Files
@@ -11,6 +12,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
@@ -28,27 +30,42 @@ class ControlServer(
     private val appVersion: String,
     private val scope: CoroutineScope,
     private val logger: Logger,
+    private val posix: Boolean = OwnerOnly.posix,
+    private val accept: (ServerSocketChannel) -> SocketChannel = ServerSocketChannel::accept,
 ) {
 
-    fun start(lock: EngineLock): Job {
+    /** @return the serving job, or null where the socket cannot be made owner-only. */
+    fun start(lock: EngineLock): Job? {
+        if (!posix) {
+            logger.w(TAG, "no POSIX permissions on this filesystem; not serving ${paths.socket}")
+            return null
+        }
         OwnerOnly.dir(paths.runtimeDir)
         Files.deleteIfExists(paths.socket)
         val server = ServerSocketChannel.open(StandardProtocolFamily.UNIX).bind(UnixDomainSocketAddress.of(paths.socket))
         OwnerOnly.restrict(paths.socket)
         logger.i(TAG, "control socket at ${paths.socket}")
         return scope.launch(Dispatchers.IO) {
-            lock.use {
-                server.use {
-                    try {
-                        while (isActive) {
-                            val client = runInterruptible { server.accept() }
-                            launch { serve(client) }
-                        }
-                    } catch (e: IOException) {
-                        logger.e(TAG, "control socket stopped accepting", e)
-                    }
-                }
+            lock.use { server.use { acceptLoop(server) } }
+        }
+    }
+
+    // A failed accept (fd exhaustion, say) is retried: only closing the socket ends serving.
+    private suspend fun CoroutineScope.acceptLoop(server: ServerSocketChannel) {
+        var backoff = ACCEPT_RETRY_MIN_MS
+        while (isActive) {
+            val client = try {
+                runInterruptible { accept(server) }
+            } catch (_: ClosedChannelException) {
+                return
+            } catch (e: IOException) {
+                logger.w(TAG, "accept failed, retrying in ${backoff}ms: ${e.message}")
+                delay(backoff)
+                backoff = (backoff * 2).coerceAtMost(ACCEPT_RETRY_MAX_MS)
+                continue
             }
+            backoff = ACCEPT_RETRY_MIN_MS
+            launch { serve(client) }
         }
     }
 
@@ -84,21 +101,32 @@ class ControlServer(
     }
 
     private suspend fun answer(lines: LineChannel, message: ClientMessage) {
-        try {
+        val failure = try {
             handler.handle(message.request).collect { lines.send(message.id, it) }
+            return
         } catch (e: IOException) {
             logger.d(TAG, "client dropped: ${e.message}")
+            return
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             // A request that dies unanswered leaves a blocking client waiting forever.
             logger.e(TAG, "request ${message.request} failed", e)
-            lines.send(message.id, Reply.Failure(FailureCode.Failed, e.message ?: e::class.simpleName.orEmpty()))
+            Reply.Failure(FailureCode.Failed, e.message ?: e::class.simpleName.orEmpty())
+        }
+        try {
+            lines.send(message.id, failure)
+        } catch (e: IOException) {
+            logger.d(TAG, "client left before its failure reply: ${e.message}")
         }
     }
 
     private suspend fun LineChannel.receive(): ClientMessage? = try {
         runInterruptible { readLine() }?.let { engineJson.decodeFromString<ClientMessage>(it) }
+    } catch (e: LineTooLongException) {
+        logger.w(TAG, "dropping a client: ${e.message}")
+        send(0, Reply.Failure(FailureCode.BadRequest, e.message.orEmpty()))
+        null
     } catch (e: IOException) {
         logger.d(TAG, "client dropped: ${e.message}")
         null
@@ -112,5 +140,7 @@ class ControlServer(
 
     private companion object {
         const val TAG = "ControlServer"
+        const val ACCEPT_RETRY_MIN_MS = 100L
+        const val ACCEPT_RETRY_MAX_MS = 5_000L
     }
 }

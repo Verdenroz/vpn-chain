@@ -18,6 +18,12 @@ class WireTextTest {
     }
 
     @Test
+    fun `a resource environment that cannot be built falls back to the key`() = runTest {
+        val text = WireText.Resource("tunnel_status_tun").resolveWith { throw NoSuchMethodException("ResourceEnvironment.<init>") }
+        assertEquals("tunnel_status_tun", text)
+    }
+
+    @Test
     fun `plain text passes through`() = runTest {
         assertEquals("as is", WireText.Plain("as is").resolve())
     }

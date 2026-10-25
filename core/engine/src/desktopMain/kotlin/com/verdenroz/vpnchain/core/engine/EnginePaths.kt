@@ -9,9 +9,20 @@ class EnginePaths(val runtimeDir: Path, val configDir: Path) {
 
     companion object {
         fun system(): EnginePaths = EnginePaths(
-            // Same directory DesktopTunnelController keeps relay.pid in.
-            runtimeDir = Path.of(System.getenv("XDG_RUNTIME_DIR") ?: "/tmp", "vpn-chain"),
+            runtimeDir = Path.of(runtimeBase(System::getenv, System.getProperty("os.name").startsWith("Mac")), "vpn-chain"),
             configDir = Path.of(System.getProperty("user.home"), ".config", "vpn-chain"),
         )
+
+        // Linux matches DesktopTunnelController's relay.pid directory. macOS has no XDG_RUNTIME_DIR,
+        // and its per-user TMPDIR under /var/folders beats the shared /tmp.
+        internal fun runtimeBase(env: (String) -> String?, macOS: Boolean): String =
+            env("XDG_RUNTIME_DIR") ?: env("TMPDIR").takeIf { macOS } ?: "/tmp"
     }
 }
+
+/**
+ * Whether this platform can serve the control socket owner-only. Without POSIX
+ * permissions (Windows) the socket would be open to every local user, so the
+ * engine does not serve it there.
+ */
+val controlSocketSupported: Boolean get() = OwnerOnly.posix

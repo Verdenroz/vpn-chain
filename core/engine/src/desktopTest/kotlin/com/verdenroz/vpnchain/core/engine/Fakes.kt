@@ -13,6 +13,7 @@ import com.verdenroz.vpnchain.core.model.LogEntry
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.TunnelState
+import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -92,11 +93,17 @@ internal fun relayProfile(id: String, name: String) = SavedProfile(
     ),
 )
 
-internal fun handlerOver(chain: ChainRepository, profiles: ProfileRepository, logs: LogRepository) = EngineHandler(
+internal fun handlerOver(
+    chain: ChainRepository,
+    profiles: ProfileRepository,
+    logs: LogRepository,
+    settings: Flow<UserSettings> = MutableStateFlow(UserSettings()),
+) = EngineHandler(
     chain = chain,
     profiles = profiles,
     logs = logs,
     connect = ConnectChainUseCase(chain),
     disconnect = DisconnectChainUseCase(chain),
     switchProfile = SwitchProfileUseCase(profiles, chain),
+    settings = settings,
 )

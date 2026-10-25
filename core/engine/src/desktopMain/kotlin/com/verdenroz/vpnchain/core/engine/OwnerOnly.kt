@@ -11,7 +11,7 @@ import java.nio.file.attribute.PosixFilePermissions
 
 /** Owner-only paths for the control socket and lock. Filesystems without POSIX permissions (Windows) get plain creation. */
 internal object OwnerOnly {
-    private val posix = "posix" in FileSystems.getDefault().supportedFileAttributeViews()
+    val posix = "posix" in FileSystems.getDefault().supportedFileAttributeViews()
     private val dirPerms = PosixFilePermissions.fromString("rwx------")
     val filePerms = PosixFilePermissions.fromString("rw-------")
     val fileAttrs: Array<FileAttribute<*>> =

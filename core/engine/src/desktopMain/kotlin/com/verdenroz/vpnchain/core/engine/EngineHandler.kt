@@ -8,6 +8,7 @@ import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.SwitchProfileUseCase
 import com.verdenroz.vpnchain.core.model.LogEntry
 import com.verdenroz.vpnchain.core.model.TunnelState
+import com.verdenroz.vpnchain.core.model.UserSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -23,6 +24,7 @@ class EngineHandler(
     private val connect: ConnectChainUseCase,
     private val disconnect: DisconnectChainUseCase,
     private val switchProfile: SwitchProfileUseCase,
+    private val settings: Flow<UserSettings>,
 ) {
 
     /** One reply for a plain request; a stream for [Request.Subscribe]. */
@@ -79,8 +81,12 @@ class EngineHandler(
     private fun summaries(): Flow<List<ProfileSummary>> =
         combine(profiles.profiles, profiles.activeProfileId) { saved, activeId -> saved.map { it.toSummary(activeId) } }
 
+    // Mirrors ChainSupervisor's own test for whether a drop gets redialled.
     private fun status(): Flow<EngineStatus> =
-        combine(chain.status, summaries()) { status, summaries -> status.toWire(summaries.firstOrNull { it.active }) }
+        combine(chain.status, summaries(), chain.connectionIntent, settings) { status, summaries, intent, settings ->
+            val active = summaries.firstOrNull { it.active }
+            status.toWire(active, willRetry = intent && settings.autoReconnect && active != null)
+        }
 
     // Entries are kept by reference across ring updates, so identity finds where the last batch ended.
     private fun newLogLines(): Flow<List<LogLine>> = flow {

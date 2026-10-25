@@ -1,32 +1,46 @@
 package com.verdenroz.vpnchain.core.engine
 
 import com.verdenroz.vpnchain.core.data.ChainRepository
+import com.verdenroz.vpnchain.core.logging.Logger
 import com.verdenroz.vpnchain.core.model.TunnelState
+import com.verdenroz.vpnchain.core.model.UserSettings
+import java.io.IOException
 import java.net.StandardProtocolFamily
 import java.net.UnixDomainSocketAddress
+import java.nio.ByteBuffer
 import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermissions
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import kotlin.io.path.deleteRecursively
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class ControlSocketTest {
     private val root: Path = Files.createTempDirectory("engine")
     private val paths = EnginePaths(runtimeDir = root.resolve("run/vpn-chain"), configDir = root.resolve("config"))
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val uncaught = mutableListOf<Throwable>()
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e -> synchronized(uncaught) { uncaught += e } },
+    )
     private val chain = FakeChainRepository()
     private val profiles = FakeProfileRepository(listOf(relayProfile("home", "Home"), relayProfile("work", "Work")))
     private val logs = FakeLogRepository()
@@ -38,10 +52,12 @@ class ControlSocketTest {
         root.deleteRecursively()
     }
 
-    private fun serve() {
-        val server = ControlServer(handlerOver(chain, profiles, logs), paths, "1.2.3", scope, SilentLogger)
-        server.start(EngineLock.tryAcquire(paths.lock)!!)
-    }
+    private fun serve(
+        handler: EngineHandler = handlerOver(chain, profiles, logs),
+        posix: Boolean = true,
+        accept: (ServerSocketChannel) -> SocketChannel = ServerSocketChannel::accept,
+        logger: Logger = SilentLogger,
+    ) = ControlServer(handler, paths, "1.2.3", scope, logger, posix, accept).start(EngineLock.tryAcquire(paths.lock)!!)
 
     private fun client() = EngineClient.connect(paths.socket, "1.2.3")
 
@@ -210,6 +226,75 @@ class ControlSocketTest {
         serve()
         assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(paths.runtimeDir)))
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(paths.socket)))
+    }
+
+    @Test
+    fun `without POSIX permissions the socket is not served`() {
+        assertNull(serve(posix = false))
+        assertFalse(Files.exists(paths.socket))
+    }
+
+    @Test
+    fun `failed accepts are retried, not fatal`() {
+        val failures = AtomicInteger(2)
+        serve(accept = { server -> if (failures.getAndDecrement() > 0) throw IOException("EMFILE") else server.accept() })
+        client().use { assertEquals("1.2.3", it.engineVersion) }
+    }
+
+    @Test
+    fun `a request that fails after its client left is not an uncaught error`() {
+        val dial = CompletableDeferred<Unit>()
+        val failing = object : ChainRepository by chain {
+            override suspend fun connect(): Result<Unit> = dial.await().let { error("dial blew up") }
+        }
+        val answered = CompletableDeferred<Unit>()
+        val logger = object : Logger by SilentLogger {
+            override fun d(tag: String, message: String) {
+                if ("before its failure reply" in message) answered.complete(Unit)
+            }
+        }
+        serve(handler = handlerOver(failing, profiles, logs), logger = logger)
+        SocketChannel.open(UnixDomainSocketAddress.of(paths.socket)).use { channel ->
+            val lines = LineChannel(channel)
+            lines.writeLine(engineJson.encodeToString(ClientMessage(1, Request.Hello(PROTOCOL_VERSION))))
+            lines.readLine()
+            lines.writeLine(engineJson.encodeToString(ClientMessage(2, Request.Up())))
+        }
+        dial.complete(Unit)
+        runBlocking { withTimeout(5_000) { answered.await() } }
+        assertEquals(emptyList(), synchronized(uncaught) { uncaught.toList() })
+    }
+
+    @Test
+    fun `an endless line gets one refusal and the connection dropped`() {
+        serve()
+        val (reply, after) = SocketChannel.open(UnixDomainSocketAddress.of(paths.socket)).use { channel ->
+            val lines = LineChannel(channel)
+            // Exactly the cap: bytes the engine never reads would turn its close into a reset.
+            val endless = ByteBuffer.wrap(ByteArray(LineChannel.MAX_LINE_BYTES) { 'x'.code.toByte() })
+            while (endless.hasRemaining()) channel.write(endless)
+            engineJson.decodeFromString<ServerMessage>(lines.readLine()!!).reply to lines.readLine()
+        }
+        assertEquals(FailureCode.BadRequest, assertIs<Reply.Failure>(reply).code)
+        assertNull(after)
+    }
+
+    @Test
+    fun `an error the engine will redial is marked as such`() {
+        chain.status.value = chain.status.value.copy(state = TunnelState.Error)
+        chain.connectionIntent.value = true
+        serve()
+        val status = client().use { assertIs<Reply.Status>(it.call(Request.Status)).status }
+        assertTrue(status.willRetry)
+    }
+
+    @Test
+    fun `an error with auto-reconnect off is final`() {
+        chain.status.value = chain.status.value.copy(state = TunnelState.Error)
+        chain.connectionIntent.value = true
+        serve(handler = handlerOver(chain, profiles, logs, MutableStateFlow(UserSettings(autoReconnect = false))))
+        val status = client().use { assertIs<Reply.Status>(it.call(Request.Status)).status }
+        assertFalse(status.willRetry)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.update.di
 
+import com.verdenroz.vpnchain.core.common.appVersion
 import com.verdenroz.vpnchain.core.common.di.applicationScopeQualifier
 import com.verdenroz.vpnchain.core.common.di.ioDispatcherQualifier
 import com.verdenroz.vpnchain.core.update.AppInstaller
@@ -29,7 +30,7 @@ actual val updateModule: Module = module {
             repository = get(),
             installer = get(),
             directory = xdgDir("XDG_CACHE_HOME", ".cache").resolve("update").toOkioPath(),
-            installedVersion = System.getProperty("vpnchain.version").orEmpty(),
+            installedVersion = appVersion,
         ).also { updates ->
             get<CoroutineScope>(applicationScopeQualifier).launch { updates.run() }
         }

@@ -145,6 +145,8 @@ data class EngineStatus(
     val killSwitch: KillSwitchState,
     val exitIp: String? = null,
     val detail: WireText? = null,
+    /** An [TunnelState.Error] here is not final: the user wants the chain up and the engine will redial. */
+    val willRetry: Boolean = false,
 )
 
 @Serializable
@@ -156,7 +158,10 @@ data class EngineStats(
     val downlinkBytesPerSecond: Long = 0,
 )
 
-/** What a client may show of a saved connection: never its keys or addresses. */
+/**
+ * What a client may show of a saved connection: never its keys. The name is the
+ * user's, and may default to the server's address.
+ */
 @Serializable
 data class ProfileSummary(
     val id: String,

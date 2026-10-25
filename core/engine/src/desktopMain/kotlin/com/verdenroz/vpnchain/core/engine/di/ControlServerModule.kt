@@ -1,6 +1,8 @@
 package com.verdenroz.vpnchain.core.engine.di
 
+import com.verdenroz.vpnchain.core.common.appVersion
 import com.verdenroz.vpnchain.core.common.di.applicationScopeQualifier
+import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.di.startEngine
 import com.verdenroz.vpnchain.core.engine.ControlServer
 import com.verdenroz.vpnchain.core.engine.EngineHandler
@@ -22,13 +24,14 @@ val controlServerModule = module {
             connect = get(),
             disconnect = get(),
             switchProfile = get(),
+            settings = get<SettingsRepository>().settings,
         )
     }
     single {
         ControlServer(
             handler = get(),
             paths = get(),
-            appVersion = System.getProperty("vpnchain.version").orEmpty(),
+            appVersion = appVersion,
             scope = get<CoroutineScope>(applicationScopeQualifier),
             logger = get(),
         )
@@ -37,9 +40,9 @@ val controlServerModule = module {
 
 /**
  * Starts the engine in this process and serves the control socket for it when
- * this process wins the engine lock. The lock is taken before the engine opens
- * DataStore; a process that loses it still runs its own engine but leaves the
- * socket to the winner.
+ * this process wins the engine lock. The lock only decides who serves the
+ * socket: a second GUI that loses it still runs its own engine, DataStore
+ * included, until the GUI becomes a client of a running engine.
  */
 fun startHostedEngine(koin: Koin) {
     val paths = koin.get<EnginePaths>()
@@ -56,7 +59,7 @@ fun startHostedEngine(koin: Koin) {
         return
     }
     try {
-        koin.get<ControlServer>().start(lock)
+        if (koin.get<ControlServer>().start(lock) == null) lock.close()
     } catch (e: IOException) {
         lock.close()
         logger.e(TAG, "cannot serve ${paths.socket}", e)
