@@ -2,8 +2,14 @@ package com.verdenroz.vpnchain.core.warp.probe
 
 import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.model.BlockReason
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.withTimeoutOrNull
 
-/** One GET of `https://<host>/` through a probe proxy; null on any transport failure. */
+/**
+ * One GET of `https://<host>/` through a probe proxy; null on any transport
+ * failure. Must give up promptly when cancelled, as [SiteProber] does at its deadline.
+ */
 interface SiteFetcher {
     suspend fun get(host: String, port: Int, proxy: ProbeProxy): ProbeResponse?
 }
@@ -45,7 +51,10 @@ sealed interface ProbeOutcome {
  * takes a site it merely challenges, since a browser passes a challenge from an
  * ordinary address, and refuses one it blocks outright.
  */
-class SiteProber(private val fetcher: SiteFetcher) {
+class SiteProber(
+    private val fetcher: SiteFetcher,
+    private val deadline: Duration = FETCH_DEADLINE,
+) {
 
     suspend fun probe(host: String, proxy: ProbeProxy): ProbeOutcome {
         val relayReason = when (val relay = verdict(host, proxy.relayPort, proxy)) {
@@ -72,8 +81,11 @@ class SiteProber(private val fetcher: SiteFetcher) {
 
     /** With [clean], an answer is only open when it is a 2xx or 3xx. */
     private suspend fun verdict(host: String, port: Int, proxy: ProbeProxy, clean: Boolean = false): ExitVerdict {
-        val response = fetcher.get(host, port, proxy) ?: return ExitVerdict.Inconclusive
+        // Per-read timeouts alone let a site that drips a byte at a time hold a worker indefinitely.
+        val response = withTimeoutOrNull(deadline) { fetcher.get(host, port, proxy) } ?: return ExitVerdict.Inconclusive
         val verdict = SiteClassifier.classify(response)
         return if (clean && verdict == ExitVerdict.Open && response.status !in 200..399) ExitVerdict.Inconclusive else verdict
     }
 }
+
+private val FETCH_DEADLINE = 15.seconds

@@ -7,7 +7,10 @@ import java.util.Base64
 import javax.net.ssl.SSLParameters
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 actual fun createSiteFetcher(): SiteFetcher = JvmSiteFetcher()
@@ -20,8 +23,17 @@ internal class JvmSiteFetcher : SiteFetcher {
 
     override suspend fun get(host: String, port: Int, proxy: ProbeProxy): ProbeResponse? =
         withContext(Dispatchers.IO) {
+            val raw = Socket()
+            // Blocking reads ignore cancellation; closing the socket is what ends them.
+            val closer = launch(start = CoroutineStart.UNDISPATCHED) {
+                try {
+                    awaitCancellation()
+                } finally {
+                    raw.close()
+                }
+            }
             runCatching {
-                Socket().use { raw ->
+                raw.use {
                     raw.soTimeout = TIMEOUT_MS
                     raw.connect(InetSocketAddress("127.0.0.1", port), TIMEOUT_MS)
                     tunnel(raw, host, proxy)
@@ -33,7 +45,7 @@ internal class JvmSiteFetcher : SiteFetcher {
                     tls.outputStream.flush()
                     readCapped(tls)
                 }
-            }.getOrNull()
+            }.getOrNull().also { closer.cancel() }
         }
 
     private fun tunnel(socket: Socket, host: String, proxy: ProbeProxy) {

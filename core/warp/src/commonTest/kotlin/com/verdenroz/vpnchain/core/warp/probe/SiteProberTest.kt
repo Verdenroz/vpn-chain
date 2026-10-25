@@ -4,7 +4,11 @@ import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.model.BlockReason
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
 
 private val PROXY = ProbeProxy(relayPort = 1, warpPort = 2, fallbackPort = 3, username = "u", password = "p")
 
@@ -202,5 +206,18 @@ class SiteProberTest {
             ProbeOutcome.RefusedEverywhere(BlockReason.Forbidden),
             SiteProber(fetcher).probe("example.com", PROXY),
         )
+    }
+
+    @Test
+    fun `a fetch past the deadline says nothing either way`() = runTest {
+        val stalled = object : SiteFetcher {
+            override suspend fun get(host: String, port: Int, proxy: ProbeProxy): ProbeResponse? {
+                delay(1.hours)
+                return OPEN
+            }
+        }
+
+        assertEquals(ProbeOutcome.Unknown, SiteProber(stalled, deadline = 15.seconds).probe("example.com", PROXY))
+        assertEquals(15_000L, currentTime)
     }
 }
