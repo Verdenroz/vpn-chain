@@ -51,6 +51,7 @@ val dataModule = module {
             preferences = get(),
             store = get(),
             now = ::currentTimeMillis,
+            logger = get(),
         )
     }
     // Eager, like the repositories it watches: detection has to be listening

@@ -15,11 +15,14 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 
 private const val WEEK = 7L * 24 * 60 * 60 * 1000
 
 private class RecordingStore : LearnedRuleSetStore {
+    var failing = false
     val files = mutableMapOf<RuleSetKind, LearnedRules>()
     val written get() = files[RuleSetKind.Warp]?.let { it.exact + it.suffixes }
     val writtenOpen get() = files[RuleSetKind.Open]?.let { it.exact + it.suffixes }
@@ -27,6 +30,7 @@ private class RecordingStore : LearnedRuleSetStore {
 
     override fun path(kind: RuleSetKind) = "/learned"
     override fun write(kind: RuleSetKind, rules: LearnedRules) {
+        if (failing) throw IllegalStateException("disk full")
         files[kind] = rules
     }
 }
@@ -45,6 +49,7 @@ class DefaultLearnedSitesRepositoryTest {
         preferences = VpnChainPreferencesDataSource(LearnedSitesPreferences()),
         store = store,
         now = { clock },
+        logger = SilentLogger(),
     )
 
     @Test
@@ -144,6 +149,29 @@ class DefaultLearnedSitesRepositoryTest {
         repository.learn("www.shop.example", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
 
         assertEquals(LearnedRoute.Direct, repository.sites.first().single().route)
+    }
+
+    @Test
+    fun `two sites learned at once both reach the rule-set`() = runTest {
+        coroutineScope {
+            launch { repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden) }
+            launch { repository.learn("b.com", LearnedRoute.Warp, BlockReason.Forbidden) }
+        }
+
+        assertEquals(setOf("a.com", "b.com"), store.written.orEmpty().toSet())
+    }
+
+    @Test
+    fun `a rule-set that cannot be written keeps the site and is written on the next change`() = runTest {
+        store.failing = true
+        repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
+
+        assertEquals(listOf("a.com"), repository.sites.first().map { it.domain })
+
+        store.failing = false
+        repository.learn("b.com", LearnedRoute.Warp, BlockReason.Forbidden)
+
+        assertEquals(setOf("a.com", "b.com"), store.written.orEmpty().toSet())
     }
 
     @Test

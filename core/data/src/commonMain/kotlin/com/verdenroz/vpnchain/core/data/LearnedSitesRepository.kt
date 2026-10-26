@@ -8,7 +8,11 @@ import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.warp.probe.PublicSuffixList
+import com.verdenroz.vpnchain.core.logging.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
 
 /** The sites detection has found, and the rule-set files that carry them to sing-box. */
@@ -37,7 +41,10 @@ interface LearnedSitesRepository {
 
     suspend fun saveReachable(domains: Map<String, Long>)
 
-    /** Rewrites the rule-set files from storage; a running sing-box reloads them. */
+    /**
+     * Rewrites the rule-set files from storage; a running sing-box reloads them.
+     * One sync runs at a time. A write failure is thrown to the caller.
+     */
     suspend fun syncRuleSets()
 }
 
@@ -45,7 +52,11 @@ internal class DefaultLearnedSitesRepository(
     private val preferences: VpnChainPreferencesDataSource,
     private val store: LearnedRuleSetStore,
     private val now: () -> Long,
+    private val logger: Logger,
 ) : LearnedSitesRepository {
+
+    private val syncLock = Mutex()
+    private var syncFailing = false
 
     override val sites: Flow<List<LearnedSite>> = preferences.learnedSites
 
@@ -59,12 +70,12 @@ internal class DefaultLearnedSitesRepository(
         if (before in KEPT && route != before) return
         preferences.putLearnedSite(LearnedSite(domain, reason, now(), route))
         // Each write reloads the rule-set in sing-box; a refusal routes nothing.
-        if (before in ROUTED || route in ROUTED) syncRuleSets()
+        if (before in ROUTED || route in ROUTED) syncKeepingState()
     }
 
     override suspend fun remove(domain: String) {
         preferences.removeLearnedSite(domain, nowMillis = now(), suppressUntilMillis = now() + SUPPRESS_MILLIS)
-        syncRuleSets()
+        syncKeepingState()
     }
 
     override suspend fun allowDirect(domain: String) = reroute(domain, from = LearnedRoute.DirectAvailable, to = LearnedRoute.Direct)
@@ -74,7 +85,7 @@ internal class DefaultLearnedSitesRepository(
     private suspend fun reroute(domain: String, from: LearnedRoute, to: LearnedRoute) {
         val site = preferences.learnedSites.first().find { it.domain == domain && it.route == from } ?: return
         preferences.putLearnedSite(site.copy(route = to))
-        syncRuleSets()
+        syncKeepingState()
     }
 
     override suspend fun reachable(): Map<String, Long> = preferences.reachableDomains.first()
@@ -87,7 +98,7 @@ internal class DefaultLearnedSitesRepository(
      * entry that is a public suffix or a single host matches only itself.
      * Anything leaving the relay matches the exact host it was learned or sent for.
      */
-    override suspend fun syncRuleSets() {
+    override suspend fun syncRuleSets() = syncLock.withLock {
         val learned = preferences.learnedSites.first()
         fun hosts(route: LearnedRoute) = learned.filter { it.route == route }.map { it.domain }
         val (suffixes, exact) = hosts(LearnedRoute.Warp).partition { PublicSuffixList.bundled.registrableDomain(it) == it }
@@ -97,7 +108,25 @@ internal class DefaultLearnedSitesRepository(
         store.write(RuleSetKind.Direct, LearnedRules(exact = direct))
     }
 
+    /**
+     * The learned state is already stored, so a file that cannot be written only
+     * delays it: the next sync writes everything again. Logged once per outage,
+     * and never thrown into the probe workers that called it.
+     */
+    private suspend fun syncKeepingState() {
+        try {
+            syncRuleSets()
+            syncFailing = false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (!syncFailing) logger.w(TAG, "learned rule-set write failed, retrying on the next change: ${e.message}")
+            syncFailing = true
+        }
+    }
+
     private companion object {
+        const val TAG = "LearnedSites"
         const val SUPPRESS_MILLIS = 7L * 24 * 60 * 60 * 1000
         val ROUTED = setOf(LearnedRoute.Warp, LearnedRoute.FailOpen, LearnedRoute.Direct)
         val KEPT = setOf(LearnedRoute.FailOpen, LearnedRoute.Direct)
