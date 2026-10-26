@@ -42,9 +42,9 @@ class CliOutputTest {
             state       disconnected
             connection  none
             entry hop   down
-            kill switch helper-unavailable
+            kill switch helper-unprivileged
             """.trimIndent(),
-            statusText(EngineStatus(TunnelState.Disconnected, killSwitch = KillSwitchState.HelperUnavailable), null),
+            statusText(EngineStatus(TunnelState.Disconnected, killSwitch = KillSwitchState.HelperUnprivileged), null),
         )
     }
 

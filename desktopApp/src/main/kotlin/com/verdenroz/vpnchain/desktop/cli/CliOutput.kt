@@ -25,7 +25,12 @@ internal val KillSwitchState.label: String
     get() = when (this) {
         KillSwitchState.Active -> "active"
         KillSwitchState.Disabled -> "off"
-        KillSwitchState.HelperUnavailable -> "helper-unavailable"
+        KillSwitchState.HelperNotFound -> "helper-not-found"
+        KillSwitchState.HelperUnprivileged -> "helper-unprivileged"
+        KillSwitchState.HelperFailed -> "helper-failed"
+        KillSwitchState.HelperTimedOut -> "helper-timed-out"
+        KillSwitchState.NoExemptAddresses -> "no-exempt-addresses"
+        KillSwitchState.NotEngaged -> "not-engaged"
         KillSwitchState.ExternalAppRequired -> "external-app-required"
     }
 
