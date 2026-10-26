@@ -18,14 +18,14 @@ import kotlin.test.assertTrue
 class SwitchProfileUseCaseTest {
 
     @Test
-    fun `a live tunnel is taken down before the new profile is dialled`() = runTest {
+    fun `a live tunnel is moved onto the new profile without stopping`() = runTest {
         val log = mutableListOf<String>()
         val world = SwitchWorld(TunnelState.Connected, log)
 
         val result = world.switchProfile("b")
 
         assertTrue(result.isSuccess)
-        assertEquals(listOf("setActive:b", "disconnect", "connect"), log)
+        assertEquals(listOf("setActive:b", "restart"), log)
     }
 
     @Test
@@ -55,7 +55,7 @@ class SwitchProfileUseCaseTest {
 
         world.switchProfile("b")
 
-        assertEquals(listOf("setActive:b", "disconnect", "connect"), log)
+        assertEquals(listOf("setActive:b", "restart"), log)
     }
 
     @Test
@@ -65,7 +65,7 @@ class SwitchProfileUseCaseTest {
 
         world.switchProfile("b")
 
-        assertEquals(listOf("setActive:b", "disconnect", "connect"), log)
+        assertEquals(listOf("setActive:b", "restart"), log)
     }
 
     @Test
@@ -123,6 +123,10 @@ private class RecordingChain(
         return connectResult
     }
     override suspend fun reconnect(): Result<Unit> = Result.success(Unit)
+    override suspend fun restart(): Result<Unit> {
+        log += "restart"
+        return connectResult
+    }
     override suspend fun disconnect() {
         log += "disconnect"
     }
@@ -138,7 +142,7 @@ class ImportWireGuardConfUseCaseTest {
 
         assertTrue(import("conf").isSuccess)
 
-        assertEquals(listOf("import:false:true", "disconnect", "connect"), log)
+        assertEquals(listOf("import:false:true", "restart"), log)
     }
 
     @Test

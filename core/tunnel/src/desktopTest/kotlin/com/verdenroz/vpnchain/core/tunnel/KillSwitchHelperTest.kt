@@ -151,4 +151,28 @@ class KillSwitchHelperTest {
         assertEquals(KillSwitchEngagement(KillSwitchState.HelperNotFound, engaged = false), result)
         assertEquals(1, calls.size)
     }
+
+    @Test
+    fun `a restart replaces the table with the new exemptions and never takes it down`() {
+        val calls = mutableListOf<List<String>>()
+
+        val result = runBlocking {
+            rearmForRestart(listOf("198.51.100.20"), allowLocal = false, wanted = true) { calls += it; HelperOutcome.Exited(0, "") }
+        }
+
+        assertEquals(KillSwitchEngagement(null, engaged = true), result)
+        assertEquals(listOf(listOf("up", "198.51.100.20")), calls)
+    }
+
+    @Test
+    fun `a restart the setting no longer wants takes the table down`() {
+        val calls = mutableListOf<List<String>>()
+
+        val result = runBlocking {
+            rearmForRestart(listOf("198.51.100.20"), allowLocal = false, wanted = false) { calls += it; HelperOutcome.Exited(0, "") }
+        }
+
+        assertEquals(null, result)
+        assertEquals(listOf(listOf("down")), calls)
+    }
 }

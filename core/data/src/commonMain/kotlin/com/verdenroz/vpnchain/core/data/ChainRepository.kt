@@ -39,6 +39,16 @@ interface ChainRepository {
      */
     suspend fun reconnect(): Result<Unit>
 
+    /**
+     * Moves the tunnel onto the current profile and settings without bringing it
+     * down first, so the kill switch and Android's VpnService hold throughout.
+     * Leaves intent alone. The default exists only for test doubles.
+     */
+    suspend fun restart(): Result<Unit> {
+        disconnect()
+        return connect()
+    }
+
     /** Traffic and uptime for the live session. */
     val stats: Flow<SessionStats>
 
@@ -99,6 +109,14 @@ internal class DefaultChainRepository(
     }
 
     override suspend fun reconnect(): Result<Unit> = start()
+
+    override suspend fun restart(): Result<Unit> {
+        val settings = settingsRepository.settings.first()
+        val configJson = renderConfig()
+            ?: return Result.failure(IllegalStateException("No chain profile configured"))
+        return runCatching { controller.restart(configJson, settings.killSwitchEnabled, settings.allowLocalNetworks) }
+            .onFailure { logger.e(TAG, "restart failed", it) }
+    }
 
     private suspend fun start(): Result<Unit> {
         val settings = settingsRepository.settings.first()

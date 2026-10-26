@@ -59,3 +59,22 @@ internal suspend fun engageKillSwitch(
     }
     return KillSwitchEngagement(fault, engaged)
 }
+
+/**
+ * The kill switch while a live chain moves to a new config. A wanted table is
+ * replaced with the new exemptions in one `up`, never taken down first; only
+ * when the setting or the new config says no protection is it brought down.
+ * @return the engagement, or null when the table was taken down.
+ */
+internal suspend fun rearmForRestart(
+    exemptIps: List<String>,
+    allowLocal: Boolean,
+    wanted: Boolean,
+    run: HelperRunner,
+): KillSwitchEngagement? {
+    if (!wanted) {
+        run(listOf("down"))
+        return null
+    }
+    return engageKillSwitch(exemptIps, allowLocal, run)
+}

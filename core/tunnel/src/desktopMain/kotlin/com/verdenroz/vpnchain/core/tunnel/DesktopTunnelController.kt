@@ -199,10 +199,7 @@ class DesktopTunnelController(
                 return@withLock
             }
             if (process?.isAlive == true) return@withLock
-            clashApi = RelayConfig.clashApi(configJson)
-        tunMode = RelayConfig.isTun(configJson)
-            tunHasEntry = tunMode && RelayConfig.hasWireGuardEntry(configJson)
-            proxyPort = RelayConfig.proxyPort(configJson, DEFAULT_PROXY_PORT)
+            applyConfig(configJson)
             this@DesktopTunnelController.killSwitchEnabled = killSwitchEnabled
             this@DesktopTunnelController.allowLocalNetworks = allowLocalNetworks
             killSwitchFault = null
@@ -214,6 +211,39 @@ class DesktopTunnelController(
             _status.value = ChainStatus(state = TunnelState.Connecting)
             if (tunMode) startTun(configJson) else startProxy(configJson)
         }
+    }
+
+    override suspend fun restart(
+        configJson: String,
+        killSwitchEnabled: Boolean,
+        allowLocalNetworks: Boolean,
+    ) = withContext(Dispatchers.IO) {
+        startStopLock.withLock {
+            downRequestFile.delete()
+            applyConfig(configJson)
+            this@DesktopTunnelController.killSwitchEnabled = killSwitchEnabled
+            this@DesktopTunnelController.allowLocalNetworks = allowLocalNetworks
+            killSwitchFault = null
+            // The new table goes in before the old relay stops, so traffic is never left with none.
+            val outcome = rearmForRestart(
+                RelayConfig.exemptIps(configJson),
+                allowLocalNetworks,
+                wanted = tunMode && killSwitchEnabled && firewallIsOurs(),
+                run = ::runKillSwitchHelper,
+            )
+            killSwitchFault = outcome?.fault
+            killSwitchEngaged = outcome?.engaged == true
+            tearDown(restoreNetworking = false)
+            _status.value = ChainStatus(state = TunnelState.Connecting)
+            if (tunMode) startTun(configJson) else startProxy(configJson)
+        }
+    }
+
+    private fun applyConfig(configJson: String) {
+        clashApi = RelayConfig.clashApi(configJson)
+        tunMode = RelayConfig.isTun(configJson)
+        tunHasEntry = tunMode && RelayConfig.hasWireGuardEntry(configJson)
+        proxyPort = RelayConfig.proxyPort(configJson, DEFAULT_PROXY_PORT)
     }
 
     private suspend fun startProxy(configJson: String) {

@@ -153,6 +153,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 stopTunnel()
                 return START_NOT_STICKY
             }
+            ACTION_RELOAD -> reloadTunnel()
             else -> startTunnel()
         }
         return START_STICKY
@@ -179,6 +180,49 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 // a Disconnect arriving meanwhile has to be able to tear it down.
                 if (booted) confirmCarrying(gen)
             }
+        }
+    }
+
+    /**
+     * Moves a running engine onto the pending config without stopping the
+     * service or its TUN owner, so the system never sees the VPN go away. With no
+     * engine running yet it boots one, as [startTunnel] does.
+     */
+    private fun reloadTunnel() {
+        startForegroundNotification()
+        val gen = generation.incrementAndGet()
+        tearingDown = false
+        TunnelBridge.setState(TunnelState.Connecting)
+        serviceScope.launch {
+            wakeGuard.awake {
+                val booted = lifecycleLock.withLock {
+                    val server = commandServer ?: return@withLock bootEngine(gen)
+                    reloadEngine(server, gen)
+                }
+                if (booted) confirmCarrying(gen)
+            }
+        }
+    }
+
+    /** Call under [lifecycleLock]. */
+    private suspend fun reloadEngine(server: CommandServer, gen: Int): Boolean {
+        val config = resolveConfig()
+        if (config.isNullOrBlank()) {
+            dropEngineLocked(gen, UiText.Resource(Res.string.tunnel_error_no_config_provided))
+            return false
+        }
+        healthJob?.cancel()
+        healthJob = null
+        return runCatching {
+            withContext(Dispatchers.IO) { server.startOrReloadService(config, OverrideOptions()) }
+            owns(gen)
+        }.getOrElse { t ->
+            TunnelBridge.logFailure("reload failed", t.message)
+            dropEngineLocked(
+                gen,
+                t.message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.tunnel_error_start_failed),
+            )
+            false
         }
     }
 
@@ -553,6 +597,9 @@ class VpnChainService : VpnService(), CommandServerHandler {
     companion object {
         const val ACTION_START = "com.verdenroz.vpnchain.action.START"
         const val ACTION_STOP = "com.verdenroz.vpnchain.action.STOP"
+
+        /** Moves a running engine onto [TunnelBridge.pendingConfig] in place. */
+        const val ACTION_RELOAD = "com.verdenroz.vpnchain.action.RELOAD"
 
         /** Stop originating from a notification key, outside the app's own path. */
         const val ACTION_STOP_BY_USER = "com.verdenroz.vpnchain.action.STOP_BY_USER"

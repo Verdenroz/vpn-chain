@@ -34,6 +34,17 @@ interface TunnelController {
     suspend fun stop()
 
     /**
+     * Moves a live or wanted tunnel onto [configJson] without the gap a [stop]
+     * then [start] leaves: desktop keeps the kill switch armed and swaps in the
+     * new exemptions in one load, and Android reloads the engine inside the
+     * VpnService it already holds. The default is only for platforms with neither.
+     */
+    suspend fun restart(configJson: String, killSwitchEnabled: Boolean = true, allowLocalNetworks: Boolean = true) {
+        stop()
+        start(configJson, killSwitchEnabled, allowLocalNetworks)
+    }
+
+    /**
      * Let go of a tunnel that dropped and will not be retried — distinct from
      * [stop], which is the user asking to come down.
      *

@@ -70,6 +70,21 @@ class AndroidTunnelController(
             }
     }
 
+    /** Reloads the engine inside the running VpnService, so Always-on lockdown never sees it stop. */
+    override suspend fun restart(configJson: String, killSwitchEnabled: Boolean, allowLocalNetworks: Boolean) {
+        TunnelBridge.pendingConfig = configJson
+        val intent = Intent(context, VpnChainService::class.java).apply {
+            action = VpnChainService.ACTION_RELOAD
+        }
+        runCatching { context.startForegroundService(intent) }
+            .onFailure {
+                TunnelBridge.setState(
+                    TunnelState.Error,
+                    UiText.Resource(Res.string.tunnel_error_background_start_refused),
+                )
+            }
+    }
+
     /**
      * The same teardown as [stop]. The service keeps its foreground notification
      * across a drop so a reconnect is possible at all; when none is coming, that

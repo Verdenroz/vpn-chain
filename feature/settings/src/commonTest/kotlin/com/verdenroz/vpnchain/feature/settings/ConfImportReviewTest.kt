@@ -48,7 +48,7 @@ class ConfImportReviewTest {
 
         viewModel.usePendingImport()
 
-        assertEquals(listOf("import:false:true", "disconnect", "connect"), log)
+        assertEquals(listOf("import:false:true", "restart"), log)
         assertNull(viewModel.pendingImport.value)
     }
 
@@ -60,7 +60,7 @@ class ConfImportReviewTest {
         assertEquals(emptyList(), log)
         viewModel.usePendingImport()
 
-        assertEquals(listOf("import:true:true", "disconnect", "connect"), log)
+        assertEquals(listOf("import:true:true", "restart"), log)
     }
 
     @Test

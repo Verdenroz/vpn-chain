@@ -51,6 +51,10 @@ internal class FakeChain(state: TunnelState, private val log: MutableList<String
         return Result.success(Unit)
     }
     override suspend fun reconnect(): Result<Unit> = Result.success(Unit)
+    override suspend fun restart(): Result<Unit> {
+        log += "restart"
+        return Result.success(Unit)
+    }
     override suspend fun disconnect() {
         log += "disconnect"
     }

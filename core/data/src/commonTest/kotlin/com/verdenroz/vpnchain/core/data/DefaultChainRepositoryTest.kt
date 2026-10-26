@@ -103,6 +103,19 @@ class DefaultChainRepositoryTest {
     }
 
     @Test
+    fun `restart hands the controller a fresh config without stopping it`() = runTest {
+        val world = RepositoryWorld(backgroundScope)
+        world.profiles.stored.value = REPOSITORY_PROFILE
+        runCurrent()
+
+        assertTrue(world.repository.restart().isSuccess)
+
+        assertEquals(0, world.controller.stopCalls)
+        assertEquals(1, world.controller.restarts.size)
+        assertTrue("203.0.113.10" in world.controller.restarts.single())
+    }
+
+    @Test
     fun `release stops the controller without touching intent`() = runTest {
         val world = RepositoryWorld(backgroundScope)
         world.preferences.setConnectionIntent(true)
@@ -157,6 +170,7 @@ private class FakeTunnelController : TunnelController {
     override val userStops = MutableSharedFlow<Unit>()
     var stopCalls = 0
     var releaseCalls = 0
+    val restarts = mutableListOf<String>()
     var configProvider: (suspend () -> String?)? = null
 
     override suspend fun start(configJson: String, killSwitchEnabled: Boolean, allowLocalNetworks: Boolean) = Unit
@@ -166,6 +180,10 @@ private class FakeTunnelController : TunnelController {
 
     override suspend fun release() {
         releaseCalls++
+    }
+
+    override suspend fun restart(configJson: String, killSwitchEnabled: Boolean, allowLocalNetworks: Boolean) {
+        restarts += configJson
     }
 
     override fun installConfigProvider(provider: suspend () -> String?) {
