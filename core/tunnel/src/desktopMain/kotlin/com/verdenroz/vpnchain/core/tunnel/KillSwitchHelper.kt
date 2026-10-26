@@ -64,17 +64,56 @@ internal suspend fun engageKillSwitch(
  * The kill switch while a live chain moves to a new config. A wanted table is
  * replaced with the new exemptions in one `up`, never taken down first; only
  * when the setting or the new config says no protection is it brought down.
- * @return the engagement, or null when the table was taken down.
+ * [engaged] is whether the old session's table is believed loaded: it skips a
+ * pointless `down`, and stands in for `status` when the helper cannot answer.
+ * @return the engagement, or null when no table is left.
  */
 internal suspend fun rearmForRestart(
     exemptIps: List<String>,
     allowLocal: Boolean,
     wanted: Boolean,
+    engaged: Boolean,
     run: HelperRunner,
 ): KillSwitchEngagement? {
     if (!wanted) {
-        run(listOf("down"))
+        if (engaged) run(listOf("down"))
         return null
     }
-    return engageKillSwitch(exemptIps, allowLocal, run)
+    val outcome = engageKillSwitch(exemptIps, allowLocal, run)
+    if (outcome.engaged || outcome.fault !in UNASKED_FAULTS) return outcome
+    return outcome.copy(engaged = tableLoaded(run, assumed = engaged))
+}
+
+/** Faults [engageKillSwitch] reports without asking `status`; on a switch the old table may still be loaded. */
+private val UNASKED_FAULTS = setOf(KillSwitchState.NoExemptAddresses, KillSwitchState.HelperNotFound)
+
+private suspend fun tableLoaded(run: HelperRunner, assumed: Boolean): Boolean {
+    val status = run(listOf("status")) as? HelperOutcome.Exited ?: return assumed
+    return when (status.code) {
+        0 -> true
+        1 -> false
+        else -> assumed
+    }
+}
+
+/**
+ * What one connect attempt does with the kill switch. [armedBySwitch] is set
+ * when a switch's re-arm already loaded this config's table, so launching
+ * does not load it again. [holdOnFailure] is set when a table already guards
+ * a session the user wants protected: a failed attempt leaves it in place.
+ */
+internal data class AttemptArming(val armedBySwitch: Boolean, val holdOnFailure: Boolean) {
+    fun engagesOnLaunch(wanted: Boolean): Boolean = wanted && !armedBySwitch
+
+    fun liftsOnFailure(): Boolean = !holdOnFailure
+
+    companion object {
+        fun forStart(engaged: Boolean, enabled: Boolean) =
+            AttemptArming(armedBySwitch = false, holdOnFailure = engaged && enabled)
+
+        fun forSwitch(rearm: KillSwitchEngagement?, enabled: Boolean) = AttemptArming(
+            armedBySwitch = rearm?.engaged == true && rearm.fault == null,
+            holdOnFailure = rearm?.engaged == true && enabled,
+        )
+    }
 }

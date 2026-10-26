@@ -157,7 +157,7 @@ class KillSwitchHelperTest {
         val calls = mutableListOf<List<String>>()
 
         val result = runBlocking {
-            rearmForRestart(listOf("198.51.100.20"), allowLocal = false, wanted = true) { calls += it; HelperOutcome.Exited(0, "") }
+            rearmForRestart(listOf("198.51.100.20"), allowLocal = false, wanted = true, engaged = true) { calls += it; HelperOutcome.Exited(0, "") }
         }
 
         assertEquals(KillSwitchEngagement(null, engaged = true), result)
@@ -169,10 +169,91 @@ class KillSwitchHelperTest {
         val calls = mutableListOf<List<String>>()
 
         val result = runBlocking {
-            rearmForRestart(listOf("198.51.100.20"), allowLocal = false, wanted = false) { calls += it; HelperOutcome.Exited(0, "") }
+            rearmForRestart(listOf("198.51.100.20"), allowLocal = false, wanted = false, engaged = true) { calls += it; HelperOutcome.Exited(0, "") }
         }
 
         assertEquals(null, result)
         assertEquals(listOf(listOf("down")), calls)
+    }
+
+    private fun rearm(
+        exemptIps: List<String>,
+        wanted: Boolean,
+        engaged: Boolean,
+        calls: MutableList<List<String>>,
+        reply: (List<String>) -> HelperOutcome,
+    ) = runBlocking {
+        rearmForRestart(exemptIps, allowLocal = false, wanted = wanted, engaged = engaged) { calls += it; reply(it) }
+    }
+
+    @Test
+    fun `a restart with no exemptions asks whether the old table is still loaded`() {
+        val calls = mutableListOf<List<String>>()
+
+        val result = rearm(emptyList(), wanted = true, engaged = false, calls) { HelperOutcome.Exited(0, "") }
+
+        assertEquals(KillSwitchEngagement(KillSwitchState.NoExemptAddresses, engaged = true), result)
+        assertEquals(listOf(listOf("status")), calls)
+    }
+
+    @Test
+    fun `a restart whose helper vanished keeps the table it believed loaded`() {
+        val result = rearm(ips, wanted = true, engaged = true, mutableListOf()) { HelperOutcome.NotFound }
+
+        assertEquals(KillSwitchEngagement(KillSwitchState.HelperNotFound, engaged = true), result)
+    }
+
+    @Test
+    fun `a restart reads an absent table as absent`() {
+        val result = rearm(emptyList(), wanted = true, engaged = true, mutableListOf()) { HelperOutcome.Exited(1, "") }
+
+        assertEquals(KillSwitchEngagement(KillSwitchState.NoExemptAddresses, engaged = false), result)
+    }
+
+    @Test
+    fun `a restart with no table to lift runs no helper`() {
+        val calls = mutableListOf<List<String>>()
+
+        val result = rearm(ips, wanted = false, engaged = false, calls) { HelperOutcome.Exited(0, "") }
+
+        assertEquals(null, result)
+        assertTrue(calls.isEmpty())
+    }
+
+    @Test
+    fun `a fresh connect loads the table and lifts it on failure`() {
+        val arming = AttemptArming.forStart(engaged = false, enabled = true)
+
+        assertTrue(arming.engagesOnLaunch(wanted = true))
+        assertTrue(arming.liftsOnFailure())
+    }
+
+    @Test
+    fun `a switch that re-armed loads nothing more and holds on failure`() {
+        val arming = AttemptArming.forSwitch(KillSwitchEngagement(null, engaged = true), enabled = true)
+
+        assertFalse(arming.engagesOnLaunch(wanted = true))
+        assertFalse(arming.liftsOnFailure())
+    }
+
+    @Test
+    fun `a switch whose re-arm failed over the old table retries the load and still holds`() {
+        val arming = AttemptArming.forSwitch(KillSwitchEngagement(KillSwitchState.HelperFailed, engaged = true), enabled = true)
+
+        assertTrue(arming.engagesOnLaunch(wanted = true))
+        assertFalse(arming.liftsOnFailure())
+    }
+
+    @Test
+    fun `a switch the setting turned off holds nothing`() {
+        val arming = AttemptArming.forSwitch(null, enabled = false)
+
+        assertFalse(arming.engagesOnLaunch(wanted = false))
+        assertTrue(arming.liftsOnFailure())
+    }
+
+    @Test
+    fun `a retry after a protected session dropped keeps its table on failure`() {
+        assertFalse(AttemptArming.forStart(engaged = true, enabled = true).liftsOnFailure())
     }
 }

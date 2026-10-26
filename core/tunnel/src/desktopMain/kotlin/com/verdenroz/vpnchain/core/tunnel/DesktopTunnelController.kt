@@ -125,6 +125,7 @@ class DesktopTunnelController(
     private val startStopLock = Mutex()
 
     /** Non-null only when this controller launched the relay itself. */
+    @Volatile
     private var process: RelayProcess? = null
     private var readerJob: Job? = null
     private var logTailJob: Job? = null
@@ -158,6 +159,9 @@ class DesktopTunnelController(
      *  chain carries traffic gives up the lock instead of making the user wait. */
     @Volatile
     private var stopRequested: Boolean = false
+
+    @Volatile
+    private var arming = AttemptArming(armedBySwitch = false, holdOnFailure = false)
 
     /**
      * Resolves a log string, never throwing — a resource-loading hiccup (rare,
@@ -203,6 +207,7 @@ class DesktopTunnelController(
             this@DesktopTunnelController.killSwitchEnabled = killSwitchEnabled
             this@DesktopTunnelController.allowLocalNetworks = allowLocalNetworks
             killSwitchFault = null
+            arming = AttemptArming.forStart(killSwitchEngaged, killSwitchEnabled)
             // A relay left running by the CLI or a previous GUI run is invisible to
             // a fresh process. Launching a second sing-box over the same TUN makes
             // it tear down the live instance's routing on exit, which strands the
@@ -224,17 +229,20 @@ class DesktopTunnelController(
             this@DesktopTunnelController.killSwitchEnabled = killSwitchEnabled
             this@DesktopTunnelController.allowLocalNetworks = allowLocalNetworks
             killSwitchFault = null
+            // Connecting throughout: a Disconnected here reads as a drop to the supervisor.
+            _status.value = ChainStatus(state = TunnelState.Connecting)
             // The new table goes in before the old relay stops, so traffic is never left with none.
             val outcome = rearmForRestart(
                 RelayConfig.exemptIps(configJson),
                 allowLocalNetworks,
                 wanted = tunMode && killSwitchEnabled && firewallIsOurs(),
+                engaged = killSwitchEngaged,
                 run = ::runKillSwitchHelper,
             )
             killSwitchFault = outcome?.fault
             killSwitchEngaged = outcome?.engaged == true
-            tearDown(restoreNetworking = false)
-            _status.value = ChainStatus(state = TunnelState.Connecting)
+            arming = AttemptArming.forSwitch(outcome, killSwitchEnabled)
+            tearDown(restoreNetworking = false, settled = TunnelState.Connecting)
             if (tunMode) startTun(configJson) else startProxy(configJson)
         }
     }
@@ -278,11 +286,11 @@ class DesktopTunnelController(
             emitLog(Res.string.tunnel_error_already_running_hint)
             return
         }
-        if (killSwitchEnabled && firewallIsOurs()) engageKillSwitch(configJson)
+        if (arming.engagesOnLaunch(killSwitchEnabled && firewallIsOurs())) engageKillSwitch(configJson)
         val proc = spawnSingBox(configJson)
         if (proc == null) {
-            // Never actually started - nothing to protect, don't leave traffic blocked.
-            disengageKillSwitch()
+            // A fresh connect protected nothing yet; a switch keeps guarding the session it replaces.
+            if (arming.liftsOnFailure()) disengageKillSwitch()
             return
         }
         if (awaitListening(proc) { tunInterfaceUp() }) confirmCarrying(proc)
@@ -497,7 +505,7 @@ class DesktopTunnelController(
             val exit = relay.awaitExit()
             cfg.delete()
             removePidFileIfMatches(relay.pid)
-            handleRelayExit(exit)
+            handleRelayExit(relay, exit)
         }
         return relay
     }
@@ -521,7 +529,7 @@ class DesktopTunnelController(
         val relay = ManagedRelayProcess()
         process = relay
         writeSessionState()
-        readerJob = scope.launch(Dispatchers.IO) { handleRelayExit(relay.awaitExit()) }
+        readerJob = scope.launch(Dispatchers.IO) { handleRelayExit(relay, relay.awaitExit()) }
         return relay
     }
 
@@ -543,7 +551,9 @@ class DesktopTunnelController(
         emitLog(message, detail)
     }
 
-    private suspend fun handleRelayExit(exit: Int) {
+    private suspend fun handleRelayExit(relay: RelayProcess, exit: Int) {
+        // A relay a switch replaced is not the attempt now Connecting.
+        if (process !== relay) return
         // A non-zero exit while we still believe we're up means the tunnel died.
         val state = _status.value.state
         if (state == TunnelState.Connecting || state == TunnelState.Connected) {
@@ -561,7 +571,7 @@ class DesktopTunnelController(
             // A crash after Connected keeps the kill switch engaged — that leak is
             // exactly what it exists to stop. A startup that never got there
             // protected nothing, so leave networking as we found it instead.
-            if (state == TunnelState.Connecting) disengageKillSwitch()
+            if (state == TunnelState.Connecting && arming.liftsOnFailure()) disengageKillSwitch()
             _status.value = ChainStatus(
                 state = if (exit == 0) TunnelState.Disconnected else TunnelState.Error,
                 detail = when {
@@ -609,7 +619,7 @@ class DesktopTunnelController(
         // one. Tearing it down lets the supervisor retry from a clean state
         // instead of leaving a tunnel that will never carry anything.
         if (!stillWaitingToCarry(proc)) return
-        tearDown()
+        tearDown(restoreNetworking = arming.liftsOnFailure())
         _status.value = ChainStatus(
             state = TunnelState.Error,
             detail = UiText.Resource(Res.string.tunnel_error_no_traffic),
@@ -637,19 +647,23 @@ class DesktopTunnelController(
      * mutex is not reentrant, and a failed start has to unwind from inside it.
      * [restoreNetworking] is false when the chain is coming down *because* it
      * failed, where lifting the kill switch would leak the traffic it exists
-     * to hold.
+     * to hold. [settled] is the status published while the relay comes down.
      */
-    private suspend fun tearDown(restoreNetworking: Boolean = true) {
+    private suspend fun tearDown(
+        restoreNetworking: Boolean = true,
+        settled: TunnelState = TunnelState.Disconnected,
+    ) {
         // Forced: after a GUI restart this process didn't install the table but
         // still has to be able to restore networking — Disconnect is the user's
         // documented way out of a fail-closed state.
         if (restoreNetworking) disengageKillSwitch(force = true)
-        // Set before killing so the reader job doesn't report the shutdown as a crash.
-        _status.value = ChainStatus(state = TunnelState.Disconnected)
+        _status.value = ChainStatus(state = settled)
         readerJob?.cancel()
         readerJob = null
-        process?.stop(PROCESS_EXIT_TIMEOUT_S)
+        // Cleared before the stop so the reader doesn't report the shutdown as a crash.
+        val relay = process
         process = null
+        relay?.stop(PROCESS_EXIT_TIMEOUT_S)
         // An adopted relay under systemd has no pidfile and runs as another user,
         // so signalling it would fail silently. Ask the service manager instead.
         if (ManagedRelay.available && ManagedRelay.isActive()) ManagedRelay.stop()

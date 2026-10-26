@@ -303,7 +303,26 @@ class ChainSupervisorTest {
 
         assertEquals(0, world.chain.reconnectCalls)
     }
+
+    @Test
+    fun `a connection switch that stays connecting starts no retry`() = runTest {
+        val world = SupervisorWorld(this, initialState = TunnelState.Connected)
+        world.chain.connectionIntent.value = true
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+
+        world.chain.emit(TunnelState.Connecting)
+        advanceTimeBy(SWITCH_MS)
+        world.chain.emit(TunnelState.Connected)
+        advanceTimeBy(ReconnectPolicy.MAX_DELAY_MS)
+
+        assertEquals(0, world.chain.reconnectCalls)
+    }
+
 }
+
+/** Long enough for a switch to tear down one relay and dial the next. */
+private const val SWITCH_MS = 5_000L
 
 /** Enough virtual time for the supervisor's non-delayed work to run. */
 private const val SETTLE_MS = 100L
