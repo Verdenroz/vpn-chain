@@ -23,6 +23,17 @@ object PrivateStorage {
     private val fileAttrs: Array<FileAttribute<*>> =
         if (systemPosix) arrayOf(PosixFilePermissions.asFileAttribute(filePerms)) else emptyArray()
 
+    /** Whether this filesystem has POSIX permissions; without them nothing here can be made owner-only. */
+    val posix: Boolean get() = systemPosix
+
+    /** Attributes that create a file owner-only in one step, for channels opened outside this object. */
+    val ownerOnlyFile: Array<FileAttribute<*>> get() = fileAttrs
+
+    /** Narrows an existing file, such as a bound socket, to its owner. */
+    fun restrict(file: Path) {
+        if (systemPosix) Files.setPosixFilePermissions(file, filePerms)
+    }
+
     /** `~/.config/vpn-chain`, created or repaired once per process before anything uses it. */
     val configDir: File by lazy { prepareConfigDir(File(System.getProperty("user.home"))) }
 

@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.engine
 
+import com.verdenroz.vpnchain.core.common.PrivateStorage
 import com.verdenroz.vpnchain.core.logging.Logger
 import java.io.IOException
 import java.net.StandardProtocolFamily
@@ -30,7 +31,7 @@ class ControlServer(
     private val appVersion: String,
     private val scope: CoroutineScope,
     private val logger: Logger,
-    private val posix: Boolean = OwnerOnly.posix,
+    private val posix: Boolean = PrivateStorage.posix,
     private val accept: (ServerSocketChannel) -> SocketChannel = ServerSocketChannel::accept,
 ) {
 
@@ -40,10 +41,10 @@ class ControlServer(
             logger.w(TAG, "no POSIX permissions on this filesystem; not serving ${paths.socket}")
             return null
         }
-        OwnerOnly.dir(paths.runtimeDir)
+        PrivateStorage.privateDir(paths.runtimeDir.toFile())
         Files.deleteIfExists(paths.socket)
         val server = ServerSocketChannel.open(StandardProtocolFamily.UNIX).bind(UnixDomainSocketAddress.of(paths.socket))
-        OwnerOnly.restrict(paths.socket)
+        PrivateStorage.restrict(paths.socket)
         logger.i(TAG, "control socket at ${paths.socket}")
         return scope.launch(Dispatchers.IO) {
             lock.use { server.use { acceptLoop(server) } }

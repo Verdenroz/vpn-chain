@@ -154,4 +154,38 @@ class PrivateStorageTest {
         assertEquals("rw-------", mode(log))
         assertEquals("precious", victim.readText())
     }
+
+    @Test
+    fun `a private dir is created 0700 with its parents`() {
+        val dir = PrivateStorage.privateDir(File(home(), "a/b"))
+
+        assertEquals("rwx------", mode(dir))
+    }
+
+    @Test
+    fun `an existing open private dir is tightened`() {
+        val dir = File(home(), "open").apply { mkdirs() }
+        loosen(dir, "rwxr-xr-x")
+
+        PrivateStorage.privateDir(dir)
+
+        assertEquals("rwx------", mode(dir))
+    }
+
+    @Test
+    fun `a file in place of a private dir is refused`() {
+        val file = File(home(), "file").apply { writeText("x") }
+
+        assertFailsWith<IOException> { PrivateStorage.privateDir(file) }
+    }
+
+    @Test
+    fun `restrict narrows an existing file to its owner`() {
+        val file = File(home(), "control.sock").apply { writeText("") }
+        loosen(file, "rw-rw-rw-")
+
+        PrivateStorage.restrict(file.toPath())
+
+        assertEquals("rw-------", mode(file))
+    }
 }

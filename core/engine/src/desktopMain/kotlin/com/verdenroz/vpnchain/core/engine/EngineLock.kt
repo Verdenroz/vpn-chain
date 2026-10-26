@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.engine
 
+import com.verdenroz.vpnchain.core.common.PrivateStorage
 import java.io.Closeable
 import java.nio.channels.FileChannel
 import java.nio.channels.OverlappingFileLockException
@@ -20,7 +21,7 @@ class EngineLock private constructor(private val channel: FileChannel) : Closeab
         /** @return the lock, or null while another engine holds it. */
         fun tryAcquire(file: Path): EngineLock? {
             Files.createDirectories(file.parent)
-            val channel = FileChannel.open(file, setOf(CREATE, WRITE), *OwnerOnly.fileAttrs)
+            val channel = FileChannel.open(file, setOf(CREATE, WRITE), *PrivateStorage.ownerOnlyFile)
             // The JVM tracks its own locks: a second acquire in one process throws instead of returning null.
             val lock = try {
                 channel.tryLock()

@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.engine
 
+import com.verdenroz.vpnchain.core.common.PrivateStorage
 import java.nio.file.Path
 
 /** Where the engine's control socket and lock live. */
@@ -10,7 +11,7 @@ class EnginePaths(val runtimeDir: Path, val configDir: Path) {
     companion object {
         fun system(): EnginePaths = EnginePaths(
             runtimeDir = Path.of(runtimeBase(System::getenv, System.getProperty("os.name").startsWith("Mac")), "vpn-chain"),
-            configDir = Path.of(System.getProperty("user.home"), ".config", "vpn-chain"),
+            configDir = PrivateStorage.configDir.toPath(),
         )
 
         // Linux matches DesktopTunnelController's relay.pid directory. macOS has no XDG_RUNTIME_DIR,
@@ -25,4 +26,4 @@ class EnginePaths(val runtimeDir: Path, val configDir: Path) {
  * permissions (Windows) the socket would be open to every local user, so the
  * engine does not serve it there.
  */
-val controlSocketSupported: Boolean get() = OwnerOnly.posix
+val controlSocketSupported: Boolean get() = PrivateStorage.posix
