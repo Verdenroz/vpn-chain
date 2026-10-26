@@ -76,8 +76,8 @@ exemptions, and (by default) local networks.
   The mark was chosen to stay clear of sing-box's auto_redirect marks (0x2023
   to 0x2025), WireGuard quick (51820), Kubernetes (0x4000, 0x8000) and
   Tailscale (0x40000, 0x80000 under mask 0xff0000). The helper accepts only a
-  `0x`-prefixed value of up to eight hex digits that is not zero, and passes it
-  to `nft` in a fixed argv, as with the addresses.
+  `0x`-prefixed value of up to eight hex digits that is not zero, and writes it
+  into the same one-transaction script, just before the `reject`.
 
   Risks. sing-box stamps the mark, so the hole closes when sing-box dies,
   unlike an address exemption. Any other process holding `CAP_NET_ADMIN` can
