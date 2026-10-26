@@ -59,8 +59,11 @@ vpn-chain down           # stop the relay (add --disconnect-entry to drop the en
 ## Set up a connection
 
 1. Deploy the relay. On a fresh Debian or Ubuntu VPS, as root, run
-   `server/deploy-server.sh`. It installs Xray with VLESS+REALITY and prints
-   the values you need.
+   `server/deploy-server.sh` from a copy of `server/`. It installs Xray with
+   VLESS+REALITY, switches the kernel to BBR and `fq` when the module is
+   available (the default cubic backs off hard on a lossy long path), and
+   writes the first device's values to `/root/vpn-chain-<name>.env` (`0600`),
+   never to the terminal. Re-running keeps the keys and devices.
 2. Put them in `secrets.env`, outside the repo:
 
    ```
@@ -85,7 +88,10 @@ connection instead.
 
 Real credentials never live in the repo. The CLI renders an ephemeral config
 from `secrets.env` at run time. The apps keep the profile in DataStore and never
-log credentials.
+log credentials. On desktop, `~/.config/vpn-chain` is owner-only (`0700`, files
+`0600`, repaired at start), each rendered config is a private temp file, and the
+app refuses a runtime directory it does not own. Android keeps the profile in
+app-private storage and excludes it from backups and device transfer.
 
 **One identity per device.** The QR code carries this device's own live
 credentials. To give a phone an identity you can revoke without touching the
