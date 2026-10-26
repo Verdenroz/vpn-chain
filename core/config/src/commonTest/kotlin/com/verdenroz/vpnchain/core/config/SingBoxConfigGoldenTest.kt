@@ -182,7 +182,8 @@ private val MIXED_RELAY = """
                     "short_id": "ab12"
                 }
             },
-            "packet_encoding": "xudp"
+            "packet_encoding": "xudp",
+            "connect_timeout": "3s"
         },
         {
             "type": "direct",
