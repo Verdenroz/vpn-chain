@@ -161,7 +161,8 @@ private val MIXED_RELAY = """
                     "short_id": "ab12"
                 }
             },
-            "packet_encoding": "xudp"
+            "packet_encoding": "xudp",
+            "connect_timeout": "3s"
         },
         {
             "type": "direct",
@@ -240,7 +241,8 @@ private val TUN_RELAY = """
                     "short_id": "ab12"
                 }
             },
-            "packet_encoding": "xudp"
+            "packet_encoding": "xudp",
+            "connect_timeout": "3s"
         },
         {
             "type": "direct",
@@ -372,6 +374,7 @@ private val TUN_CHAIN = """
                 }
             },
             "packet_encoding": "xudp",
+            "connect_timeout": "3s",
             "detour": "entry-hop"
         },
         {
@@ -525,6 +528,7 @@ private val TUN_CHAIN_WARP = """
                 }
             },
             "packet_encoding": "xudp",
+            "connect_timeout": "3s",
             "detour": "entry-hop"
         },
         {
@@ -631,7 +635,8 @@ private val TUN_RELAY_WARP = """
                     "short_id": "ab12"
                 }
             },
-            "packet_encoding": "xudp"
+            "packet_encoding": "xudp",
+            "connect_timeout": "3s"
         },
         {
             "type": "direct",
