@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -41,12 +42,21 @@ internal class ClashDestinationFeed : DestinationFeed {
     companion object {
         private const val POLL_MS = 2_000L
 
-        /** Clash reports the inbound as `type/tag`; probe connections are ours, not the user's. */
-        fun parseHosts(body: String): Set<String> =
-            Json.parseToJsonElement(body).jsonObject.getValue("connections").jsonArray
-                .map { it.jsonObject.getValue("metadata").jsonObject }
-                .filterNot { ProbeProxy.isProbeInbound(it["type"]?.jsonPrimitive?.contentOrNull.orEmpty().substringAfter('/')) }
-                .mapNotNull { it["host"]?.jsonPrimitive?.contentOrNull?.takeIf(String::isNotEmpty) }
-                .toSet()
+        fun parseHosts(body: String): Set<String> = parseUserConnections(body).map { it.host }.toSet()
     }
 }
+
+internal data class ClashConnection(val id: String, val host: String)
+
+/** Live connections with a sniffed name. Clash reports the inbound as `type/tag`; probe connections are ours, not the user's. */
+internal fun parseUserConnections(body: String): List<ClashConnection> =
+    Json.parseToJsonElement(body).jsonObject.getValue("connections").jsonArray
+        .map { it.jsonObject }
+        .filterNot { ProbeProxy.isProbeInbound(it.metadata("type").substringAfter('/')) }
+        .mapNotNull { connection ->
+            connection.metadata("host").takeIf(String::isNotEmpty)
+                ?.let { ClashConnection(connection["id"]?.jsonPrimitive?.contentOrNull.orEmpty(), it) }
+        }
+
+private fun JsonObject.metadata(key: String): String =
+    getValue("metadata").jsonObject[key]?.jsonPrimitive?.contentOrNull.orEmpty()

@@ -3,7 +3,9 @@ package com.verdenroz.vpnchain.core.tunnel.di
 import com.verdenroz.vpnchain.core.common.di.applicationScopeQualifier
 import com.verdenroz.vpnchain.core.config.DesktopLearnedRuleSetStore
 import com.verdenroz.vpnchain.core.config.LearnedRuleSetStore
+import com.verdenroz.vpnchain.core.tunnel.ClashConnectionCloser
 import com.verdenroz.vpnchain.core.tunnel.ClashDestinationFeed
+import com.verdenroz.vpnchain.core.tunnel.ConnectionCloser
 import com.verdenroz.vpnchain.core.tunnel.DesktopNetworkMonitor
 import com.verdenroz.vpnchain.core.tunnel.DesktopTunnelController
 import com.verdenroz.vpnchain.core.tunnel.DestinationFeed
@@ -22,5 +24,6 @@ actual val tunnelModule: Module = module {
     single<NetworkMonitor> { DesktopNetworkMonitor() }
     single<ProbeGate> { OpenProbeGate() }
     single<DestinationFeed> { ClashDestinationFeed() }
+    single<ConnectionCloser> { ClashConnectionCloser(get<TunnelController>().runningConfig) }
     single<LearnedRuleSetStore> { DesktopLearnedRuleSetStore() }
 }
