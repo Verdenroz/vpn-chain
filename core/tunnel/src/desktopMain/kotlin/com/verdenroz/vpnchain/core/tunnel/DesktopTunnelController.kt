@@ -440,9 +440,10 @@ class DesktopTunnelController(
         val (fault, engaged) = engageKillSwitch(
             exemptIps,
             allowLocalNetworks,
-            ::runKillSwitchHelper,
             markArgs = RelayConfig.markArgs(configJson),
-        ) { emitLog(Res.string.tunnel_log_kill_switch_no_mark) }
+            onMarkRefused = { emitLog(Res.string.tunnel_log_kill_switch_no_mark) },
+            run = ::runKillSwitchHelper,
+        )
         killSwitchFault = fault
         killSwitchEngaged = engaged
         when (fault) {

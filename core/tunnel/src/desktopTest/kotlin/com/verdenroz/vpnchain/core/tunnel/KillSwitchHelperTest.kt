@@ -18,7 +18,7 @@ class KillSwitchHelperTest {
         exemptIps: List<String> = ips,
         allowLocal: Boolean = true,
         run: HelperRunner,
-    ) = runBlocking { engageKillSwitch(exemptIps, allowLocal, run) }.fault
+    ) = runBlocking { engageKillSwitch(exemptIps, allowLocal, run = run) }.fault
 
     @Test
     fun `exit zero engages`() {
@@ -178,7 +178,7 @@ class KillSwitchHelperTest {
 
     private fun marked(calls: MutableList<List<String>>, refused: MutableList<Unit>, answer: (List<String>) -> HelperOutcome) =
         runBlocking {
-            engageKillSwitch(ips, allowLocal = false, run = { calls += it; answer(it) }, markArgs = mark) { refused += Unit }
+            engageKillSwitch(ips, allowLocal = false, markArgs = mark, onMarkRefused = { refused += Unit }) { calls += it; answer(it) }
         }
 
     @Test

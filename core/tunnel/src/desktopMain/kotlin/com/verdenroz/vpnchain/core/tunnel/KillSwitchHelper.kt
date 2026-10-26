@@ -40,9 +40,9 @@ internal data class KillSwitchEngagement(val fault: KillSwitchState?, val engage
 internal suspend fun engageKillSwitch(
     exemptIps: List<String>,
     allowLocal: Boolean,
-    run: HelperRunner,
     markArgs: List<String> = emptyList(),
     onMarkRefused: suspend () -> Unit = {},
+    run: HelperRunner,
 ): KillSwitchEngagement {
     if (exemptIps.isEmpty()) return KillSwitchEngagement(KillSwitchState.NoExemptAddresses, engaged = false)
     val localArgs = if (allowLocal) listOf("--allow-local") else emptyList()
