@@ -138,7 +138,7 @@ class DesktopTunnelController(
     @Volatile
     private var process: RelayProcess? = null
     private var readerJob: Job? = null
-    private var configProvider: (suspend () -> String?)? = null
+    private val configProvider = ConfigProviderSlot()
     private var launchedThisAttempt = false
     private var launchLogOffset = 0L
     private var logTailJob: Job? = null
@@ -225,12 +225,12 @@ class DesktopTunnelController(
             // a fresh process. Launching a second sing-box over the same TUN makes
             // it tear down the live instance's routing on exit, which strands the
             // machine offline — so adopt what's running instead of competing.
-            if (adoptRunningSession()) return@withLock
+            if (adoptRunningSession(startConfig = configJson)) return@withLock
             _status.value = ChainStatus(state = TunnelState.Connecting)
             launchedThisAttempt = false
             if (tunMode) startTun(configJson) else startProxy(configJson)
             if (!lostPortRace()) return@withLock
-            val fresh = configProvider?.invoke() ?: return@withLock
+            val fresh = configProvider.current?.invoke() ?: return@withLock
             emitLog(Res.string.tunnel_log_port_race_retry)
             applyConfig(fresh)
             _status.value = ChainStatus(state = TunnelState.Connecting)
@@ -258,18 +258,21 @@ class DesktopTunnelController(
                 allowLocalNetworks,
                 wanted = tunMode && killSwitchEnabled && firewallIsOurs(),
                 engaged = killSwitchEngaged,
+                markArgs = RelayConfig.markArgs(configJson),
+                onMarkRefused = { emitLog(Res.string.tunnel_log_kill_switch_no_mark) },
                 run = ::runKillSwitchHelper,
             )
             killSwitchFault = outcome?.fault
             killSwitchEngaged = outcome?.engaged == true
             arming = AttemptArming.forSwitch(outcome, killSwitchEnabled)
             tearDown(restoreNetworking = false, settled = TunnelState.Connecting)
+            launchedThisAttempt = false
             if (tunMode) startTun(configJson) else startProxy(configJson)
         }
     }
 
     override fun installConfigProvider(provider: suspend () -> String?) {
-        configProvider = provider
+        configProvider.install(provider)
     }
 
     private fun applyConfig(configJson: String) {
@@ -358,29 +361,34 @@ class DesktopTunnelController(
 
     /** Takes ownership of an already-running relay's status instead of starting
      *  a competing one. Returns false when nothing is running. */
-    private suspend fun adoptRunningSession(): Boolean {
+    /**
+     * [startConfig] is the config and settings a [start] was handed, already
+     * applied; only the passive adopt-on-launch path renders one of its own.
+     */
+    private suspend fun adoptRunningSession(startConfig: String? = null): Boolean {
         val session = detectRunningSession() ?: return false
         // Only asked once something is actually up, so the idle poll stays in-process.
         val managed = ManagedRelay.available && ManagedRelay.isActive()
         val recorded = readSessionState() != null
         relayLog = if (managed) SystemdRelay.logFile else File(runtimeDir, "relay.log")
-        tunMode = session.tun
-        tunHasEntry = session.entry
         killSwitchEngaged = session.killSwitch
         killSwitchFault = null
-        killSwitchEnabled = session.killSwitchEnabled
         if (managed && adoptedManagedConfig() == null) {
-            val fresh = configProvider?.invoke()
+            val fresh = configProvider.configForStaleAdopt(startConfig)
             if (fresh != null) {
                 emitLog(Res.string.tunnel_log_adopted_stale)
                 ManagedRelay.stop()
-                readConfig(fresh)
+                if (startConfig == null) killSwitchEnabled = session.killSwitchEnabled
+                applyConfig(fresh)
                 _status.value = ChainStatus(state = TunnelState.Connecting)
                 launchedThisAttempt = false
                 if (tunMode) startTun(fresh) else startProxy(fresh)
                 return true
             }
         }
+        tunMode = session.tun
+        tunHasEntry = session.entry
+        killSwitchEnabled = session.killSwitchEnabled
         _runningConfig.value = if (managed) adoptedManagedConfig() else null
         if (shouldRestoreKillSwitch(managed, recorded)) {
             adoptedManagedConfig()?.let {

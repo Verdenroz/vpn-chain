@@ -174,6 +174,22 @@ class KillSwitchHelperTest {
 
         assertEquals(null, result)
         assertEquals(listOf(listOf("down")), calls)
+    }
+
+    @Test
+    fun `a restart keeps the mark and retries without it on an old helper`() {
+        val calls = mutableListOf<List<String>>()
+
+        runBlocking {
+            rearmForRestart(listOf("198.51.100.20"), allowLocal = false, wanted = true, engaged = true, markArgs = mark) {
+                calls += it
+                HelperOutcome.Exited(if (it.containsAll(mark)) 2 else 0, "")
+            }
+        }
+
+        assertEquals(listOf(listOf("up") + mark + "198.51.100.20", listOf("up", "198.51.100.20")), calls)
+    }
+
     private val mark = listOf("--allow-mark", "0x760000")
 
     private fun marked(calls: MutableList<List<String>>, refused: MutableList<Unit>, answer: (List<String>) -> HelperOutcome) =
@@ -208,6 +224,15 @@ class KillSwitchHelperTest {
         val calls = mutableListOf<List<String>>()
 
         marked(calls, mutableListOf()) { if (it.first() == "status") HelperOutcome.Exited(1, "") else HelperOutcome.Exited(1, "") }
+
+        assertEquals(listOf(listOf("up") + mark + ips, listOf("status")), calls)
+    }
+
+    @Test
+    fun `a value the helper refuses is not retried without the mark`() {
+        val calls = mutableListOf<List<String>>()
+
+        marked(calls, mutableListOf()) { if (it.first() == "status") HelperOutcome.Exited(1, "") else HelperOutcome.Exited(3, "invalid mark") }
 
         assertEquals(listOf(listOf("up") + mark + ips, listOf("status")), calls)
     }

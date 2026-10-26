@@ -47,7 +47,7 @@ internal suspend fun engageKillSwitch(
     if (exemptIps.isEmpty()) return KillSwitchEngagement(KillSwitchState.NoExemptAddresses, engaged = false)
     val localArgs = if (allowLocal) listOf("--allow-local") else emptyList()
     var outcome = run(listOf("up") + localArgs + markArgs + exemptIps)
-    // A helper built before --allow-mark rejects it as a usage error: keep the table, without the hole.
+    // A helper built before --allow-mark rejects it as a usage error (2); a bad value is 3. Keep the table, without the hole.
     if (markArgs.isNotEmpty() && (outcome as? HelperOutcome.Exited)?.code == HELPER_USAGE_EXIT) {
         onMarkRefused()
         outcome = run(listOf("up") + localArgs + exemptIps)
@@ -82,13 +82,15 @@ internal suspend fun rearmForRestart(
     allowLocal: Boolean,
     wanted: Boolean,
     engaged: Boolean,
+    markArgs: List<String> = emptyList(),
+    onMarkRefused: suspend () -> Unit = {},
     run: HelperRunner,
 ): KillSwitchEngagement? {
     if (!wanted) {
         if (engaged) run(listOf("down"))
         return null
     }
-    val outcome = engageKillSwitch(exemptIps, allowLocal, run)
+    val outcome = engageKillSwitch(exemptIps, allowLocal, markArgs, onMarkRefused, run)
     if (outcome.engaged || outcome.fault !in UNASKED_FAULTS) return outcome
     return outcome.copy(engaged = tableLoaded(run, assumed = engaged))
 }
