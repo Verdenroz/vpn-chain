@@ -73,8 +73,6 @@ actual fun renderPlatformTunnelConfig(
  */
 private fun cacheFilePath(): String = File(PrivateStorage.configDir, "singbox-cache.db").absolutePath
 
-internal fun userConfigDir(): File = PrivateStorage.configDir
-
 /** A fresh port and secret per rendered config; the relay itself does not depend on the API. */
 private fun newClashApi(): ClashApi = ClashApi(port = freeLoopbackPort(), secret = randomHexToken(SECRET_BYTES))
 
