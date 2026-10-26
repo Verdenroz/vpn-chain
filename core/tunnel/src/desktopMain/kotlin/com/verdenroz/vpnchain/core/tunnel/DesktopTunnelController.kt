@@ -3,10 +3,8 @@ package com.verdenroz.vpnchain.core.tunnel
 import com.verdenroz.vpnchain.core.common.PrivateStorage
 import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.config.ClashApi
-import com.verdenroz.vpnchain.core.config.SingBoxConfigFactory
 import com.verdenroz.vpnchain.core.config.SystemdRelay
 import com.verdenroz.vpnchain.core.config.isLostPortRace
-import com.verdenroz.vpnchain.core.config.writeReplacing
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.KillSwitchState
@@ -50,8 +48,6 @@ import java.net.NetworkInterface
 import java.net.Proxy
 import java.net.Socket
 import java.net.URI
-import java.nio.file.Files
-import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -611,16 +607,8 @@ class DesktopTunnelController(
         return relay
     }
 
-    /** Group-readable, not owner-only: the service user reads it through the
-     *  `vpn-chain` group. Permissions are set before the credentials go in. */
-    private fun writeManagedConfig(configJson: String) {
-        val path = SystemdRelay.configFile.toPath()
-        Files.deleteIfExists(path)
-        Files.createFile(path)
-        Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rw-r-----"))
-        SystemdRelay.configFile.writeText(configJson)
-        writeReplacing(SystemdRelay.stampFile.toPath(), SingBoxConfigFactory.RENDER_SCHEMA.toString(), "rw-r-----")
-    }
+    private fun writeManagedConfig(configJson: String) =
+        writeManagedConfig(SystemdRelay.configFile.toPath(), SystemdRelay.stampFile.toPath(), configJson)
 
     private suspend fun failManagedStart(message: StringResource, detail: String) {
         _status.value = ChainStatus(
