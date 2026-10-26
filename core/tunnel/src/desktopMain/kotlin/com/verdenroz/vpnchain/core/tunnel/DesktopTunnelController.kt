@@ -227,15 +227,7 @@ class DesktopTunnelController(
             // machine offline — so adopt what's running instead of competing.
             if (adoptRunningSession(startConfig = configJson)) return@withLock
             _status.value = ChainStatus(state = TunnelState.Connecting)
-            launchedThisAttempt = false
-            if (tunMode) startTun(configJson) else startProxy(configJson)
-            if (!lostPortRace()) return@withLock
-            val fresh = configProvider.current?.invoke() ?: return@withLock
-            emitLog(Res.string.tunnel_log_port_race_retry)
-            applyConfig(fresh)
-            _status.value = ChainStatus(state = TunnelState.Connecting)
-            launchedThisAttempt = false
-            if (tunMode) startTun(fresh) else startProxy(fresh)
+            launchRelay(configJson)
         }
     }
 
@@ -266,9 +258,24 @@ class DesktopTunnelController(
             killSwitchEngaged = outcome?.engaged == true
             arming = AttemptArming.forSwitch(outcome, killSwitchEnabled)
             tearDown(restoreNetworking = false, settled = TunnelState.Connecting)
-            launchedThisAttempt = false
-            if (tunMode) startTun(configJson) else startProxy(configJson)
+            launchRelay(configJson)
         }
+    }
+
+    /** Launches [configJson], then once more on a fresh render if sing-box lost a port race. */
+    private suspend fun launchRelay(configJson: String) {
+        launchAttempt(configJson)
+        if (!lostPortRace()) return
+        val fresh = configProvider.current?.invoke() ?: return
+        emitLog(Res.string.tunnel_log_port_race_retry)
+        applyConfig(fresh)
+        _status.value = ChainStatus(state = TunnelState.Connecting)
+        launchAttempt(fresh)
+    }
+
+    private suspend fun launchAttempt(configJson: String) {
+        launchedThisAttempt = false
+        if (tunMode) startTun(configJson) else startProxy(configJson)
     }
 
     override fun installConfigProvider(provider: suspend () -> String?) {
@@ -381,8 +388,7 @@ class DesktopTunnelController(
                 if (startConfig == null) killSwitchEnabled = session.killSwitchEnabled
                 applyConfig(fresh)
                 _status.value = ChainStatus(state = TunnelState.Connecting)
-                launchedThisAttempt = false
-                if (tunMode) startTun(fresh) else startProxy(fresh)
+                launchRelay(fresh)
                 return true
             }
         }
