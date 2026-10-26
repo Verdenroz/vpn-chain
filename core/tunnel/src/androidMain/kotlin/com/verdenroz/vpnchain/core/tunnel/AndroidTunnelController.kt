@@ -70,8 +70,15 @@ class AndroidTunnelController(
             }
     }
 
-    /** Reloads the engine inside the running VpnService, so Always-on lockdown never sees it stop. */
+    /**
+     * Reloads the engine inside the running VpnService, so Always-on lockdown
+     * never sees it stop. With no engine to reload it is a fresh start, which
+     * needs consent first.
+     */
     override suspend fun restart(configJson: String, killSwitchEnabled: Boolean, allowLocalNetworks: Boolean) {
+        if (!engineRunning(TunnelBridge.status.value.state)) {
+            return start(configJson, killSwitchEnabled, allowLocalNetworks)
+        }
         TunnelBridge.pendingConfig = configJson
         val intent = Intent(context, VpnChainService::class.java).apply {
             action = VpnChainService.ACTION_RELOAD
@@ -99,3 +106,7 @@ class AndroidTunnelController(
         context.startService(intent)
     }
 }
+
+/** Connecting or Connected means the service holds an engine, or a boot that will produce one. */
+internal fun engineRunning(state: TunnelState): Boolean =
+    state == TunnelState.Connecting || state == TunnelState.Connected

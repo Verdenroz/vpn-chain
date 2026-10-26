@@ -116,8 +116,16 @@ class VpnChainService : VpnService(), CommandServerHandler {
         }
     }
 
+    /** A reload opens a new TUN, so the previous descriptor has to go or the old interface stays up. */
     internal fun retainTunDescriptor(pfd: ParcelFileDescriptor) {
+        val previous = tunDescriptor
         tunDescriptor = pfd
+        if (previous == null || previous === pfd) return
+        val previousFd = runCatching { previous.fd }.getOrNull()
+        when (staleTunRelease(previousFd, pfd.fd)) {
+            StaleTunRelease.Close -> runCatching { previous.close() }
+            StaleTunRelease.Detach -> runCatching { previous.detachFd() }
+        }
     }
 
     /**
@@ -166,9 +174,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         val gen = generation.incrementAndGet()
         tearingDown = false
         TunnelBridge.setState(TunnelState.Connecting)
-        refreshLockdownState()
-        lockdownPoller.removeCallbacks(lockdownCheck)
-        lockdownPoller.postDelayed(lockdownCheck, LOCKDOWN_POLL_MS)
+        watchLockdown()
 
         serviceScope.launch {
             wakeGuard.awake {
@@ -193,15 +199,23 @@ class VpnChainService : VpnService(), CommandServerHandler {
         val gen = generation.incrementAndGet()
         tearingDown = false
         TunnelBridge.setState(TunnelState.Connecting)
+        watchLockdown()
         serviceScope.launch {
             wakeGuard.awake {
                 val booted = lifecycleLock.withLock {
+                    if (!owns(gen)) return@withLock false
                     val server = commandServer ?: return@withLock bootEngine(gen)
                     reloadEngine(server, gen)
                 }
                 if (booted) confirmCarrying(gen)
             }
         }
+    }
+
+    private fun watchLockdown() {
+        refreshLockdownState()
+        lockdownPoller.removeCallbacks(lockdownCheck)
+        lockdownPoller.postDelayed(lockdownCheck, LOCKDOWN_POLL_MS)
     }
 
     /** Call under [lifecycleLock]. */
@@ -215,7 +229,13 @@ class VpnChainService : VpnService(), CommandServerHandler {
         healthJob = null
         return runCatching {
             withContext(Dispatchers.IO) { server.startOrReloadService(config, OverrideOptions()) }
-            owns(gen)
+            // A stop that landed mid-reload left this engine for the reload to close, as in bootEngine.
+            if (!owns(gen)) {
+                cleanup()
+                false
+            } else {
+                true
+            }
         }.getOrElse { t ->
             TunnelBridge.logFailure("reload failed", t.message)
             dropEngineLocked(
@@ -370,13 +390,21 @@ class VpnChainService : VpnService(), CommandServerHandler {
 
     private fun owns(gen: Int): Boolean = generation.get() == gen
 
+    /**
+     * The status flips at once; the engine is closed under [lifecycleLock] so a
+     * boot or reload in flight finishes first instead of racing the close. A
+     * start arriving meanwhile takes the generation, and this stop yields to it.
+     */
     private fun stopTunnel() {
         TunnelBridge.setUserStarted(applicationContext, false)
-        generation.incrementAndGet()
+        val gen = generation.incrementAndGet()
         TunnelBridge.setState(TunnelState.Disconnected)
-        cleanup()
-        stopForegroundCompat()
-        stopSelf()
+        serviceScope.launch {
+            val stopped = lifecycleLock.withLock { owns(gen).also { if (it) cleanup() } }
+            if (!stopped) return@launch
+            stopForegroundCompat()
+            stopSelf()
+        }
     }
 
     private fun cleanup() {
@@ -622,3 +650,12 @@ class VpnChainService : VpnService(), CommandServerHandler {
         private var didSetup = false
     }
 }
+
+internal enum class StaleTunRelease { Close, Detach }
+
+/**
+ * A previous descriptor whose number the new TUN reuses was closed underneath
+ * it; closing it, or letting its finalizer run, would close the new TUN.
+ */
+internal fun staleTunRelease(previousFd: Int?, newFd: Int): StaleTunRelease =
+    if (previousFd == newFd) StaleTunRelease.Detach else StaleTunRelease.Close
