@@ -21,6 +21,9 @@
  *
  * status exits 0 when the table is installed and 1 when it is not.
  *
+ * Exit 2 is a usage error or an unknown option, exit 3 an invalid value (an
+ * exempt IP, too many of them, or a mark), and 1 any other failure.
+ *
  * --allow-local additionally accepts RFC1918 and link-local destinations, so
  * Docker bridges and LAN hosts stay reachable while the chain is up.
  *
@@ -60,6 +63,10 @@
 #define MAX_EXEMPT 8
 #define TABLE_NAME "vpn_chain_killswitch"
 #define SCRIPT_CAP 2048
+
+/* An old helper answers --allow-mark with EXIT_USAGE, so a bad value must not look the same. */
+#define EXIT_USAGE 2
+#define EXIT_INVALID 3
 
 static const char *NFT_PATHS[] = {"/usr/sbin/nft", "/sbin/nft", "/usr/bin/nft", NULL};
 
@@ -244,27 +251,27 @@ static int parse_up_args(int argc, char *argv[], struct options *opts) {
             opts->allow_mark = argv[++i];
             if (!is_valid_mark(opts->allow_mark)) {
                 fprintf(stderr, "invalid mark: %s\n", opts->allow_mark);
-                return -1;
+                return EXIT_INVALID;
             }
         } else {
             fprintf(stderr, "unknown option: %s\n", argv[i]);
-            return -1;
+            return EXIT_USAGE;
         }
     }
     opts->exempt_ips = &argv[i];
     opts->exempt_count = argc - i;
     if (opts->exempt_count < 1) {
         fprintf(stderr, "up needs at least one exempt_ip\n");
-        return -1;
+        return EXIT_USAGE;
     }
     if (opts->exempt_count > MAX_EXEMPT) {
         fprintf(stderr, "too many exempt IPs (max %d)\n", MAX_EXEMPT);
-        return -1;
+        return EXIT_INVALID;
     }
     for (int j = 0; j < opts->exempt_count; j++) {
         if (!is_valid_ipv4(opts->exempt_ips[j])) {
             fprintf(stderr, "invalid exempt_ip: %s\n", opts->exempt_ips[j]);
-            return -1;
+            return EXIT_INVALID;
         }
     }
     return 0;
@@ -282,7 +289,7 @@ int main(int argc, char *argv[]) {
             "       %s status\n",
             prog, prog, prog
         );
-        return 2;
+        return EXIT_USAGE;
     }
 
     int up = strcmp(argv[1], "up") == 0;
@@ -291,7 +298,8 @@ int main(int argc, char *argv[]) {
     int script_len = 0;
 
     if (up) {
-        if (parse_up_args(argc, argv, &opts) != 0) return 2;
+        int parsed = parse_up_args(argc, argv, &opts);
+        if (parsed != 0) return parsed;
         script_len = build_script(script, &opts);
         if (script_len < 0) {
             fprintf(stderr, "ruleset too large\n");

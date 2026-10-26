@@ -86,7 +86,8 @@ exemptions, and (by default) local networks.
   failing open is the sole use of it. It does not change what the site sees:
   the real network address, with no kill switch behind those flows. And it
   needs the helper rebuilt (`cli/killswitch/build.sh`) and `setcap` run on it
-  once more. Until then an older helper rejects `--allow-mark` with exit 2,
+  once more. Until then an older helper rejects `--allow-mark` with exit 2 (a usage
+  error; the current helper reserves exit 3 for an invalid value),
   and the app installs the table again without the mark and logs that sites
   that fail open stay blocked. The kill switch stays up; only failing open to
   the bare link is lost.
