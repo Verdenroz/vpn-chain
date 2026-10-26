@@ -29,25 +29,25 @@ class RoutingRestartTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun `turning failing open off restarts a live tunnel`() {
+    fun `turning failing open off moves a live tunnel without stopping it`() {
         viewModel(TunnelState.Connected).setFailOpen(false)
 
-        assertEquals(listOf("disconnect", "connect"), log)
+        assertEquals(listOf("restart"), log)
         assertEquals(false, settings.settings.value.failOpen)
     }
 
     @Test
-    fun `turning the entry hop off restarts a live tunnel`() {
+    fun `turning the entry hop off moves a live tunnel without stopping it`() {
         viewModel(TunnelState.Connected).setEntryHopEnabled(false)
 
-        assertEquals(listOf("disconnect", "connect"), log)
+        assertEquals(listOf("restart"), log)
     }
 
     @Test
-    fun `changing the WARP mode restarts a live tunnel`() {
+    fun `changing the WARP mode moves a live tunnel without stopping it`() {
         viewModel(TunnelState.Connected).setWarpMode(WarpMode.Off)
 
-        assertEquals(listOf("disconnect", "connect"), log)
+        assertEquals(listOf("restart"), log)
     }
 
     @Test
