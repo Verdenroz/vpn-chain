@@ -139,6 +139,7 @@ internal class DefaultChainRepository(
         val wantsTail = settings.warpMode != WarpMode.Off && profile.supportsWarpExit
         val warp = if (wantsTail) warpRepository.exit() else null
         // Like the tail, a failure here costs the learned sites, never the connect.
+        learnedStore.beginSession()
         val learned = learnedStore.takeIf {
             profile.supportsWarpExit &&
                 runCatching { learnedSites.syncRuleSets() }

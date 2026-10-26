@@ -18,6 +18,9 @@ enum class RuleSetKind { Warp, Open, Direct }
  * takes effect without restarting the tunnel.
  */
 interface LearnedRuleSetStore {
+    /** Fixes where this session's files live; called once per rendered config. */
+    fun beginSession() {}
+
     fun path(kind: RuleSetKind): String
 
     /** Replaces the file in one step, so sing-box never reads a half-written list. */

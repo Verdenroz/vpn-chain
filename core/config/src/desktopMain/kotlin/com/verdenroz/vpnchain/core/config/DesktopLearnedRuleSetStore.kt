@@ -2,36 +2,44 @@ package com.verdenroz.vpnchain.core.config
 
 import com.verdenroz.vpnchain.core.common.PrivateStorage
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
-import java.nio.file.attribute.PosixFilePermissions
 
 /**
  * Beside the rendered config under systemd, where the relay's own user reads
  * it through the `vpn-chain` group; in the owner-only config directory when
- * the app spawns sing-box itself.
+ * the app spawns sing-box itself. The directory is chosen once per session, so
+ * the files are always written where the running config looks for them; a
+ * directory that stops being writable is an error, never a quiet move.
  */
-class DesktopLearnedRuleSetStore : LearnedRuleSetStore {
+class DesktopLearnedRuleSetStore(
+    private val managed: () -> Boolean = { SystemdRelay.available },
+    private val runDir: () -> File = { SystemdRelay.runDir },
+    private val privateDir: () -> File = { PrivateStorage.configDir },
+) : LearnedRuleSetStore {
 
-    private val managed: Boolean get() = SystemdRelay.available
+    private class Session(val dir: File, val mode: String)
 
-    private val dir: File
-        get() = if (managed) SystemdRelay.runDir else PrivateStorage.configDir
+    @Volatile
+    private var session: Session? = null
+
+    override fun beginSession() {
+        session = resolve()
+    }
 
     override fun path(kind: RuleSetKind): String =
-        File(dir, LearnedRuleSet.fileName(kind)).absolutePath
+        File(current().dir, LearnedRuleSet.fileName(kind)).absolutePath
 
     override fun write(kind: RuleSetKind, rules: LearnedRules) {
-        val target = File(path(kind)).toPath()
-        val staged = if (managed) {
-            target.resolveSibling("${target.fileName}.tmp").also {
-                Files.deleteIfExists(it)
-                Files.createFile(it, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-r-----")))
-            }
-        } else {
-            PrivateStorage.createTempFile(dir, "${target.fileName}.", ".tmp").toPath()
-        }
-        Files.writeString(staged, LearnedRuleSet.render(rules))
-        Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        val session = current()
+        writeReplacing(File(session.dir, LearnedRuleSet.fileName(kind)).toPath(), LearnedRuleSet.render(rules), session.mode)
+    }
+
+    private fun current(): Session = session ?: resolve().also { session = it }
+
+    private fun resolve(): Session =
+        if (managed()) Session(runDir(), GROUP_READABLE) else Session(privateDir(), OWNER_ONLY)
+
+    private companion object {
+        const val GROUP_READABLE = "rw-r-----"
+        const val OWNER_ONLY = "rw-------"
     }
 }

@@ -6,6 +6,7 @@ import com.verdenroz.vpnchain.core.config.ClashApi
 import com.verdenroz.vpnchain.core.config.SingBoxConfigFactory
 import com.verdenroz.vpnchain.core.config.SystemdRelay
 import com.verdenroz.vpnchain.core.config.isLostPortRace
+import com.verdenroz.vpnchain.core.config.writeReplacing
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.KillSwitchState
@@ -604,7 +605,7 @@ class DesktopTunnelController(
         Files.createFile(path)
         Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rw-r-----"))
         SystemdRelay.configFile.writeText(configJson)
-        SystemdRelay.stampFile.writeText(SingBoxConfigFactory.RENDER_SCHEMA.toString())
+        writeReplacing(SystemdRelay.stampFile.toPath(), SingBoxConfigFactory.RENDER_SCHEMA.toString(), "rw-r-----")
     }
 
     private suspend fun failManagedStart(message: StringResource, detail: String) {
