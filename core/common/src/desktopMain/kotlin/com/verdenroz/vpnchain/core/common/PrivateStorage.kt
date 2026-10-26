@@ -10,6 +10,7 @@ import java.nio.file.Path
 import java.nio.file.attribute.FileAttribute
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermissions
+import java.nio.file.attribute.UserPrincipal
 
 /**
  * Owner-only storage for state that holds keys. The 0700 directory is the boundary: DataStore
@@ -98,14 +99,22 @@ object PrivateStorage {
         return path.toFile()
     }
 
-    private val currentUser by lazy {
-        val probe = Files.createTempFile("vpn-chain-owner", null)
-        try {
-            Files.getOwner(probe)
-        } finally {
-            Files.delete(probe)
-        }
-    }
+    private val currentUser by lazy { lookUpCurrentUser() }
+
+    /** By name first: probing with a temp file fails when the temp directory is not writable. */
+    internal fun lookUpCurrentUser(
+        name: String = System.getProperty("user.name"),
+        tempDir: Path? = null,
+    ): UserPrincipal =
+        runCatching { FileSystems.getDefault().userPrincipalLookupService.lookupPrincipalByName(name) }
+            .getOrElse {
+                val probe = if (tempDir == null) Files.createTempFile("vpn-chain-owner", null) else Files.createTempFile(tempDir, "vpn-chain-owner", null)
+                try {
+                    Files.getOwner(probe)
+                } finally {
+                    Files.delete(probe)
+                }
+            }
 
     private fun isOwnDirectory(path: Path) =
         Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) && Files.getOwner(path, LinkOption.NOFOLLOW_LINKS) == currentUser

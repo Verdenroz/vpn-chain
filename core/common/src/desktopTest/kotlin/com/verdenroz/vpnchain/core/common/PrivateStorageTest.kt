@@ -188,4 +188,22 @@ class PrivateStorageTest {
 
         assertEquals("rw-------", mode(file))
     }
+
+    @Test
+    fun `the current user is found by name without touching a temp directory`() {
+        val unwritable = Files.createTempDirectory("no-tmp").also {
+            Files.setPosixFilePermissions(it, PosixFilePermissions.fromString("r-x------"))
+        }
+
+        val user = PrivateStorage.lookUpCurrentUser(tempDir = unwritable)
+
+        assertEquals(Files.getOwner(home().toPath()), user)
+    }
+
+    @Test
+    fun `an unknown name falls back to the temp-file probe`() {
+        val user = PrivateStorage.lookUpCurrentUser(name = "no-such-user-vpn-chain", tempDir = home().toPath())
+
+        assertEquals(Files.getOwner(home().toPath()), user)
+    }
 }
