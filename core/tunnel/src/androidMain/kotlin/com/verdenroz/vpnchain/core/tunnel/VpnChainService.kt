@@ -231,7 +231,13 @@ class VpnChainService : VpnService(), CommandServerHandler {
         healthJob?.cancel()
         healthJob = null
         return runCatching {
-            withContext(Dispatchers.IO) { server.startOrReloadService(config, OverrideOptions()) }
+            withContext(Dispatchers.IO) {
+                server.startOrReloadService(config, OverrideOptions())
+                TunnelBridge.runningConfig.value = config
+                runCatching { connectionsClient?.disconnect() }
+                connectionsClient = null
+                startConnectionsClient(config)
+            }
             // A stop that landed mid-reload left this engine for the reload to close, as in bootEngine.
             if (!owns(gen)) {
                 cleanup()
@@ -260,8 +266,9 @@ class VpnChainService : VpnService(), CommandServerHandler {
             // sing-box fails its whole start when a port this app picked was taken first.
             val started = runCatching { startEngine(config) }
             val lost = started.exceptionOrNull()?.message?.let(::isLostPortRace) == true
-            val fresh = if (lost) TunnelBridge.renderConfig() else null
-            if (fresh != null) {
+            // A Disconnect that landed during the failed boot has to stick, not be undone by the retry.
+            val fresh = if (lost && owns(gen) && !tearingDown) TunnelBridge.renderConfig() else null
+            if (fresh != null && owns(gen) && !tearingDown) {
                 TunnelBridge.log("a local port was taken before sing-box could bind it, starting again with new ports")
                 cleanup()
                 tearingDown = false
