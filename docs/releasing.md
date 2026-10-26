@@ -9,7 +9,16 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`.
 2. Commit, then tag and push:
 
    ```
-   git tag v0.1.7 && git push origin v0.1.7
+   git tag v0.2.1 && git push origin v0.2.1
+   ```
+
+3. Approve the `publish` job in the `release` environment. The release is
+   published as a pre-release, so no installed copy is offered it yet.
+4. Install it from the release page and test it on a device. Then promote it, which
+   is what the in-app updater and `install-desktop.sh` pick up:
+
+   ```
+   gh release edit v0.2.1 --prerelease=false --latest
    ```
 
 The tag must match `vpnchain.version`. The publish job fails when the built APKs
