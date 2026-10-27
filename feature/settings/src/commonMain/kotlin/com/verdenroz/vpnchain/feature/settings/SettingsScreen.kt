@@ -117,7 +117,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_rout
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_route_entire_system_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_routing_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan_qr
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_secrets_env_label
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_field_label
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_show_qr
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_all
@@ -728,7 +728,7 @@ private fun ImportSection(
         )
         Spacer(Modifier.height(12.dp))
         ValueField(
-            label = stringResource(Res.string.settings_secrets_env_label),
+            label = stringResource(Res.string.settings_import_field_label),
             value = pasted,
             minLines = 4,
             sensitive = true,
