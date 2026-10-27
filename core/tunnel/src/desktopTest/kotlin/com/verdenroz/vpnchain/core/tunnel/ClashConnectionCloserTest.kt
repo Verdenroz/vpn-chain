@@ -29,7 +29,6 @@ private val CONNECTIONS = """
     ]}
 """
 
-/** A loopback clash API that lists [CONNECTIONS] and records each DELETE. */
 private class FakeClashApi(private val deleteStatus: Int = 204) : AutoCloseable {
     val deleted: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {

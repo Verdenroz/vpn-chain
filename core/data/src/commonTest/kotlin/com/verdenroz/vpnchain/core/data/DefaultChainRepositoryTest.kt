@@ -209,7 +209,7 @@ internal class RepositoryWorld(
         profileRepository = profiles,
         settingsRepository = StubSettingsRepository(settings),
         warpRepository = StubWarpRepository(),
-        learnedSites = DefaultLearnedSitesRepository(preferences, store, NoopConnectionCloser(), now = { 0L }, logger = SilentLogger(), scope = scope),
+        learnedSites = DefaultLearnedSitesRepository(preferences, store = store, closer = NoopConnectionCloser(), now = { 0L }, logger = SilentLogger(), scope = scope),
         learnedStore = store,
         preferences = preferences,
         logger = SilentLogger(),

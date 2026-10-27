@@ -47,7 +47,6 @@ private class LearnedSitesPreferences : DataStore<Preferences> {
         transform(state.value).also { state.value = it }
 }
 
-/** Records each close with the direct rule-set as it stood when the close ran. */
 private class RecordingCloser(private val store: RecordingStore) : ConnectionCloser {
     var failing = false
     val closed = mutableListOf<Pair<HostMatch, List<String>>>()
