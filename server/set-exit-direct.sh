@@ -49,8 +49,6 @@ jq '
   # 4. a direct exit dials from this machine, so names must be resolved before the
   #    private-address rule, as deploy-server.sh sets them up
   | .routing.domainStrategy = "IPOnDemand"
-  | .dns = { servers: ["localhost"] }
-  | (.outbounds[] | select(.tag == "direct") | .settings) = { domainStrategy: "UseIP" }
 ' "$XRAY_CONFIG" > "$tmp" || die "jq transform failed (original left in place)"
 
 "$XRAY_BIN" -test -config "$tmp" >/dev/null \

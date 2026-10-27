@@ -161,20 +161,18 @@ build_config() {
   }, {
     tag:"api", listen:"127.0.0.1", port:$apiport, protocol:"dokodemo-door", settings:{ address:"127.0.0.1" }
   } ],
-  outbounds: ( [ (if $proton==null then {tag:"direct",protocol:"freedom",settings:{domainStrategy:"UseIP"}}
-                                    else {tag:"direct",protocol:"freedom"} end),
-                 {tag:"block",protocol:"blackhole"} ]
+  outbounds: ( [ {tag:"direct",protocol:"freedom"}, {tag:"block",protocol:"blackhole"} ]
                + (if $proton==null then [] else [$proton] end) ),
   # Xray has no routing.final field (that is sing-box); its default outbound is
   # the FIRST in the array, so force the exit with an explicit catch-all rule.
-  # A direct exit resolves names before the private-address rule and dials that same
-  # answer, so a name for loopback is blocked like its address. A Proton exit dials in its tunnel.
+  # A direct exit resolves names before the private-address rule, so a name for loopback is
+  # blocked like its address. A Proton exit dials in its tunnel, where loopback is not the VPS.
   routing:{ domainStrategy:(if $proton==null then "IPOnDemand" else "AsIs" end),
     rules: ( [ { type:"field", inboundTag:["api"], outboundTag:"api" } ]
              + (if $proton==null then [] else [ { type:"field", ip:[$pdns], outboundTag:"exit-wg" } ] end)
              + [ { type:"field", ip:["geoip:private"], outboundTag:"block" } ]
              + [ { type:"field", network:"tcp,udp", outboundTag:$final } ] ) }
-} | if $proton==null then .dns = { servers:["localhost"] } else . end'
+}'
 }
 
 mkdir -p "$(dirname "$XRAY_CONFIG")" /var/log/xray
