@@ -34,10 +34,8 @@ pub fn render(relay: &Relay) -> Value {
 
 /// Writes the rendered config so that a crash leaves either the old file or the new one.
 pub fn write_config(relay: &Relay, path: &Path) -> Result<(), Error> {
-    let mut json = serde_json::to_vec_pretty(&render(relay)).expect("config serializes");
-    json.push(b'\n');
     // xray's service user is not root and must be able to read it.
-    store::replace(path, &json, 0o644)
+    store::replace(path, &store::to_json(&render(relay)), 0o644)
 }
 
 fn inbounds(relay: &Relay) -> Value {

@@ -232,7 +232,6 @@ fn exit(config: &Value) -> Result<(Exit, Option<Secret>), Error> {
     Ok((exit, Some(settings.secret_key)))
 }
 
-/// The entry tagged `tag` in the `inbounds` or `outbounds` list, if there is one.
 fn section<T: DeserializeOwned>(config: &Value, list: &str, tag: &str) -> Result<Option<T>, Error> {
     let Some(entry) = config
         .get(list)

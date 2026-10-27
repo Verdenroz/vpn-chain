@@ -7,7 +7,6 @@ use relayd::{Error, Relay, import, secrets_path, write_config};
 const USAGE: &str = "usage: relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>]
        relayd render --state <state.json> [--secrets <secrets.json>] --out <config.json>";
 
-/// `EX_USAGE`, the exit status for a malformed command line.
 const EX_USAGE: u8 = 64;
 
 fn main() -> ExitCode {

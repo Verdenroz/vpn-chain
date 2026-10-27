@@ -4,7 +4,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
 use common::{read, relay};
-use relayd::{render, write_config};
+use relayd::{Secret, render, write_config};
 use serde_json::Value;
 
 fn deployed(name: &str) -> Value {
@@ -44,7 +44,7 @@ fn a_relay_without_the_stats_api_renders_no_api_section() {
 #[test]
 fn spare_short_ids_follow_the_devices_ids() {
     let mut relay = relay("relay-direct");
-    relay.state.spare_short_ids = vec![relayd::Secret::new("99887766")];
+    relay.state.spare_short_ids = vec![Secret::new("99887766")];
 
     let config = render(&relay);
 

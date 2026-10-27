@@ -1,6 +1,6 @@
 //! The relay's resident agent: the single owner of what the VLESS+REALITY relay serves.
 //!
-//! **The state file is the source of truth; xray's `config.json` is rendered from it.** xray's
+//! The state file is the source of truth; xray's `config.json` is rendered from it. xray's
 //! runtime API changes users only in memory, so something on the server has to own a durable
 //! copy and write the config to match. Keeping that copy in relayd's own schema-versioned file,
 //! rather than reading facts back out of `config.json`, lets it hold what xray has no place for:

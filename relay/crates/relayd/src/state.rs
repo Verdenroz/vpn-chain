@@ -136,8 +136,8 @@ impl Relay {
     pub fn create(&self, state: &Path, secrets: &Path) -> Result<(), Error> {
         self.validate()?;
         store::absent(state)?;
-        store::create(secrets, &to_json(&self.secrets), 0o600)?;
-        store::create(state, &to_json(&self.state), 0o600).inspect_err(|_| {
+        store::create(secrets, &store::to_json(&self.secrets), 0o600)?;
+        store::create(state, &store::to_json(&self.state), 0o600).inspect_err(|_| {
             let _ = fs::remove_file(secrets);
         })
     }
@@ -178,12 +178,6 @@ fn read_versioned<T: DeserializeOwned>(path: &Path) -> Result<T, Error> {
         )),
         None => Err(Error::at(path, "not a relayd file: no \"v\"")),
     }
-}
-
-fn to_json<T: Serialize>(value: &T) -> Vec<u8> {
-    let mut json = serde_json::to_vec_pretty(value).expect("state serializes");
-    json.push(b'\n');
-    json
 }
 
 fn check_devices(devices: &[Device]) -> Result<(), Error> {

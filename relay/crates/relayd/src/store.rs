@@ -1,8 +1,9 @@
 use std::fs::{self, OpenOptions, Permissions};
 use std::io::{ErrorKind, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::Error;
@@ -33,6 +34,13 @@ pub fn redacted(error: &serde_json::Error) -> String {
         .map(|(index, part)| if index % 2 == 1 { ".." } else { part })
         .collect::<Vec<_>>()
         .join("\"")
+}
+
+/// Pretty-printed with a trailing newline, as jq writes it.
+pub fn to_json<T: Serialize>(value: &T) -> Vec<u8> {
+    let mut json = serde_json::to_vec_pretty(value).expect("relayd's types serialize");
+    json.push(b'\n');
+    json
 }
 
 /// Replaces `path` so that a crash leaves either the old file or the new one.
@@ -68,7 +76,7 @@ fn exists(path: &Path) -> Error {
     Error::at(path, "already exists; refusing to overwrite it")
 }
 
-fn stage(path: &Path, contents: &[u8], mode: u32) -> Result<std::path::PathBuf, Error> {
+fn stage(path: &Path, contents: &[u8], mode: u32) -> Result<PathBuf, Error> {
     let name = path.file_name().expect("a file path has a name");
     let pending = path.with_file_name(format!(".{}.tmp", name.to_string_lossy()));
     let at = |error| Error::at(&pending, error);

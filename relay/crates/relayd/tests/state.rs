@@ -2,13 +2,13 @@ mod common;
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use common::{assert_no_secret, fixture, read, relay};
+use common::{SECRETS, assert_no_secret, fixture, read, relay};
 use relayd::{Exit, Relay, Secret, secrets_path};
 use serde_json::Value;
 
-fn scratch() -> (tempfile::TempDir, std::path::PathBuf) {
+fn scratch() -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("relay.json");
     (dir, path)
@@ -189,7 +189,7 @@ fn a_wireguard_exit_without_its_key_is_refused() {
 #[test]
 fn debug_output_shows_no_credential() {
     let mut relay = relay("relay-direct");
-    relay.secrets.exit_secret_key = Some(Secret::new(common::SECRETS[2]));
+    relay.secrets.exit_secret_key = Some(Secret::new(SECRETS[2]));
 
     assert_no_secret(&format!("{relay:?}"));
     assert_no_secret(&format!("{relay:#?}"));
