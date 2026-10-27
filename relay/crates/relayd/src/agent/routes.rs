@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::body::Bytes;
-use axum::extract::{Extension, Path, State};
+use axum::extract::{DefaultBodyLimit, Extension, Path, State};
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::response::{IntoResponse, Response};
@@ -12,7 +12,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::task::spawn_blocking;
 
-use super::guard::authenticate;
+use super::enroll::enroll;
+use super::guard::{BODY_LIMIT, authenticate};
 use super::reply::ApiError;
 use super::{Principal, Service};
 use crate::{Error, Role, valid_name};
@@ -20,7 +21,7 @@ use crate::{Error, Role, valid_name};
 type Outcome = Result<Response, ApiError>;
 
 pub fn router(service: Arc<Service>) -> Router {
-    Router::new()
+    let signed = Router::new()
         .route("/v1/relay", get(relay))
         .route("/v1/devices", get(list_devices).post(add_device))
         .route(
@@ -36,7 +37,13 @@ pub fn router(service: Arc<Service>) -> Router {
         .layer(middleware::from_fn_with_state(
             service.clone(),
             authenticate,
-        ))
+        ));
+    Router::new()
+        .route(
+            "/v1/enroll",
+            post(enroll).layer(DefaultBodyLimit::max(BODY_LIMIT)),
+        )
+        .merge(signed)
         .with_state(service)
 }
 

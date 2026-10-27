@@ -39,6 +39,11 @@ impl Key {
         })
     }
 
+    /// Whether `public_key` is a P-256 public key [`Key::new`] would accept.
+    pub fn check_public(public_key: &[u8]) -> Result<(), Error> {
+        spki_der(public_key).map(drop)
+    }
+
     /// Whether the id and public key agree and the key is a point on P-256.
     pub(crate) fn check(&self) -> Result<(), Error> {
         let der = STANDARD.decode(&self.public_key).map_err(|_| self.bad())?;
