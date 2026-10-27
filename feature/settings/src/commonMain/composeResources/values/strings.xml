@@ -40,10 +40,10 @@
     <string name="settings_warp_automatic">Automatic</string>
     <string name="settings_warp_all">Everything</string>
     <string name="settings_learn_title">Learn blocked sites</string>
-    <string name="settings_fail_open_title">Find another route when WARP is blocked too</string>
+    <string name="settings_fail_open_title">Retry blocked sites another way</string>
     <string name="settings_kill_switch_title">Kill switch</string>
     <string name="settings_dns_title">DNS</string>
-    <string name="settings_dns_filter_title">Block harmful sites</string>
+    <string name="settings_dns_filter_title">Block threats and ads</string>
     <string name="settings_dns_filter_detail">Threats blocks malware, phishing and scams. Ads also blocks ads and trackers. Lists update weekly.</string>
     <string name="settings_dns_filter_off">Off</string>
     <string name="settings_dns_filter_malware">Threats</string>

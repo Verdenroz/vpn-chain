@@ -6,7 +6,7 @@ resolves through the relay, so the filtering has to happen client-side.
 
 ## Turn it on or change the level
 
-**Settings → DNS → Block harmful sites**, on both platforms:
+**Settings → DNS → Block threats and ads**, on both platforms:
 
 | Level | Blocks |
 |---|---|

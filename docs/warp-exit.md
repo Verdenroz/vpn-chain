@@ -35,7 +35,7 @@ With Automatic, two more switches appear:
 | Switch | Default | Effect |
 |---|---|---|
 | Learn blocked sites | On | Probe new destinations and route refused ones through WARP |
-| Find another route when WARP is blocked too | On | [Fail open](#failing-open) for sites both refuse |
+| Retry blocked sites another way | On | [Fail open](#failing-open) for sites both refuse |
 
 The **Sites** tab lists each learned site under the way it leaves. **Remove**
 forgets a site and stops it being learned for seven days.
@@ -187,8 +187,8 @@ connection keeps its route until it ends.
 
 ## Failing open
 
-Some sites refuse the relay and WARP both. With **Find another route when WARP
-is blocked too** on, the chain can send such a site past the relay. That is a
+Some sites refuse the relay and WARP both. With **Retry blocked sites another
+way** on, the chain can send such a site past the relay. That is a
 deliberate step out of the chain, so the Sites tab shows which way each such
 site leaves.
 
