@@ -9,10 +9,18 @@ use crate::{Error, JobId, Layout, Version};
 const CONFIG_LIMIT: u64 = 4 * 1024 * 1024;
 const CURRENT_NEW: &str = ".current.new";
 
-/// The xray version `current` points at, if it points at one.
-pub fn current_version(layout: &Layout) -> Option<Version> {
-    let target = fs::read_link(layout.current()).ok()?;
-    target.to_str()?.parse().ok()
+/// The xray version `current` points at; none when there is no link yet.
+pub fn current_version(layout: &Layout) -> Result<Option<Version>, Error> {
+    let target = match fs::read_link(layout.current()) {
+        Ok(target) => target,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(Error::at(&layout.current(), error)),
+    };
+    target
+        .to_str()
+        .and_then(|target| target.parse().ok())
+        .map(Some)
+        .ok_or_else(|| Error::at(&layout.current(), "not a link to a version directory"))
 }
 
 /// Points `current` at `version` with a rename, so xray's unit never sees a missing link.
@@ -60,7 +68,8 @@ pub fn stage_config(layout: &Layout, bytes: &[u8]) -> Result<PathBuf, Error> {
         if let Some(meta) = &like {
             fchown(&file, Some(meta.uid()), Some(meta.gid()))?;
         }
-        file.set_permissions(fs::Permissions::from_mode(mode))
+        file.set_permissions(fs::Permissions::from_mode(mode))?;
+        file.sync_all()
     })();
     written.map_err(|error| {
         let _ = fs::remove_file(&pending);
@@ -98,7 +107,7 @@ impl Snapshot {
             Err(error) if error.kind() == ErrorKind::NotFound => {}
             Err(error) => return Err(Error::at(&layout.xray_config, error)),
         }
-        if let Some(version) = current_version(layout) {
+        if let Some(version) = current_version(layout)? {
             let path = dir.join(SNAPSHOT_VERSION);
             fs::write(&path, version.as_str()).map_err(|error| Error::at(&path, error))?;
         }
