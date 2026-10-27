@@ -45,7 +45,7 @@ pub use devices::{Manager, SPARES};
 pub use error::{Error, Kind};
 pub use identity::Identity;
 pub use import::import;
-pub use key::Key;
+pub use key::{Key, add_key};
 pub use live::{Live, Restart};
 pub use render::render;
 pub use secret::Secret;

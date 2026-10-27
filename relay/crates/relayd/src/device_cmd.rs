@@ -1,50 +1,15 @@
-use std::path::PathBuf;
 use std::time::Duration;
 
 use relayd::{
-    DEVICES_LOCK, Device, Error, Manager, Placement, Relay, Role, SPARES, Systemctl, XrayLive, now,
-    secrets_path,
+    Device, Error, Manager, Placement, Relay, Role, Systemctl, XrayLive, now, secrets_path,
 };
 
 use crate::args::Args;
+use crate::target::{Target, valued};
 
-const XRAY_GROUP: &str = "xray";
 const LOCK_WAIT: Duration = Duration::from_secs(30);
-const TARGET_FLAGS: [&str; 7] = [
-    "state", "secrets", "config", "lock", "xray", "group", "spares",
-];
-
-/// Where the relay lives, from the flags every device command takes.
-struct Target {
-    state: PathBuf,
-    secrets: PathBuf,
-    config: PathBuf,
-    lock: PathBuf,
-    xray: PathBuf,
-    group: String,
-    spares: usize,
-}
 
 impl Target {
-    fn from(args: &mut Args) -> Option<Self> {
-        let state = args.path("state")?;
-        let config = args.path("config")?;
-        Some(Self {
-            secrets: args.path("secrets").unwrap_or_else(|| secrets_path(&state)),
-            config,
-            lock: args
-                .path("lock")
-                .unwrap_or_else(|| PathBuf::from(DEVICES_LOCK)),
-            xray: args.path("xray").unwrap_or_else(|| PathBuf::from("xray")),
-            group: args.value("group").unwrap_or_else(|| XRAY_GROUP.to_owned()),
-            spares: match args.value("spares") {
-                Some(spares) => spares.parse().ok()?,
-                None => SPARES,
-            },
-            state,
-        })
-    }
-
     fn manage<T>(&self, operate: impl FnOnce(&Manager) -> Result<T, Error>) -> Result<T, Error> {
         let relay = Relay::load(&self.state, &self.secrets)?;
         let api = relay.state.api.as_ref().ok_or_else(|| {
@@ -67,11 +32,6 @@ impl Target {
             now,
         })
     }
-}
-
-/// The flags every device command takes, and `extra` ones of its own.
-fn valued(extra: &[&'static str]) -> Vec<&'static str> {
-    [extra, &TARGET_FLAGS].concat()
 }
 
 pub fn device(args: &[&str]) -> Option<Result<(), Error>> {
