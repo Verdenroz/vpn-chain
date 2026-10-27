@@ -1,0 +1,12 @@
+[Unit]
+Description=Perform the xray changes relayd requested and roll back any that is not confirmed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/vpn-chain/relay-privileged drain
+# A change waits for its confirm: five minutes unless RELAY_JOBS_CONFIRM_SECS says otherwise.
+TimeoutStartSec=1h
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
