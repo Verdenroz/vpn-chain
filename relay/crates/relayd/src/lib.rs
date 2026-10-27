@@ -36,12 +36,13 @@ mod state;
 mod store;
 mod validate;
 
-pub use adapters::{Systemctl, XrayLive};
+pub use adapters::{JobsRestart, Systemctl, XrayLive};
 pub use adopt::adopt;
 pub use clock::now;
 pub use config_file::{Placement, write_config};
 pub use devices::{Manager, SPARES};
 pub use error::{Error, Kind};
+pub use identity::Identity;
 pub use import::import;
 pub use key::Key;
 pub use live::{Live, Restart};
