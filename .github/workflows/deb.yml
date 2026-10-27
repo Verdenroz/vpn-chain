@@ -52,13 +52,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
 
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcap-dev lintian
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcap-dev
       - name: Build the app image
         run: ./gradlew :desktopApp:createReleaseDistributable
       - name: Build the .deb
         run: desktopApp/deb/build-deb.sh desktopApp/build/compose/binaries/main-release/app/vpn-chain dist
+      # The runner's lintian lacks tags the overrides name, and an unknown override is an error.
       - name: Lint
-        run: lintian --fail-on error,warning dist/*.deb
+        run: |
+          docker run --rm -e DEBIAN_FRONTEND=noninteractive -v "$PWD/dist:/dist:ro" \
+            debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f \
+            sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends lintian >/dev/null && lintian --fail-on error,warning /dist/*.deb'
       - name: Install, remove and purge
         run: |
           for image in debian:trixie-slim ubuntu:24.04; do
