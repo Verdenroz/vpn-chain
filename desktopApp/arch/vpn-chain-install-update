@@ -1,0 +1,24 @@
+#!/bin/sh
+# Installs a vpn-chain update as root: vpn-chain-install-update SHA256 < vpn-chain.pkg.tar.zst
+# Run through pkexec, which asks for an administrator password. The package is
+# copied out of the caller's reach before it is hashed, so the file that is
+# checked is the file that is installed.
+set -eu
+
+sha256="${1:-}"
+case "$sha256" in
+    *[!0-9a-f]* | "") echo "usage: ${0##*/} SHA256 < vpn-chain.pkg.tar.zst" >&2; exit 2 ;;
+esac
+[ "${#sha256}" -eq 64 ] || { echo "usage: ${0##*/} SHA256 < vpn-chain.pkg.tar.zst" >&2; exit 2; }
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+chmod 755 "$work"
+pkg="$work/vpn-chain.pkg.tar.zst"
+cat >"$pkg"
+chmod 644 "$pkg"
+
+echo "$sha256  $pkg" | sha256sum -c --status || { echo "the download does not match its SHA-256" >&2; exit 1; }
+[ "$(pacman -Qp "$pkg" 2>/dev/null | cut -d' ' -f1)" = vpn-chain ] || { echo "the download is not the vpn-chain package" >&2; exit 1; }
+
+pacman -U --noconfirm "$pkg"
