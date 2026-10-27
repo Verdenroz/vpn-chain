@@ -263,6 +263,30 @@ touch /var/log/xray/error.log /var/log/xray/access.log && chown -R nobody /var/l
     pass "$label: $paired enrolls as an admin and lists $names; the phone is unaffected"
 }
 
+step "b) a second device is paired without signing out the first"
+g relayd pair --new phone >"$W/link-phone"
+eq "$(g stat -c '%U:%G %a' $STATE_DIR/relay.json $STATE_DIR/relay.secrets.json | paste -sd' ')" "relayd:relayd 600 relayd:relayd 600"
+eq "$(g stat -c '%U:%G %a' /usr/local/etc/xray/config.json)" relayd:xray\ 640
+eq "$(link_field "$W/link-phone" n)" phone
+client_from phone-1 "$version" "$W/link-phone"
+eq "$(through phone-1 "http://$(addr 50)/")" public
+eq "$(through "e-$tag" "http://$(addr 50)/")" public
+new_key phone
+reply="$(enroll phone-1 "$(link_field "$W/link-phone" t)" phone)"
+eq "${reply%% *}" 200
+phone_key="$(jq -r .keyId <<<"${reply#* }")"
+client_from phone-2 "$version" "$W/link-phone" "$(jq -r .identity.uuid <<<"${reply#* }")" "$(jq -r .identity.shortId <<<"${reply#* }")"
+reply="$(signed_full phone-2 phone "$phone_key" GET /v1/devices)"
+eq "$(jq -r '.devices | map(.name + ":" + .role) | join(",")' <<<"${reply#* }")" phone:member
+reply="$(signed_full "e-$tag" "k-$tag" "$key_id" GET /v1/devices)"
+eq "$(jq -r '.devices | map(.name + ":" + .role) | sort | join(",")' <<<"${reply#* }")" "admin:admin,phone:member,tablet:member"
+pass "pair --new adds a member through the API, relayd keeps its files, enrollment makes it a member, and the admin device keeps working"
+g relayd pair >/dev/null 2>"$W/err5"
+grep -q 'signs out the app' "$W/err5"
+pass "a plain pair says it re-pairs the admin device"
+grep -q 'phone *member' <<<"$(g relayd device list)"
+pass "device list on the VPS needs no flags"
+
 step "d) a relay deployed by deploy-server.sh is adopted, pairing an existing device"
 adopt_case existing "$(addr 100)" device1 --device device1
 step "d) the same, pairing a new admin device"
