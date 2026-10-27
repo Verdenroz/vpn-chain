@@ -1,6 +1,7 @@
 mod args;
 mod device_cmd;
 mod egress_cmd;
+mod install_cmd;
 mod pair_cmd;
 mod serve_cmd;
 mod target;
@@ -16,7 +17,8 @@ use relayd::{
 use args::Args;
 use target::XRAY_GROUP;
 
-const USAGE: &str = "usage: relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>]
+const USAGE: &str = "usage: relayd install [--name <device> | --device <device>] [--sni <host>] [--port <n>] [--host <address>] [--wireguard <wg-quick file>]
+       relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>]
        relayd adopt --config <config.json> [--devices <devices.json>] --state <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>] [--xray <path>] [--group <name>] [--restart]
        relayd render --state <state.json> [--secrets <secrets.json>] --out <config.json> [--group <name>] [--swap [--xray <path>]]
        relayd device list --state <state.json> [--secrets <secrets.json>]
@@ -44,6 +46,7 @@ fn main() -> ExitCode {
         ["maintenance", rest @ ..] => device_cmd::maintenance(rest),
         ["keys", rest @ ..] => serve_cmd::keys(rest),
         ["serve", rest @ ..] => serve_cmd::serve(rest),
+        ["install", rest @ ..] => install_cmd::install(rest),
         ["pair", rest @ ..] => pair_cmd::pair(rest),
         ["egress", rest @ ..] => egress_cmd::egress(rest),
         _ => None,

@@ -1,7 +1,13 @@
 d /var/lib/vpn-chain           0755 root   root   -
+d /var/lib/vpn-chain/relay     0700 relayd relayd -
 d /var/lib/vpn-chain/jobs      0700 relayd relayd -
 d /var/lib/vpn-chain/requests  0700 relayd relayd -
 d /var/lib/vpn-chain/confirm   0700 relayd relayd -
 d /var/lib/vpn-chain/staged    0700 relayd relayd -
 d /var/lib/vpn-chain/snapshots 0700 root   root   -
 d /opt/vpn-chain/xray          0755 root   root   -
+d /usr/local/etc/xray          0750 relayd xray   -
+d /var/log/xray                0775 xray   xray   -
+Z /var/log/xray                -    xray   xray   -
+f /run/lock/vpn-chain-devices.lock 0664 root relayd -
+z /run/lock/vpn-chain-devices.lock 0664 root relayd -

@@ -51,11 +51,19 @@ pub fn lock(path: &Path) -> Result<File, Error> {
 
 /// Like [`lock`], retrying until `wait` has passed, as the scripts' `flock -w` does.
 pub fn lock_within(path: &Path, wait: Duration) -> Result<File, Error> {
+    // A create-open of a file another user made is refused in a sticky directory such as
+    // /run/lock, so the lock the scripts made is opened as it is.
     let file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
         .write(true)
         .open(path)
+        .or_else(|error| match error.kind() {
+            ErrorKind::NotFound => OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(path),
+            _ => Err(error),
+        })
         .map_err(|error| Error::at(path, error))?;
     let deadline = Instant::now() + wait;
     loop {

@@ -1,1 +1,3 @@
 u relayd - "vpn-chain relay daemon" /var/lib/vpn-chain
+u xray - "xray"
+m relayd xray
