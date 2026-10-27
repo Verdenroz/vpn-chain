@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Runs relay/packaging/setup.sh in a container against a release the test signs with a
-# throwaway minisign key, and checks that anything the key did not sign aborts before relayd
-# runs. The container is plain, not privileged, and gone afterwards.
+# Runs relay/packaging/setup.sh in a container against a release the test serves itself, and
+# checks that a download not matching its published SHA-256 aborts before relayd runs. The
+# container is plain, not privileged, and gone afterwards.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
