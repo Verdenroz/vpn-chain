@@ -25,6 +25,7 @@ cleanup() {
 }
 dump() {
     echo "FAILED at line $1" >&2
+    docker logs "$NAME" >&2 || true
     docker exec "$NAME" journalctl --no-pager -n 60 -u relay-privileged -u xray -u client >&2 || true
 }
 trap cleanup EXIT
@@ -103,8 +104,10 @@ cp "$BINS/xray-v$GOOD/xray" "$WORK/bins/xray/$GOOD/xray"
 cp "$BAD_XRAY" "$WORK/bins/xray/$BAD/xray"
 cp "$BINS/sing-box-$SINGBOX/sing-box" "$WORK/bins/sing-box/sing-box"
 
+# CI sets --security-opt apparmor=unconfined: Ubuntu's docker profile denies the cgroup remount.
+read -ra EXTRA <<<"${RELAY_JOBS_DOCKER_EXTRA:-}"
 docker build -q -t "$NAME" "$HERE" >/dev/null
-docker run -d --name "$NAME" \
+docker run -d --name "$NAME" "${EXTRA[@]}" \
     --cap-add SYS_ADMIN --cgroupns=private --tmpfs /run --tmpfs /run/lock --tmpfs /tmp \
     -v "$HERE:/opt/live:ro" -v "$WORK/bins:/opt/bins:ro" \
     -v "$BUILD:/opt/build:ro" -v "$RELAY/packaging/systemd:/opt/units:ro" \

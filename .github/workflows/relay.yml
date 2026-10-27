@@ -53,3 +53,5 @@ jobs:
           persist-credentials: false
       - run: rustup toolchain install
       - run: crates/relay-jobs/tests/live/run.sh
+        env:
+          RELAY_JOBS_DOCKER_EXTRA: --security-opt apparmor=unconfined
