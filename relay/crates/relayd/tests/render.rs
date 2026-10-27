@@ -84,22 +84,10 @@ fn spare_short_ids_follow_the_devices_ids() {
 }
 
 #[test]
-fn a_direct_exit_resolves_names_before_the_private_address_rule_and_dials_the_same_answer() {
+fn a_direct_exit_resolves_names_before_the_private_address_rule() {
     let config = render(&relay("relay-direct"));
 
     assert_eq!(config["routing"]["domainStrategy"], "IPOnDemand");
-    assert_eq!(
-        config["dns"],
-        serde_json::json!({ "servers": ["localhost"] })
-    );
-    assert_eq!(
-        config["outbounds"][0],
-        serde_json::json!({
-            "tag": "direct",
-            "protocol": "freedom",
-            "settings": { "domainStrategy": "UseIP" },
-        })
-    );
 }
 
 #[test]
@@ -107,9 +95,4 @@ fn a_wireguard_exit_leaves_names_to_the_tunnel() {
     let config = render(&relay("relay-wireguard"));
 
     assert_eq!(config["routing"]["domainStrategy"], "AsIs");
-    assert!(config.get("dns").is_none());
-    assert_eq!(
-        config["outbounds"][0],
-        serde_json::json!({ "tag": "direct", "protocol": "freedom" })
-    );
 }

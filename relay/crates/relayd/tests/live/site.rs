@@ -64,7 +64,7 @@ pub struct Site {
     pub echo: u16,
     pub private_echo: u16,
     pub loopback_echo: u16,
-    pub loopback6_echo: u16,
+    pub loopback6_echo: Option<u16>,
     pub laptop: Credentials,
     live: XrayLive,
     pub restart: DockerRestart,
@@ -136,7 +136,10 @@ impl Site {
         let echo = rt.block_on(echo_server_on(lab.public_ip));
         let private_echo = rt.block_on(echo_server_on(lab.private_ip));
         let loopback_echo = rt.block_on(echo_server());
-        let loopback6_echo = rt.block_on(echo_server_on(IpAddr::from([0, 0, 0, 0, 0, 0, 0, 1])));
+        let ipv6 = IpAddr::from([0, 0, 0, 0, 0, 0, 0, 1]);
+        let loopback6_echo = std::net::TcpListener::bind((ipv6, 0))
+            .is_ok()
+            .then(|| rt.block_on(echo_server_on(ipv6)));
         Self {
             live: XrayLive::connect(lab.api_port).unwrap(),
             restart: DockerRestart {

@@ -291,10 +291,12 @@ fn refuse_unmodelled(config: &Value, relay: &Relay) -> Result<(), Error> {
     if section::<Value>(config, "outbounds", AGENT_TAG)?.is_none() {
         without_agent(&mut rendered);
     }
-    if resolves_names(relay) && config.pointer("/routing/domainStrategy") == Some(&json!("AsIs")) {
-        without_name_resolution(&mut rendered);
+    let mut found = normalize(config);
+    if resolves_names(relay) && leaves_names_alone(config) {
+        found["routing"]["domainStrategy"] = json!("AsIs");
+        rendered["routing"]["domainStrategy"] = json!("AsIs");
     }
-    match difference(&normalize(config), &normalize(&rendered), "") {
+    match difference(&found, &normalize(&rendered), "") {
         None => Ok(()),
         Some(path) => Err(Error::new(format!(
             "{path} is not what relayd renders; importing would change or drop it"
@@ -313,32 +315,32 @@ fn without_agent(config: &mut Value) {
 }
 
 /// A relay deployed before names were resolved ahead of the private-address rule, which
-/// rendering turns on.
-fn without_name_resolution(config: &mut Value) {
-    if let Some(object) = config.as_object_mut() {
-        object.remove("dns");
-    }
-    config["routing"]["domainStrategy"] = json!("AsIs");
-    if let Some(direct) = config["outbounds"]
-        .as_array_mut()
-        .and_then(|outbounds| {
-            outbounds
-                .iter_mut()
-                .find(|outbound| outbound["tag"] == "direct")
-        })
-        .and_then(Value::as_object_mut)
-    {
-        direct.remove("settings");
-    }
+/// rendering turns on. xray reads a missing strategy, or any case of it, as `AsIs`.
+fn leaves_names_alone(config: &Value) -> bool {
+    config
+        .pointer("/routing/domainStrategy")
+        .and_then(Value::as_str)
+        .is_none_or(|strategy| strategy.eq_ignore_ascii_case("AsIs"))
 }
 
-/// xray treats `shortIds` as a set, and relayd lists device IDs before spares. A relay that
-/// serves only `StatsService` is still importable: rendering it adds `HandlerService`.
+/// Whether xray would run `rendered` exactly as it runs `found`.
+pub(crate) fn same_config(found: &Value, rendered: &Value) -> bool {
+    difference(&ordered(found), &ordered(rendered), "").is_none()
+}
+
+/// A relay that serves only `StatsService` is still importable: rendering it adds
+/// `HandlerService`.
 fn normalize(config: &Value) -> Value {
-    let mut config = config.clone();
+    let mut config = ordered(config);
     if config.pointer("/api/services") == Some(&json!(["StatsService"])) {
         config["api"]["services"] = json!(["HandlerService", "StatsService"]);
     }
+    config
+}
+
+/// xray treats `shortIds` as a set, and relayd lists device IDs before spares.
+fn ordered(config: &Value) -> Value {
+    let mut config = config.clone();
     let ids = config
         .pointer_mut("/inbounds")
         .and_then(Value::as_array_mut)

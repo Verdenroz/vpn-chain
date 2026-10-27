@@ -194,12 +194,16 @@ fn nothing_on_the_relay_answers_through_the_tunnel_by_address_or_by_name() {
             "a public address, sing-box {version}"
         );
 
+        let ipv6 = site.loopback6_echo.into_iter().flat_map(|port| {
+            [
+                ("a name for ::1", LOOPBACK6_HOST, port),
+                ("::1", "[::1]", port),
+            ]
+        });
         let refused = [
             ("a name for loopback", LOOPBACK_HOST, site.loopback_echo),
             ("localhost", "localhost", site.loopback_echo),
             ("a loopback address", "127.0.0.1", site.loopback_echo),
-            ("a name for ::1", LOOPBACK6_HOST, site.loopback6_echo),
-            ("::1", "[::1]", site.loopback6_echo),
             (
                 "a name for a private address",
                 PRIVATE_HOST,
@@ -207,7 +211,7 @@ fn nothing_on_the_relay_answers_through_the_tunnel_by_address_or_by_name() {
             ),
             ("a private address", private.as_str(), site.private_echo),
         ];
-        for (what, host, port) in refused {
+        for (what, host, port) in refused.into_iter().chain(ipv6) {
             assert!(
                 !echoes(&site, proxy, host, port),
                 "{what} reached an echo server, sing-box {version}"
