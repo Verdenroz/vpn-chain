@@ -1,5 +1,3 @@
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("vpnchain.compose.multiplatform")
@@ -80,17 +78,10 @@ compose.desktop {
         // reflection make that a minefield, so ship unminified for now.
         buildTypes.release.proguard { isEnabled.set(false) }
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             modules("jdk.unsupported")
             packageName = "vpn-chain"
             packageVersion = appVersion
             linux { iconFile.set(project.file("icons/vpn-chain.png")) }
-            windows { iconFile.set(project.file("icons/vpn-chain.ico")) }
-            macOS {
-                iconFile.set(project.file("icons/vpn-chain.icns"))
-                // Dmg refuses MAJOR=0 versions; placeholder until 1.0.
-                packageVersion = "1.0.0"
-            }
         }
     }
 }

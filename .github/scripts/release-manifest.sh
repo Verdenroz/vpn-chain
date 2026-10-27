@@ -15,9 +15,9 @@ badge() {
 }
 
 artifacts='{}'
-for entry in android-arm64-v8a:apk android-x86_64:apk linux-x64:tar.gz; do
+for entry in "android-arm64-v8a:vpn-chain-$version-android-arm64-v8a.apk" "android-x86_64:vpn-chain-$version-android-x86_64.apk" "linux-x64:vpn-chain_${version}_amd64.deb"; do
   key="${entry%%:*}"
-  name="vpn-chain-$version-$key.${entry#*:}"
+  name="${entry#*:}"
   [ -f "$dist/$name" ] || { echo "missing $name" >&2; exit 1; }
   artifacts=$(jq \
     --arg key "$key" \
