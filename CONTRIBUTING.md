@@ -25,6 +25,31 @@ instrumented Android suite.
 The kill-switch helper builds with `cli/killswitch/build.sh` (needs `gcc` and the
 libcap headers). Shell scripts must pass `shellcheck`.
 
+### Linux source build
+
+`:desktopApp:run` finds `sing-box` and `vpn-chain-killswitch` on the `PATH`; an
+installed `.deb` takes precedence with its own copies under `/opt/vpn-chain/libexec`.
+`cli/setup-desktop.sh` is the source-build counterpart of the package: it builds the
+helper and grants it `cap_net_admin`, installs the relay unit for the `sing-box` on
+your `PATH`, and installs the polkit rules. Run it again after you rebuild the helper
+or move `sing-box`. `cli/vpn-chain` is the bash command line for the same setup.
+
+### Linux package
+
+```
+./gradlew :desktopApp:createReleaseDistributable
+desktopApp/deb/build-deb.sh desktopApp/build/compose/binaries/main-release/app/vpn-chain dist
+desktopApp/deb/test-install.sh dist/vpn-chain_*_amd64.deb debian:trixie-slim
+```
+
+`build-deb.sh` needs `dpkg-deb`, `gcc` with the libcap headers and `curl`, so run it
+on Debian or Ubuntu or in a container. The package holds the app image, the pinned
+`sing-box` and the helper under `/opt/vpn-chain`, the relay unit, the polkit rules
+and the update action. The helper alone carries a file capability, set in `postinst`;
+`sing-box` gets its capabilities from the unit. `test-install.sh` installs, removes
+and purges the package in a container with no privileges and no systemd. The
+`deb` workflow runs all of this on every change to the files it packages.
+
 ### Server scripts
 
 These need Docker. The first run downloads the pinned Xray and checks its SHA-256.
@@ -61,7 +86,8 @@ nothing in the unit tests noticing. Bump only with `matrix.sh` green.
 - **Xray:** `XRAY_VERSION` and both SHA-256 values in `server/lib/pins.sh`, and the
   pin in `relay/crates/xray-api/tests/fetch-bins.sh`.
 - **sing-box:** `libbox` in `gradle/libs.versions.toml` (Android),
-  `SINGBOX_VERSIONS_DEFAULT` and its SHA-256 values in `server/lib/pins.sh`, the
+  `SINGBOX_VERSIONS_DEFAULT` and its SHA-256 values in `server/lib/pins.sh` (the
+  `.deb` bundles the `libbox` version, checked against that SHA-256), the
   pins in `relay/crates/xray-api/tests/fetch-bins.sh`, and `SING_BOX_VERSION` in
   `.github/workflows/blocklists.yml`. The blocklists must compile with the oldest
   sing-box the apps run, because an older runtime cannot read a newer `.srs`.
@@ -82,17 +108,16 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`.
 3. Approve the `publish` job in the `release` environment. It publishes a
    pre-release, which no installed copy is offered.
 4. Install it from the release page and test it on a device, then promote it.
-   The in-app updater and `cli/install-desktop.sh` only see the latest full release.
+   The in-app updater only sees the latest full release.
 
    ```
    gh release edit v0.2.1 --prerelease=false --latest
    ```
 
-The release carries the signed APKs (arm64-v8a, x86_64), a `.deb`, the Linux
-tarball the managed install updates from, an `.msi`, an unsigned `.dmg`, and
-`manifest.json` with the size and SHA-256 of the APKs and the tarball.
-`core/update/.../DesktopInstall.kt` and `cli/install-desktop.sh` apply the same
-checks to the tarball; change them together.
+The release carries the signed APKs (arm64-v8a, x86_64), the `.deb`, and
+`manifest.json` with the size and SHA-256 of each. The installed app downloads the
+`.deb`, checks those, and hands it to `desktopApp/deb/vpn-chain-install-update`
+through `pkexec`, which hashes its own copy again before `apt` installs it.
 
 ### Signing
 
