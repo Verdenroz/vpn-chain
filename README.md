@@ -123,6 +123,10 @@ Your connection details stay on your devices: in `~/.config/vpn-chain`
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## License
+
+GPL-3.0-or-later; the bundled sing-box is GPL-3.
+
 ## Third-party data
 
 `core/warp/src/jvmShared/resources/vpnchain/public_suffix_list.dat` is the
