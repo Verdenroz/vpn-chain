@@ -7,6 +7,7 @@ import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.relay.AgentException
 import com.verdenroz.vpnchain.core.relay.AgentUnreachable
 import com.verdenroz.vpnchain.core.relay.ManagementKey
+import com.verdenroz.vpnchain.core.relay.PairingException
 import com.verdenroz.vpnchain.core.relay.PairingLink
 import com.verdenroz.vpnchain.core.relay.RelayAgent
 import com.verdenroz.vpnchain.core.relay.id
@@ -65,23 +66,23 @@ class PairRelayUseCase(
             serverPort = link.port,
         )
         val id = profiles.add(name = link.host, relay = relay, wireGuard = null)
-        try {
+        val enrolled = try {
             onStep(PairingStep.Connecting, link.host)
             moveTunnel(wasUp).getOrElse { throw PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Unreachable, it) }
             onStep(PairingStep.Registering, link.host)
-            val enrolled = enroll(link)
-            profiles.save(
-                relay.copy(vlessUuid = enrolled.identity.uuid, shortId = enrolled.identity.shortId, managementKeyId = key.id),
-                entryHop = null,
-            )
+            enroll(link)
         } catch (e: Throwable) {
-            withContext(NonCancellable) { undo(id, previous, wasUp) }
+            withContext(NonCancellable) { runCatching { undo(id, previous, wasUp) } }
             throw e
         }
+        profiles.save(
+            relay.copy(vlessUuid = enrolled.identity.uuid, shortId = enrolled.identity.shortId, managementKeyId = key.id),
+            entryHop = null,
+        )
         onStep(PairingStep.Reconnecting, link.host)
         chain.restart().getOrElse { throw PairingFailed(PairingStep.Reconnecting, PairingFailed.Reason.Failed, it) }
         link.host
-    }
+    }.recoverCatching { throw it as? PairingFailed ?: it as? PairingException ?: PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Failed, it) }
 
     private suspend fun moveTunnel(wasUp: Boolean) = if (wasUp) chain.restart() else chain.connect()
 

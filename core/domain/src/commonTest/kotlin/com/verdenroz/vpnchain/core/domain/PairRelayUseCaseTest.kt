@@ -137,6 +137,14 @@ class PairRelayUseCaseTest {
     }
 
     @Test
+    fun `an unexpected exception is wrapped so its text never reaches the screen`() = runTest {
+        val error = failure(useCase(enroll = { throw IllegalStateException("JSON input: 22222222-2222") }).pair(LINK) { _, _ -> })
+
+        assertEquals(PairingFailed.Reason.Failed, error.reason)
+        assertTrue("22222222" !in error.message.orEmpty())
+    }
+
+    @Test
     fun `no failure message shows the link`() = runTest {
         val error = failure(useCase(enroll = { throw AgentException(401, "unauthorized") }).pair(LINK) { _, _ -> })
 

@@ -173,6 +173,14 @@ class HttpRelayAgentTest {
     }
 
     @Test
+    fun `a device name that could change the path is not sent`() = runTest {
+        val (client, fake) = agent()
+
+        assertFailsWith<IllegalArgumentException> { client.revoke("../relay") }
+        assertEquals(0, fake.seen.size)
+    }
+
+    @Test
     fun `the signed message matches the vector relayd tests pin`() {
         assertEquals(Vector.MESSAGE, signedMessage("POST", "/v1/devices", "{}".encodeToByteArray(), "100", "0123456789abcdef"))
     }

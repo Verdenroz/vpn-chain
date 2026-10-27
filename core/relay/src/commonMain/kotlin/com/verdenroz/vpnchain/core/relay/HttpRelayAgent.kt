@@ -12,6 +12,8 @@ import okio.ByteString.Companion.toByteString
 /** A 401 with a clock this far from ours is read as skew, not as a refused key. */
 private const val SKEW_THRESHOLD_SECONDS = 30L
 
+private val DEVICE_NAME = Regex("[a-z0-9][a-z0-9._-]{0,31}")
+
 private val json = Json { ignoreUnknownKeys = true }
 
 internal class HttpRelayAgent(
@@ -36,12 +38,12 @@ internal class HttpRelayAgent(
         }.toString()).field<AgentIdentity>("identity")
 
     override suspend fun rename(name: String, to: String) {
-        send("PATCH", "/v1/devices/$name", buildJsonObject { put("name", to) }.toString())
+        send("PATCH", "/v1/devices/${segment(name)}", buildJsonObject { put("name", to) }.toString())
     }
 
-    override suspend fun revoke(name: String) = send("DELETE", "/v1/devices/$name").decode<Revoked>()
+    override suspend fun revoke(name: String) = send("DELETE", "/v1/devices/${segment(name)}").decode<Revoked>()
 
-    override suspend fun rekey(name: String) = send("POST", "/v1/devices/$name/rekey").field<AgentIdentity>("identity")
+    override suspend fun rekey(name: String) = send("POST", "/v1/devices/${segment(name)}/rekey").field<AgentIdentity>("identity")
 
     override suspend fun startJob(request: JobRequest): String {
         val body = buildJsonObject {
@@ -99,6 +101,9 @@ internal class HttpRelayAgent(
         )
         return transport.send(proxy(), AgentRequest(method, target, body, headers))
     }
+
+    // A name goes into the signed request target, so it must not be able to change the path.
+    private fun segment(name: String) = name.also { require(DEVICE_NAME.matches(it)) { "not a device name" } }
 
     private fun proxy() = probe.current() ?: throw AgentUnreachable("The tunnel is not connected.")
 
