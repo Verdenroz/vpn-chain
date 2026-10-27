@@ -2,6 +2,9 @@
 //! docker, with the sing-box clients the apps ship. Every config swap runs the real
 //! `xray -test`. Needs docker with host networking: `cargo test --test live -- --ignored`.
 
+mod agent;
+#[path = "../common/mod.rs"]
+mod common;
 mod site;
 
 use std::path::Path;

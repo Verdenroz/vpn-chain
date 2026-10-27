@@ -17,7 +17,7 @@ use xray_api::XrayApi;
 
 pub const SPARES: usize = 4;
 pub const LAPTOP: &str = "laptop";
-const NO_GROUP: &str = "relayd-test-no-such-group";
+pub const NO_GROUP: &str = "relayd-test-no-such-group";
 
 /// Restarts the lab's xray container, which is what `systemctl restart xray` does to the
 /// relay: open connections drop, and xray reloads `config.json`.
@@ -143,6 +143,14 @@ impl Site {
             dir,
             lab,
             rt,
+        }
+    }
+
+    /// Another restart of the lab's xray, for a service that owns its own.
+    pub fn restart_handle(&self) -> DockerRestart {
+        DockerRestart {
+            container: self.lab.xray_container(),
+            ports: [self.lab.api_port, self.lab.vless_port],
         }
     }
 
