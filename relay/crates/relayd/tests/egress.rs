@@ -67,7 +67,7 @@ fn private_and_link_local_ranges_are_rejected() {
 }
 
 #[test]
-fn a_loopback_resolver_takes_every_port_and_another_only_dns() {
+fn every_resolver_takes_dns_and_nothing_else() {
     let rules = ruleset(
         10086,
         &[
@@ -77,7 +77,12 @@ fn a_loopback_resolver_takes_every_port_and_another_only_dns() {
         ],
     );
 
-    assert!(rules.contains("ip daddr 127.0.0.53 accept"));
+    assert!(
+        rules.contains(
+            "ip daddr 127.0.0.53 meta l4proto { tcp, udp } ct original proto-dst 53 accept"
+        )
+    );
+    assert!(!rules.contains("ip daddr 127.0.0.53 accept"));
     assert!(rules.contains("ip daddr 10.0.0.2 meta l4proto { tcp, udp } th dport 53 accept"));
     assert!(rules.contains("ip6 daddr fd00::2 meta l4proto { tcp, udp } th dport 53 accept"));
     assert!(rules.find("th dport 53").unwrap() < rules.find("reject").unwrap());
