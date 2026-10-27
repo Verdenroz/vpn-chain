@@ -97,6 +97,7 @@ class PairingLinkTest {
             link().replace("pbk=$KEY", "pbk=short"),
             link(extra = "&p=80"),
             link().replace("h=203.0.113.10", "h=%zz"),
+            link().replace("n=laptop", "n=a%+fb"),
             link().replace("v=1&", ""),
         )
 

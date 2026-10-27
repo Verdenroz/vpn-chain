@@ -103,6 +103,16 @@ class PairingImportTest {
     }
 
     @Test
+    fun `a link taken twice before the first step reports pairs once`() {
+        val viewModel = viewModel(FakePairing(log, gate = CompletableDeferred()))
+
+        viewModel.importSecretsEnv(LINK)
+        viewModel.importSecretsEnv(LINK)
+
+        assertEquals(listOf("pair"), log)
+    }
+
+    @Test
     fun `each failure says what to do about it`() {
         val cases = listOf(
             PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Expired) to Res.string.settings_pairing_expired,
