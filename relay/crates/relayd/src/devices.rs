@@ -8,8 +8,8 @@ use xray_api::{Traffic, UserId, VlessUser};
 
 use crate::live::fold;
 use crate::{
-    Device, Error, Identity, Key, Live, Placement, Relay, Restart, Role, Secret, State, store,
-    valid_name, write_config,
+    Device, Error, Exit, Identity, Key, Live, Placement, Relay, Restart, Role, Secret, Secrets,
+    State, store, valid_name, write_config,
 };
 
 /// Short IDs kept unissued in the config, so a new device never needs a restart.
@@ -250,6 +250,29 @@ impl Manager<'_> {
         Ok(added)
     }
 
+    /// Makes `exit` the relay's exit, with `key` as the WireGuard private key it needs, and
+    /// restarts xray to dial through it. The restart drops every open connection.
+    ///
+    /// The previous state, secrets and config are put back if the new config is refused.
+    pub fn set_exit(&self, exit: Exit, key: Option<Secret>) -> Result<(), Error> {
+        let _held = store::lock_within(self.lock, self.lock_wait)?;
+        let relay = self.begin()?;
+        let next = Relay {
+            state: State {
+                exit,
+                ..relay.state.clone()
+            },
+            secrets: Secrets {
+                exit_secret_key: key,
+                ..relay.secrets.clone()
+            },
+        };
+        next.validate()
+            .map_err(|error| Error::invalid(error.to_string()))?;
+        self.write_exit(&relay, &next)?;
+        self.restart_xray()
+    }
+
     /// Loads the relay and folds xray's counters into it, saving the totals before anything
     /// else changes. xray zeroes a counter as it reads it, so bytes are lost if the process
     /// dies, or the response times out, between that read and the save.
@@ -309,6 +332,15 @@ impl Manager<'_> {
         after.save_state(self.state)?;
         write_config(after, self.config, &self.placement).inspect_err(|_| {
             let _ = before.save_state(self.state);
+        })
+    }
+
+    /// [`Manager::write_out`] for a change that also touches the secrets, which go first so the
+    /// state never names a key that is not there.
+    fn write_exit(&self, before: &Relay, after: &Relay) -> Result<(), Error> {
+        after.save_secrets(self.secrets)?;
+        self.write_out(before, after).inspect_err(|_| {
+            let _ = before.save_secrets(self.secrets);
         })
     }
 

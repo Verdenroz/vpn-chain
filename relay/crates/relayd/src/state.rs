@@ -192,6 +192,12 @@ impl Relay {
         store::replace(state, &store::to_json(&self.state), 0o600)
     }
 
+    /// Replaces the secrets file, leaving the state alone.
+    pub fn save_secrets(&self, secrets: &Path) -> Result<(), Error> {
+        self.validate()?;
+        store::replace(secrets, &store::to_json(&self.secrets), 0o600)
+    }
+
     pub fn validate(&self) -> Result<(), Error> {
         validate::relay(self)
     }

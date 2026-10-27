@@ -9,7 +9,7 @@ mod host;
 mod pinned;
 mod ssh;
 mod units;
-mod wireguard;
+pub(crate) mod wireguard;
 
 use std::fs;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};

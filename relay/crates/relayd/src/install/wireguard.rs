@@ -10,10 +10,15 @@ const DNS: &str = "10.2.0.1";
 /// The WireGuard exit a provider's `wg-quick` file describes, and its private key.
 pub fn read(path: &Path) -> Result<(Exit, Secret), Error> {
     let text = fs::read_to_string(path).map_err(|error| Error::at(path, error))?;
-    let fields = fields(&text);
+    parse(&text).map_err(|error| Error::at(path, error))
+}
+
+/// [`read`] for the file's text. A refusal names the missing or bad field, never its value.
+pub fn parse(text: &str) -> Result<(Exit, Secret), Error> {
+    let fields = fields(text);
     let first = |name: &str| fields.get(name).and_then(|values| values.first().cloned());
     let need = |name: &str| {
-        first(name).ok_or_else(|| Error::at(path, format!("no {name} in the WireGuard file")))
+        first(name).ok_or_else(|| Error::invalid(format!("no {name} in the WireGuard file")))
     };
     let address: Vec<String> = fields
         .get("address")
@@ -28,7 +33,7 @@ pub fn read(path: &Path) -> Result<(Exit, Secret), Error> {
     let mtu = match first("mtu") {
         Some(mtu) => mtu
             .parse()
-            .map_err(|_| Error::at(path, "the WireGuard MTU is not a number"))?,
+            .map_err(|_| Error::invalid("the WireGuard MTU is not a number"))?,
         None => MTU,
     };
     let dns = first("dns")
