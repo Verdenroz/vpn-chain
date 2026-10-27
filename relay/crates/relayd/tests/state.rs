@@ -84,6 +84,7 @@ fn create_refuses_to_replace_an_existing_state() {
         "{error}"
     );
     assert_eq!(fs::read_to_string(&path).unwrap(), "kept");
+    assert!(!secrets_path(&path).exists());
 }
 
 #[test]

@@ -27,11 +27,22 @@ pub fn create(path: &Path, contents: &[u8], mode: u32) -> Result<(), Error> {
     fs::remove_file(&pending).map_err(|error| Error::at(&pending, error))?;
     match linked {
         Ok(()) => sync_parent(path),
-        Err(error) if error.kind() == ErrorKind::AlreadyExists => {
-            Err(Error::at(path, "already exists; refusing to overwrite it"))
-        }
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => Err(exists(path)),
         Err(error) => Err(Error::at(path, error)),
     }
+}
+
+/// Fails if `path` exists, for a caller about to [`create`] several files together.
+pub fn absent(path: &Path) -> Result<(), Error> {
+    if path.exists() {
+        Err(exists(path))
+    } else {
+        Ok(())
+    }
+}
+
+fn exists(path: &Path) -> Error {
+    Error::at(path, "already exists; refusing to overwrite it")
 }
 
 fn stage(path: &Path, contents: &[u8], mode: u32) -> Result<std::path::PathBuf, Error> {

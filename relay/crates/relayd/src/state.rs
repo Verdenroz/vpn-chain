@@ -132,6 +132,7 @@ impl Relay {
     /// exists without them.
     pub fn create(&self, state: &Path, secrets: &Path) -> Result<(), Error> {
         self.validate()?;
+        store::absent(state)?;
         store::create(secrets, &to_json(&self.secrets), 0o600)?;
         store::create(state, &to_json(&self.state), 0o600)
     }
