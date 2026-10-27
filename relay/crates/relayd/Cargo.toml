@@ -5,11 +5,11 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-getrandom = "0.4.3"
 base64 = "0.23.1"
+getrandom = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["preserve_order"] }
-tokio = { version = "1.54.1", features = ["rt"] }
+tokio = { version = "1.54.1", features = ["net", "rt", "time"] }
 uuid = { version = "1.29.0", features = ["v4"] }
 xray-api = { path = "../xray-api" }
 
