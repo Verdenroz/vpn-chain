@@ -739,8 +739,10 @@ internal fun staleTunRelease(previousFd: Int?, newFd: Int): StaleTunRelease =
     if (previousFd == newFd) StaleTunRelease.Detach else StaleTunRelease.Close
 
 /**
- * Detection reads the connection stream whenever the config has probes. Closing a
- * rerouted site's connections needs it only while a site is routed or a close is pending.
+ * Detection reads the connection stream whenever the config has probes past the relay; the relay
+ * probe alone serves relay management. Closing a rerouted site's connections needs it only while
+ * a site is routed or a close is pending.
  */
 internal fun wantsConnectionEvents(config: String, closesWanted: Boolean): Boolean =
-    ProbeProxy.fromConfig(config) != null || (closesWanted && SingBoxConfigFactory.routesLearnedSites(config))
+    ProbeProxy.fromConfig(config)?.let { it.warpPort != 0 || it.fallbackPort != 0 } == true ||
+        (closesWanted && SingBoxConfigFactory.routesLearnedSites(config))

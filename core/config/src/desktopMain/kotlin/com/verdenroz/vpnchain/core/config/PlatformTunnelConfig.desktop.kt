@@ -23,7 +23,7 @@ actual fun renderPlatformTunnelConfig(
     // this user's home nor its stdout.
     val cachePath = if (SystemdRelay.available) SystemdRelay.cachePath else cacheFilePath()
     val logPath = if (SystemdRelay.available) SystemdRelay.logFile.absolutePath else null
-    val probe = if (settings.learningActive) newProbeProxy() else null
+    val probe = relay?.let { newProbeProxy() }
     // No relay means no SOCKS-proxy shape to fall back on: a bare WireGuard
     // peer only exists as a TUN.
     return if (relay == null) {
