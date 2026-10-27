@@ -28,6 +28,7 @@ const DEST_IMAGE: &str =
 pub struct Lab {
     pub vless_port: u16,
     pub api_port: u16,
+    pub agent_port: u16,
     pub dest_port: u16,
     pub public_key: String,
     pub private_key: String,
@@ -47,6 +48,7 @@ impl Lab {
         let lab = Self {
             vless_port: free_port(),
             api_port: free_port(),
+            agent_port: free_port(),
             dest_port: free_port(),
             public_key,
             private_key,

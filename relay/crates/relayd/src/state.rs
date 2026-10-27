@@ -3,11 +3,22 @@ use std::path::{Path, PathBuf};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 
-use crate::{Error, Secret, store, validate};
+use crate::{Error, Key, Secret, store, validate};
 
-/// Bump whenever a persisted shape changes, and keep a migration from the version it leaves.
-pub const SCHEMA: u32 = 1;
+/// Bump whenever the state's shape changes, and keep a migration from the version it leaves.
+pub const SCHEMA: u32 = 2;
+
+/// The secrets file's own version, which only changes when its own shape does.
+pub const SECRETS_SCHEMA: u32 = 1;
+
+/// The loopback port the agent listens on unless the relay's config already names another.
+pub const AGENT_PORT: u16 = 10086;
+
+/// The name a client dials to reach the agent through the tunnel. `.invalid` never resolves, so
+/// it cannot be reached any other way.
+pub const AGENT_HOST: &str = "agent.vpn-chain.invalid";
 
 /// The xray release relayd renders for: `XRAY_VERSION` in `server/lib/pins.sh`, without the `v`.
 pub const XRAY_VERSION: &str = "26.3.27";
@@ -31,6 +42,9 @@ pub struct State {
     pub exit: Exit,
     /// The loopback stats API. A relay deployed before per-device traffic has none.
     pub api: Option<Api>,
+    pub agent: Agent,
+    /// Who may call the agent.
+    pub keys: Vec<Key>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,6 +111,12 @@ pub struct Api {
     pub port: u16,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Agent {
+    pub port: u16,
+}
+
 /// Kept in its own 0600 file so the state can be read, shown and diffed without a key in it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -122,8 +142,8 @@ pub fn secrets_path(state: &Path) -> PathBuf {
 impl Relay {
     pub fn load(state: &Path, secrets: &Path) -> Result<Self, Error> {
         let relay = Self {
-            state: read_versioned(state)?,
-            secrets: read_versioned(secrets)?,
+            state: read_state(state)?,
+            secrets: read_versioned(secrets, SECRETS_SCHEMA)?,
         };
         relay.validate()?;
         Ok(relay)
@@ -177,18 +197,47 @@ impl Relay {
     }
 }
 
-fn read_versioned<T: DeserializeOwned>(path: &Path) -> Result<T, Error> {
+fn read_state(path: &Path) -> Result<State, Error> {
+    let text = read_text(path)?;
+    match version(path, &text)? {
+        SCHEMA => store::parse(path, &text),
+        1 => {
+            let mut v1: Value = store::parse(path, &text)?;
+            v1["v"] = json!(SCHEMA);
+            v1["agent"] = json!({ "port": AGENT_PORT });
+            v1["keys"] = json!([]);
+            serde_json::from_value(v1).map_err(|error| Error::at(path, store::described(&error)))
+        }
+        other => Err(unreadable(path, other, SCHEMA)),
+    }
+}
+
+fn read_versioned<T: DeserializeOwned>(path: &Path, schema: u32) -> Result<T, Error> {
+    let text = read_text(path)?;
+    match version(path, &text)? {
+        v if v == schema => store::parse(path, &text),
+        other => Err(unreadable(path, other, schema)),
+    }
+}
+
+fn read_text(path: &Path) -> Result<String, Error> {
+    fs::read_to_string(path).map_err(|error| Error::at(path, error))
+}
+
+fn version(path: &Path, text: &str) -> Result<u32, Error> {
     #[derive(Deserialize)]
     struct Envelope {
         v: Option<u64>,
     }
-    let text = fs::read_to_string(path).map_err(|error| Error::at(path, error))?;
-    match store::parse::<Envelope>(path, &text)?.v {
-        Some(v) if v == u64::from(SCHEMA) => store::parse(path, &text),
-        Some(other) => Err(Error::at(
-            path,
-            format!("written by schema v{other}; this relayd reads v{SCHEMA}"),
-        )),
-        None => Err(Error::at(path, "not a relayd file: no \"v\"")),
-    }
+    let v = store::parse::<Envelope>(path, text)?
+        .v
+        .ok_or_else(|| Error::at(path, "not a relayd file: no \"v\""))?;
+    Ok(u32::try_from(v).unwrap_or(u32::MAX))
+}
+
+fn unreadable(path: &Path, found: u32, current: u32) -> Error {
+    Error::at(
+        path,
+        format!("written by schema v{found}; this relayd reads v{current}"),
+    )
 }

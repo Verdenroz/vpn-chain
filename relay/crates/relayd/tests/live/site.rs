@@ -6,8 +6,9 @@ use std::time::{Duration, Instant};
 
 use live_harness::{ECHO_HOST, Lab, SNI, echo_server, roundtrip_to, short_id, wait_for_port};
 use relayd::{
-    Api, Device, Error, Exit, INBOUND_TAG, Inbound, Manager, Placement, Relay, Restart, Role,
-    SCHEMA, Secret, Secrets, State, XRAY_VERSION, Xray, XrayLive, secrets_path, write_config,
+    Agent, Api, Device, Error, Exit, INBOUND_TAG, Inbound, Manager, Placement, Relay, Restart,
+    Role, SCHEMA, SECRETS_SCHEMA, Secret, Secrets, State, XRAY_VERSION, Xray, XrayLive,
+    secrets_path, write_config,
 };
 use serde_json::Value;
 use tokio::runtime::{Builder, Runtime};
@@ -104,9 +105,13 @@ impl Site {
                 spare_short_ids: (0..SPARES).map(|_| Secret::new(short_id())).collect(),
                 exit: Exit::Direct,
                 api: Some(Api { port: lab.api_port }),
+                agent: Agent {
+                    port: lab.agent_port,
+                },
+                keys: Vec::new(),
             },
             secrets: Secrets {
-                v: SCHEMA,
+                v: SECRETS_SCHEMA,
                 reality_private_key: Secret::new(&lab.private_key),
                 exit_secret_key: None,
             },

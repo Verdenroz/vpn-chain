@@ -3,7 +3,7 @@ mod common;
 use std::fs;
 
 use common::{assert_no_secret, fixture, import, read, relay};
-use relayd::{Exit, Relay, render};
+use relayd::{AGENT_PORT, Exit, Relay, render};
 use serde_json::{Value, json};
 
 fn json_fixture(name: &str) -> Value {
@@ -81,10 +81,62 @@ fn every_counter_survives_the_import() {
 
 #[test]
 fn import_then_render_reproduces_each_config() {
-    for name in ["today", "relay-direct", "relay-wireguard"] {
+    for name in ["relay-direct", "relay-wireguard"] {
         let config = json_fixture(&format!("{name}.json"));
         assert_eq!(render(&import_fixture(name)), config, "{name}");
     }
+}
+
+#[test]
+fn a_relay_from_before_the_agent_imports_and_renders_with_its_route_added() {
+    let relay = import_fixture("today");
+
+    let mut rendered = render(&relay);
+
+    assert_eq!(relay.state.agent.port, AGENT_PORT);
+    assert_eq!(rendered["routing"]["rules"][0]["outboundTag"], "agent");
+    rendered["outbounds"].as_array_mut().unwrap().pop();
+    rendered["routing"]["rules"]
+        .as_array_mut()
+        .unwrap()
+        .remove(0);
+    assert_eq!(rendered, json_fixture("today.json"));
+}
+
+#[test]
+fn the_agent_port_comes_from_a_config_that_already_routes_to_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = json_fixture("relay-direct.json");
+    config["outbounds"][2]["settings"]["redirect"] = "127.0.0.1:12345".into();
+    let path = dir.path().join("config.json");
+    fs::write(&path, config.to_string()).unwrap();
+
+    let relay = import(&path, &fixture("relay-direct.devices.json")).unwrap();
+
+    assert_eq!(relay.state.agent.port, 12345);
+}
+
+#[test]
+fn an_agent_route_after_the_private_block_is_refused() {
+    let error = import_edited(
+        |config| {
+            let rules = config["routing"]["rules"].as_array_mut().unwrap();
+            rules.swap(1, 2);
+        },
+        |_| {},
+    );
+
+    assert!(error.contains("/routing/rules/"), "{error}");
+}
+
+#[test]
+fn an_agent_outbound_that_leaves_the_machine_is_refused() {
+    let error = import_edited(
+        |config| config["outbounds"][2]["settings"]["redirect"] = "203.0.113.9:80".into(),
+        |_| {},
+    );
+
+    assert!(error.contains("does not redirect to 127.0.0.1"), "{error}");
 }
 
 #[test]

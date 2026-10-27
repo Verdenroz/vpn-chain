@@ -5,10 +5,10 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-use crate::render::{API_TAG, EXIT_TAG};
+use crate::render::{AGENT_TAG, API_TAG, EXIT_TAG};
 use crate::{
-    Api, Device, Error, Exit, INBOUND_TAG, Inbound, Relay, Role, SCHEMA, Secret, Secrets, State,
-    XRAY_VERSION, Xray, render, store,
+    AGENT_PORT, Agent, Api, Device, Error, Exit, INBOUND_TAG, Inbound, Relay, Role, SCHEMA,
+    SECRETS_SCHEMA, Secret, Secrets, State, XRAY_VERSION, Xray, render, store,
 };
 
 /// One `devices.json` entry, as `server/xray-clients.sh` writes it.
@@ -61,6 +61,16 @@ struct Reality {
 #[derive(Deserialize)]
 struct ApiInbound {
     port: u16,
+}
+
+#[derive(Deserialize)]
+struct AgentOutbound {
+    settings: AgentSettings,
+}
+
+#[derive(Deserialize)]
+struct AgentSettings {
+    redirect: String,
 }
 
 #[derive(Deserialize)]
@@ -167,6 +177,7 @@ fn adopt(config: &Value, mut tracked: BTreeMap<String, Tracked>) -> Result<Relay
         .collect();
 
     let api = section::<ApiInbound>(config, "inbounds", API_TAG)?.map(|api| Api { port: api.port });
+    let agent = agent(config)?;
     let (exit, exit_secret_key) = exit(config)?;
     let relay = Relay {
         state: State {
@@ -184,9 +195,11 @@ fn adopt(config: &Value, mut tracked: BTreeMap<String, Tracked>) -> Result<Relay
             spare_short_ids,
             exit,
             api,
+            agent,
+            keys: Vec::new(),
         },
         secrets: Secrets {
-            v: SCHEMA,
+            v: SECRETS_SCHEMA,
             reality_private_key: reality.private_key,
             exit_secret_key,
         },
@@ -209,6 +222,25 @@ fn refuse_untracked(clients: &[Client], tracked: &BTreeMap<String, Tracked>) -> 
         "clients not in devices.json ({}); run: devices.sh adopt NAME",
         untracked.join(" ")
     )))
+}
+
+/// The port a config that already carries the agent route redirects to; the default for one
+/// that does not, since rendering adds the route.
+fn agent(config: &Value) -> Result<Agent, Error> {
+    let Some(outbound) = section::<AgentOutbound>(config, "outbounds", AGENT_TAG)? else {
+        return Ok(Agent { port: AGENT_PORT });
+    };
+    outbound
+        .settings
+        .redirect
+        .strip_prefix("127.0.0.1:")
+        .and_then(|port| port.parse().ok())
+        .map(|port| Agent { port })
+        .ok_or_else(|| {
+            Error::new(format!(
+                "the {AGENT_TAG} outbound does not redirect to 127.0.0.1"
+            ))
+        })
 }
 
 fn exit(config: &Value) -> Result<(Exit, Option<Secret>), Error> {
@@ -255,11 +287,25 @@ fn section<T: DeserializeOwned>(config: &Value, list: &str, tag: &str) -> Result
 }
 
 fn refuse_unmodelled(config: &Value, relay: &Relay) -> Result<(), Error> {
-    match difference(&normalize(config), &normalize(&render(relay)), "") {
+    let mut rendered = render(relay);
+    if section::<Value>(config, "outbounds", AGENT_TAG)?.is_none() {
+        without_agent(&mut rendered);
+    }
+    match difference(&normalize(config), &normalize(&rendered), "") {
         None => Ok(()),
         Some(path) => Err(Error::new(format!(
             "{path} is not what relayd renders; importing would change or drop it"
         ))),
+    }
+}
+
+/// A relay deployed before the agent has no route to it, and rendering adds one.
+fn without_agent(config: &mut Value) {
+    if let Some(outbounds) = config["outbounds"].as_array_mut() {
+        outbounds.retain(|outbound| outbound["tag"] != AGENT_TAG);
+    }
+    if let Some(rules) = config["routing"]["rules"].as_array_mut() {
+        rules.retain(|rule| rule["outboundTag"] != AGENT_TAG);
     }
 }
 

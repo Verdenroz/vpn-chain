@@ -19,6 +19,7 @@ pub(crate) fn relay(relay: &Relay) -> Result<(), Error> {
     }
     check_inbound(state)?;
     check_devices(&state.devices)?;
+    check_management_keys(state)?;
     check_short_ids(state)?;
     check_keys(relay)
 }
@@ -45,12 +46,40 @@ fn check_inbound(state: &State) -> Result<(), Error> {
     if inbound.port == 0 {
         return Err(Error::new("the inbound port must be 1 to 65535"));
     }
-    match &state.api {
-        Some(api) if api.port == 0 || api.port == inbound.port => Err(Error::new(
+    if let Some(api) = &state.api
+        && (api.port == 0 || api.port == inbound.port)
+    {
+        return Err(Error::new(
             "the stats API port must be 1 to 65535 and differ from the inbound port",
-        )),
-        _ => Ok(()),
+        ));
     }
+    let taken = [Some(inbound.port), state.api.as_ref().map(|api| api.port)];
+    if state.agent.port == 0 || taken.contains(&Some(state.agent.port)) {
+        return Err(Error::new(
+            "the agent port must be 1 to 65535 and differ from the inbound and stats API ports",
+        ));
+    }
+    Ok(())
+}
+
+fn check_management_keys(state: &State) -> Result<(), Error> {
+    let mut ids = HashSet::new();
+    for key in &state.keys {
+        key.check()?;
+        if !ids.insert(key.id.as_str()) {
+            return Err(Error::new(format!(
+                "management key {} is listed twice",
+                key.id
+            )));
+        }
+        if !state.devices.iter().any(|device| device.name == key.device) {
+            return Err(Error::new(format!(
+                "management key {} belongs to a device that does not exist",
+                key.id
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// REALITY forwards unauthenticated visitors to `dest`, so it must name the borrowed site.
