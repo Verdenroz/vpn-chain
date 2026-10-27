@@ -525,9 +525,22 @@ fn a_failed_restart_is_reported_with_the_revocation_already_saved() {
 
     let error = lab.manager().revoke("shared", false).unwrap_err();
 
-    assert!(error.to_string().contains("restart"), "{error}");
+    assert!(error.to_string().contains("refill-pool"), "{error}");
     assert_eq!(lab.names(), ["laptop"]);
     assert_eq!(lab.clients(), ["laptop"]);
+}
+
+#[test]
+fn a_failed_restart_after_an_add_keeps_the_identity_of_the_saved_device() {
+    let lab = Lab::new(0);
+    *lab.restart.fails.lock().unwrap() = true;
+
+    lab.manager()
+        .add("phone", Role::Member, &lab.out(), true)
+        .unwrap_err();
+
+    assert_eq!(lab.names(), ["shared", "laptop", "phone"]);
+    assert_eq!(lab.identity()["name"], "phone");
 }
 
 #[test]
@@ -543,12 +556,12 @@ fn refill_pool_tops_up_and_restarts() {
 }
 
 #[test]
-fn refill_pool_on_a_full_pool_does_not_restart() {
+fn refill_pool_on_a_full_pool_still_restarts_so_a_failed_restart_can_be_finished() {
     let lab = Lab::new(SPARES);
 
     assert_eq!(lab.manager().refill_pool().unwrap(), 0);
 
-    assert_eq!(lab.restart.count(), 0);
+    assert_eq!(lab.restart.count(), 1);
 }
 
 #[test]

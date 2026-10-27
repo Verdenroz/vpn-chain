@@ -94,7 +94,7 @@ pub fn maintenance(args: &[&str]) -> Option<Result<(), Error>> {
     let target = Target::from(&mut args)?;
     let added = target.manage(|manager| manager.refill_pool());
     Some(added.map(|added| match added {
-        0 => println!("the pool is full; nothing changed"),
+        0 => println!("the pool was full; restarted xray"),
         _ => println!("added {added} spare short IDs and restarted xray"),
     }))
 }
