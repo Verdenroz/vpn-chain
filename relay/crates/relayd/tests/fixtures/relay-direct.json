@@ -21,11 +21,6 @@
       }
     }
   },
-  "dns": {
-    "servers": [
-      "localhost"
-    ]
-  },
   "inbounds": [
     {
       "tag": "vless-reality-443",
@@ -87,10 +82,7 @@
   "outbounds": [
     {
       "tag": "direct",
-      "protocol": "freedom",
-      "settings": {
-        "domainStrategy": "UseIP"
-      }
+      "protocol": "freedom"
     },
     {
       "tag": "block",

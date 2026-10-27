@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::import::import_held;
+use crate::import::{import_held, same_config};
 use crate::{Error, Placement, render, store, write_config};
 
 /// Imports the relay `config` describes into `state` and `secrets`, then renders the config
@@ -30,5 +30,5 @@ pub fn adopt(
     store::absent(state)?;
     write_config(&relay, config, placement)?;
     relay.create(state, secrets)?;
-    Ok(render(&relay) != loaded)
+    Ok(!same_config(&loaded, &render(&relay)))
 }

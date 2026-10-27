@@ -96,50 +96,47 @@ fn a_relay_from_before_the_agent_imports_and_renders_with_its_route_and_name_res
     assert_eq!(relay.state.agent.port, AGENT_PORT);
     assert_eq!(rendered["routing"]["rules"][0]["outboundTag"], "agent");
     assert_eq!(rendered["routing"]["domainStrategy"], "IPOnDemand");
-    assert_eq!(rendered["dns"], json!({ "servers": ["localhost"] }));
-    assert_eq!(
-        rendered["outbounds"][0]["settings"],
-        json!({ "domainStrategy": "UseIP" })
-    );
     rendered["outbounds"].as_array_mut().unwrap().pop();
     rendered["routing"]["rules"]
         .as_array_mut()
         .unwrap()
         .remove(0);
     rendered["routing"]["domainStrategy"] = "AsIs".into();
-    rendered.as_object_mut().unwrap().remove("dns");
-    rendered["outbounds"][0]
-        .as_object_mut()
-        .unwrap()
-        .remove("settings");
     assert_eq!(rendered, json_fixture("today.json"));
 }
 
 #[test]
-fn a_config_that_resolves_names_but_lacks_the_dns_section_is_refused() {
-    let error = import_edited(
-        |config| {
-            config.as_object_mut().unwrap().remove("dns");
-        },
-        |_| {},
-    );
+fn a_legacy_strategy_xray_reads_as_as_is_still_imports() {
+    for edit in [
+        (|config: &mut Value| {
+            config["routing"]
+                .as_object_mut()
+                .unwrap()
+                .remove("domainStrategy");
+        }) as fn(&mut Value),
+        |config| config["routing"]["domainStrategy"] = "asis".into(),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = json_fixture("relay-direct.json");
+        config["routing"]["domainStrategy"] = "AsIs".into();
+        edit(&mut config);
+        let path = dir.path().join("config.json");
+        fs::write(&path, config.to_string()).unwrap();
 
-    assert!(error.contains("/dns"), "{error}");
+        let relay = import(&path, &fixture("relay-direct.devices.json")).unwrap();
+
+        assert_eq!(render(&relay)["routing"]["domainStrategy"], "IPOnDemand");
+    }
 }
 
 #[test]
-fn a_config_that_resolves_names_without_the_direct_lookup_is_refused() {
+fn a_strategy_other_than_the_two_relayd_knows_is_refused() {
     let error = import_edited(
-        |config| {
-            config["outbounds"][0]
-                .as_object_mut()
-                .unwrap()
-                .remove("settings");
-        },
+        |config| config["routing"]["domainStrategy"] = "IPIfNonMatch".into(),
         |_| {},
     );
 
-    assert!(error.contains("/outbounds/0"), "{error}");
+    assert!(error.contains("/routing/domainStrategy"), "{error}");
 }
 
 #[test]
