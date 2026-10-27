@@ -13,8 +13,10 @@ const UNIT: &str = "xray";
 
 /// The xray API on this machine's loopback, driven from a private single-thread runtime so
 /// the device operations stay plain blocking calls.
+///
+/// Each call dials afresh: a connection kept across an xray restart fails its next call.
 pub struct XrayLive {
-    api: XrayApi,
+    addr: SocketAddr,
     runtime: Runtime,
 }
 
@@ -24,26 +26,31 @@ impl XrayLive {
             .enable_all()
             .build()
             .map_err(|error| Error::new(format!("cannot start a runtime: {error}")))?;
-        let api = {
-            let _entered = runtime.enter();
-            XrayApi::new(SocketAddr::from(([127, 0, 0, 1], port)), API_TIMEOUT)
-        };
-        Ok(Self { api, runtime })
+        Ok(Self {
+            addr: SocketAddr::from(([127, 0, 0, 1], port)),
+            runtime,
+        })
+    }
+
+    fn api(&self) -> XrayApi {
+        let _entered = self.runtime.enter();
+        XrayApi::new(self.addr, API_TIMEOUT)
     }
 }
 
 impl Live for XrayLive {
     fn add_user(&self, user: VlessUser) -> Result<(), xray_api::Error> {
-        self.runtime.block_on(self.api.add_user(INBOUND_TAG, user))
+        self.runtime
+            .block_on(self.api().add_user(INBOUND_TAG, user))
     }
 
     fn remove_user(&self, email: &str) -> Result<(), xray_api::Error> {
         self.runtime
-            .block_on(self.api.remove_user(INBOUND_TAG, email))
+            .block_on(self.api().remove_user(INBOUND_TAG, email))
     }
 
     fn drain_traffic(&self) -> Result<BTreeMap<String, Traffic>, xray_api::Error> {
-        self.runtime.block_on(self.api.user_traffic(None, true))
+        self.runtime.block_on(self.api().user_traffic(None, true))
     }
 }
 
