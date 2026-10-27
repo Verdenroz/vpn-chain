@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/relayd", "crates/xray-api"]
+members = ["crates/live-harness", "crates/relayd", "crates/xray-api"]
 
 [workspace.package]
 version = "0.1.0"
