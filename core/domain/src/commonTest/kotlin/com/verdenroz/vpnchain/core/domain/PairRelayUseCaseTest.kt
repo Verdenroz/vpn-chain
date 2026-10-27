@@ -46,26 +46,28 @@ class PairRelayUseCaseTest {
     private val steps = mutableListOf<PairingStep>()
 
     private fun useCase(
-        enroll: () -> Enrolled = { Enrolled(ROTATED, KEY.id) },
+        role: DeviceRole = DeviceRole.Admin,
+        enroll: () -> Enrolled = { Enrolled(ROTATED, KEY.id, role) },
         state: TunnelState = TunnelState.Disconnected,
         connect: Result<Unit> = Result.success(Unit),
         restart: Result<Unit> = Result.success(Unit),
         now: Long = 1_000,
     ) = PairRelayUseCase(profiles, PairingChain(state, log, connect, restart), PairingAgent(enroll), KEY) { now }
 
-    private fun failure(result: Result<String>) = assertIs<PairingFailed>(result.exceptionOrNull())
+    private fun failure(result: Result<PairedRelay>) = assertIs<PairingFailed>(result.exceptionOrNull())
 
     @Test
     fun `a link connects, enrolls and reconnects with the rotated identity`() = runTest {
         val result = useCase().pair(LINK) { step, _ -> steps += step }
 
-        assertEquals("203.0.113.10", result.getOrNull())
+        assertEquals(PairedRelay("203.0.113.10", admin = true), result.getOrNull())
         assertEquals(listOf(PairingStep.Connecting, PairingStep.Registering, PairingStep.Reconnecting), steps)
         assertEquals(listOf("add:203.0.113.10", "connect", "save", "restart"), log)
         val relay = profiles.profile.value?.relay
         assertEquals(ROTATED.uuid, relay?.vlessUuid)
         assertEquals("cd34", relay?.shortId)
         assertEquals(KEY.id, relay?.managementKeyId)
+        assertEquals(true, relay?.managementAdmin)
         assertEquals("www.example.com", relay?.sni)
     }
 
@@ -95,6 +97,14 @@ class PairRelayUseCaseTest {
     }
 
     @Test
+    fun `a member device is saved and reported as no admin`() = runTest {
+        val result = useCase(role = DeviceRole.Member).pair(LINK) { _, _ -> }
+
+        assertEquals(PairedRelay("203.0.113.10", admin = false), result.getOrNull())
+        assertEquals(false, profiles.profile.value?.relay?.managementAdmin)
+    }
+
+    @Test
     fun `a used token and an expired token read differently`() = runTest {
         val used = failure(useCase(enroll = { throw AgentException(401, "unauthorized") }).pair(LINK) { _, _ -> })
         val expired = failure(useCase(enroll = { throw AgentException(410, "expired") }).pair(LINK) { _, _ -> })
@@ -102,6 +112,8 @@ class PairRelayUseCaseTest {
         assertEquals(PairingFailed.Reason.Used, used.reason)
         assertEquals(PairingFailed.Reason.Expired, expired.reason)
         assertEquals(PairingStep.Registering, used.step)
+        assertEquals("laptop", used.device)
+        assertEquals("laptop", expired.device)
     }
 
     @Test

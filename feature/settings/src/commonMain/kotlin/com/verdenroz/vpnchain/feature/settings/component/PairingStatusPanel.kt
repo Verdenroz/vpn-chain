@@ -18,6 +18,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_connecting
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_dismiss
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_done
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_done_member
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_reconnecting
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_registering
 import org.jetbrains.compose.resources.stringResource
@@ -39,7 +40,7 @@ fun PairingStatusPanel(status: PairingStatus, onDismiss: () -> Unit) {
                     color = colors.ink,
                 )
                 is PairingStatus.Done -> Text(
-                    stringResource(Res.string.settings_pairing_done, status.host),
+                    stringResource(if (status.admin) Res.string.settings_pairing_done else Res.string.settings_pairing_done_member, status.host),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.connectedText,
                 )

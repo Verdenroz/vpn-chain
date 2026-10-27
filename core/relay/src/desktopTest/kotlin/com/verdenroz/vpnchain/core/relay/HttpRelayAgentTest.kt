@@ -113,12 +113,13 @@ class HttpRelayAgentTest {
 
     @Test
     fun `enroll is sent unsigned with the token and the public key`() = runTest {
-        route = { _, _ -> Reply(200, """{"identity":$IDENTITY,"keyId":"${key.id}"}""") }
+        route = { _, _ -> Reply(200, """{"identity":$IDENTITY,"keyId":"${key.id}","role":"member"}""") }
         val (client, fake) = agent(registered = emptyMap())
 
         val enrolled = client.enroll("tokenvalue", key)
 
         assertEquals(key.id, enrolled.keyId)
+        assertEquals(DeviceRole.Member, enrolled.role)
         assertEquals("phone", enrolled.identity.name)
         val request = fake.seen.single()
         assertEquals("/v1/enroll", request.target)
@@ -187,7 +188,7 @@ class HttpRelayAgentTest {
 
     @Test
     fun `nothing secret reaches toString or an error`() = runTest {
-        route = { _, _ -> Reply(200, """{"identity":$IDENTITY,"keyId":"${key.id}"}""") }
+        route = { _, _ -> Reply(200, """{"identity":$IDENTITY,"keyId":"${key.id}","role":"member"}""") }
         val (client, _) = agent(registered = emptyMap())
 
         val enrolled = client.enroll("tokenvalue", key)

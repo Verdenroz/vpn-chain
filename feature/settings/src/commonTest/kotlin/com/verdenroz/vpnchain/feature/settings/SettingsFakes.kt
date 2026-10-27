@@ -4,6 +4,7 @@ import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.PairingStep
+import com.verdenroz.vpnchain.core.domain.PairedRelay
 import com.verdenroz.vpnchain.core.domain.RelayPairing
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
@@ -96,11 +97,11 @@ internal class FakeSettings : SettingsRepository {
 internal class FakePairing(
     private val log: MutableList<String>,
     private val steps: List<PairingStep> = emptyList(),
-    private val result: Result<String> = Result.success("203.0.113.10"),
+    private val result: Result<PairedRelay> = Result.success(PairedRelay("203.0.113.10", admin = true)),
     private val gate: CompletableDeferred<Unit>? = null,
 ) : RelayPairing {
     override fun accepts(text: String) = text.startsWith("vpnchain://")
-    override suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<String> {
+    override suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<PairedRelay> {
         log += "pair"
         steps.forEach { onStep(it, "203.0.113.10") }
         gate?.await()
