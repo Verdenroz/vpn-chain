@@ -79,6 +79,7 @@ class PairRelayUseCase(
         val enrolled = try {
             onStep(PairingStep.Connecting, link.host)
             moveTunnel(wasUp).getOrElse { throw PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Unreachable, it) }
+            awaitConnected()
             onStep(PairingStep.Registering, link.host)
             enroll(link)
         } catch (e: Throwable) {
@@ -93,6 +94,11 @@ class PairRelayUseCase(
         chain.restart().getOrElse { throw PairingFailed(PairingStep.Reconnecting, PairingFailed.Reason.Failed, it) }
         PairedRelay(link.host, enrolled.role == DeviceRole.Admin)
     }.recoverCatching { throw it as? PairingFailed ?: it as? PairingException ?: PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Failed, it) }
+
+    private suspend fun awaitConnected() {
+        val settled = chain.status.first { it.state != TunnelState.Connecting }
+        if (settled.state != TunnelState.Connected) throw PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Unreachable)
+    }
 
     private suspend fun moveTunnel(wasUp: Boolean) = if (wasUp) chain.restart() else chain.connect()
 

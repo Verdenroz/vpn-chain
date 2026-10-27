@@ -21,7 +21,10 @@ import com.verdenroz.vpnchain.core.relay.ManagementKey
 import com.verdenroz.vpnchain.core.relay.PairingException
 import com.verdenroz.vpnchain.core.relay.RelayAgent
 import com.verdenroz.vpnchain.core.relay.id
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -53,7 +56,8 @@ class PairRelayUseCaseTest {
         connect: Result<Unit> = Result.success(Unit),
         restart: Result<Unit> = Result.success(Unit),
         now: Long = 1_000,
-    ) = PairRelayUseCase(profiles, PairingChain(state, log, connect, restart), PairingAgent(enroll), KEY) { now }
+        chain: PairingChain = PairingChain(state, log, connect, restart),
+    ) = PairRelayUseCase(profiles, chain, PairingAgent(enroll), KEY) { now }
 
     private fun failure(result: Result<PairedRelay>) = assertIs<PairingFailed>(result.exceptionOrNull())
 
@@ -70,6 +74,35 @@ class PairRelayUseCaseTest {
         assertEquals(KEY.id, relay?.managementKeyId)
         assertEquals(true, relay?.managementAdmin)
         assertEquals("www.example.com", relay?.sni)
+    }
+
+    @Test
+    fun `enrolling waits for the tunnel to be connected after connect returns`() = runTest {
+        val chain = PairingChain(TunnelState.Disconnected, log, Result.success(Unit), Result.success(Unit), connectsAtOnce = false)
+        val enroll = {
+            if (chain.status.value.state != TunnelState.Connected) throw AgentUnreachable("The tunnel is not connected.")
+            Enrolled(ROTATED, KEY.id, DeviceRole.Admin)
+        }
+        val pairing = async(start = CoroutineStart.UNDISPATCHED) { useCase(enroll = enroll, chain = chain).pair(LINK) { _, _ -> } }
+        runCurrent()
+        assertEquals(listOf("add:203.0.113.10", "connect"), log)
+
+        chain.status.value = ChainStatus(state = TunnelState.Connected)
+
+        assertEquals(PairedRelay("203.0.113.10", admin = true), pairing.await().getOrNull())
+    }
+
+    @Test
+    fun `a tunnel that settles in error leaves nothing behind`() = runTest {
+        val chain = PairingChain(TunnelState.Disconnected, log, Result.success(Unit), Result.success(Unit), connectsAtOnce = false)
+        val pairing = async(start = CoroutineStart.UNDISPATCHED) { useCase(chain = chain).pair(LINK) { _, _ -> } }
+        runCurrent()
+
+        chain.status.value = ChainStatus(state = TunnelState.Error)
+
+        val error = failure(pairing.await())
+        assertEquals(PairingFailed.Reason.Unreachable, error.reason)
+        assertNull(profiles.profile.value)
     }
 
     @Test
@@ -248,6 +281,7 @@ private class PairingChain(
     private val log: MutableList<String>,
     private val connect: Result<Unit>,
     private val restart: Result<Unit>,
+    private val connectsAtOnce: Boolean = true,
 ) : ChainRepository {
     override val status = MutableStateFlow(ChainStatus(state = state))
     override val connectionIntent = MutableStateFlow(false)
@@ -257,12 +291,22 @@ private class PairingChain(
     override fun openSystemVpnSettings() = Unit
     override suspend fun connect(): Result<Unit> {
         log += "connect"
-        return connect
+        return connect.also { settle(it) }
     }
     override suspend fun reconnect() = Result.success(Unit)
     override suspend fun restart(): Result<Unit> {
         log += "restart"
-        return restart
+        return restart.also { settle(it) }
+    }
+
+    private fun settle(result: Result<Unit>) {
+        status.value = ChainStatus(
+            state = when {
+                result.isFailure -> TunnelState.Error
+                connectsAtOnce -> TunnelState.Connected
+                else -> TunnelState.Connecting
+            },
+        )
     }
     override suspend fun disconnect() {
         log += "disconnect"
