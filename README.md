@@ -47,6 +47,16 @@ stays open either way.
      kill switch, so there is nothing else to install. New releases install from
      inside the app and ask for your password once.
 
+   - **Linux (x64, Arch):** download `vpn-chain-<version>-1-x86_64.pkg.tar.zst` from the
+     [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest) and install it:
+
+     ```
+     sudo pacman -U vpn-chain-<version>-1-x86_64.pkg.tar.zst
+     ```
+
+     Same app, tunnel and kill switch as the `.deb`, and new releases install from
+     inside the app the same way.
+
    - **Android:** download `vpn-chain-<version>-android-arm64-v8a.apk` from the
      [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest)
      and install it.
@@ -106,7 +116,7 @@ Your connection details stay on your devices: in `~/.config/vpn-chain`
   you connect again or press **Disconnect**. `vpn-chain-killswitch down` removes it.
 - **Kill switch shows Off on Linux:** the row says why. Usually the helper lost its
   permission: install the package again with
-  `sudo apt install --reinstall ./vpn-chain_<version>_amd64.deb`.
+  `sudo apt install --reinstall ./vpn-chain_<version>_amd64.deb` (on Arch, `sudo pacman -U` the package file).
 - **Android leaks traffic when the VPN drops:** Android settings → Network &
   internet → VPN → the gear next to vpn-chain → turn on **Always-on VPN** and
   **Block connections without VPN**.
@@ -118,7 +128,7 @@ Your connection details stay on your devices: in `~/.config/vpn-chain`
   shows whether it applied.
 - **`TUNSETIFF: operation not permitted` on Linux:** the app could not start its
   background service. Install the package again with
-  `sudo apt install --reinstall ./vpn-chain_<version>_amd64.deb`, from your own
+  `sudo apt install --reinstall ./vpn-chain_<version>_amd64.deb` (on Arch, `sudo pacman -U` the package file), from your own
   account in a terminal on the desktop.
 
 ## Build from source and contributing
