@@ -128,6 +128,23 @@ fn a_swap_xray_accepts_replaces_the_config_and_keeps_the_old_one() {
 }
 
 #[test]
+fn swaps_in_the_same_second_each_keep_their_own_backup() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.json");
+    fs::write(&path, "live").unwrap();
+    let placement = Placement {
+        group: NO_GROUP,
+        swap: Some(Path::new("true")),
+    };
+
+    for _ in 0..3 {
+        write_config(&relay("relay-direct"), &path, &placement).unwrap();
+    }
+
+    assert_eq!(names(dir.path()).len(), 4);
+}
+
+#[test]
 fn a_swap_xray_rejects_leaves_the_live_config_alone() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("config.json");

@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::ErrorKind;
 use std::os::unix::fs::{PermissionsExt, chown};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -85,7 +86,16 @@ fn keep_previous(path: &Path) -> Result<(), Error> {
         .duration_since(UNIX_EPOCH)
         .expect("the clock is past 1970")
         .as_secs();
-    let mut backup = PathBuf::from(path).into_os_string();
-    backup.push(format!(".bak.{seconds}"));
-    fs::hard_link(path, &backup).map_err(|error| Error::at(Path::new(&backup), error))
+    let mut taken = 0;
+    loop {
+        let mut backup = PathBuf::from(path).into_os_string();
+        backup.push(format!(".bak.{seconds}"));
+        if taken > 0 {
+            backup.push(format!(".{taken}"));
+        }
+        match fs::hard_link(path, &backup) {
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => taken += 1,
+            linked => return linked.map_err(|error| Error::at(Path::new(&backup), error)),
+        }
+    }
 }
