@@ -1,0 +1,25 @@
+# Runs the server script suites and the Xray x sing-box e2e matrix.
+name: server-tests
+
+on:
+  pull_request:
+    paths: ["server/**", ".github/workflows/server-tests.yml"]
+  push:
+    paths: ["server/**", ".github/workflows/server-tests.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Suites
+        run: server/tests/run.sh
+      - name: Matrix
+        env:
+          KNOWN_BAD: "1"
+        run: server/tests/matrix.sh
