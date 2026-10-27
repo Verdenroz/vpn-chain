@@ -79,6 +79,12 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
+    fun `a rendered config reports whether it logs connections`() {
+        assertFalse(logsConnections(SingBoxConfigFactory.androidChainConfig(profile())))
+        assertTrue(logsConnections(SingBoxConfigFactory.androidChainConfig(profile(), connectionLog = true)))
+    }
+
+    @Test
     fun `proxy config listens on the profile's local port and never opens a tun`() {
         val config = parse(SingBoxConfigFactory.mixedProxyConfig(profile()))
 

@@ -18,6 +18,7 @@ import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.config.isLostPortRace
+import com.verdenroz.vpnchain.core.config.logsConnections
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.Res
@@ -302,7 +303,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         commandServer = server
         server.startOrReloadService(config, OverrideOptions())
         TunnelBridge.runningConfig.value = config
-        startLogClient()
+        startLogClient(config)
         startStatusClient()
         startConnectionsClient(config)
     }
@@ -466,8 +467,9 @@ class VpnChainService : VpnService(), CommandServerHandler {
         didSetup = true
     }
 
-    private fun startLogClient() {
-        logClient = connectClient("log", LogHandler()) { addCommand(Libbox.CommandLog) }
+    private fun startLogClient(config: String) {
+        val maxLevel = if (logsConnections(config)) LOG_LEVEL_INFO else LOG_LEVEL_WARN
+        logClient = connectClient("log", LogHandler(maxLevel)) { addCommand(Libbox.CommandLog) }
     }
 
     private fun startStatusClient() {
@@ -629,13 +631,13 @@ class VpnChainService : VpnService(), CommandServerHandler {
     }
 
     /** Forwards engine log lines onto the shared bridge for the Logs screen. */
-    private inner class LogHandler : NoOpClientHandler() {
+    private inner class LogHandler(private val maxLevel: Int) : NoOpClientHandler() {
         override fun writeLogs(messageList: LogIterator) {
             while (messageList.hasNext()) {
                 val entry = messageList.next()
                 // The stream carries every level whatever the config says; there is
                 // no server-side switch, so drop them here before a String is built.
-                if (entry.level <= LOG_LEVEL_INFO) TunnelBridge.logRelay(entry.message)
+                if (entry.level <= maxLevel) TunnelBridge.logRelay(entry.message)
             }
         }
     }
@@ -684,6 +686,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         private const val LEGACY_CHANNEL_ID = "vpn-chain"
         private const val LOCKDOWN_POLL_MS = 3_000L
         // sing-box's scale: panic 0, fatal 1, error 2, warn 3, info 4, debug 5, trace 6.
+        private const val LOG_LEVEL_WARN = 3
         private const val LOG_LEVEL_INFO = 4
         private const val STATUS_INTERVAL_NS = 1_000_000_000L
         private const val READINESS_ATTEMPTS = 5
