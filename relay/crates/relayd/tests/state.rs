@@ -270,3 +270,28 @@ fn debug_output_shows_no_credential() {
     assert_no_secret(&format!("{relay:?}"));
     assert_no_secret(&format!("{relay:#?}"));
 }
+
+#[test]
+fn a_crash_between_the_secrets_and_the_state_of_an_exit_change_still_loads() {
+    let direct = relay("relay-direct");
+    let wireguard = relay("relay-wireguard");
+    let cases = [
+        ("to wireguard, after secrets", &direct.state),
+        ("to wireguard, after state", &wireguard.state),
+        ("to direct, after state", &direct.state),
+    ];
+    for (point, state) in cases {
+        let (_dir, path) = scratch();
+        let secrets = secrets_path(&path);
+        let crashed = Relay {
+            state: state.clone(),
+            secrets: wireguard.secrets.clone(),
+        };
+        crashed.save_secrets(&secrets).unwrap();
+        crashed.save_state(&path).unwrap();
+
+        let loaded = Relay::load(&path, &secrets).unwrap_or_else(|e| panic!("{point}: {e}"));
+
+        assert_eq!(loaded.state.exit, state.exit, "{point}");
+    }
+}

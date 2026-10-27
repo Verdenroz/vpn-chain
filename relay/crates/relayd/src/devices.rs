@@ -253,23 +253,43 @@ impl Manager<'_> {
     /// Makes `exit` the relay's exit, with `key` as the WireGuard private key it needs, and
     /// restarts xray to dial through it. The restart drops every open connection.
     ///
-    /// The previous state, secrets and config are put back if the new config is refused.
+    /// The secrets hold both keys while the state changes, so a crash at any point leaves files
+    /// that load, with the old exit or the new one. The previous state, secrets and config are
+    /// put back if the new config is refused.
     pub fn set_exit(&self, exit: Exit, key: Option<Secret>) -> Result<(), Error> {
         let _held = store::lock_within(self.lock, self.lock_wait)?;
         let relay = self.begin()?;
+        let both = Secrets {
+            exit_secret_key: key
+                .clone()
+                .or_else(|| relay.secrets.exit_secret_key.clone()),
+            ..relay.secrets.clone()
+        };
         let next = Relay {
             state: State {
                 exit,
                 ..relay.state.clone()
             },
-            secrets: Secrets {
-                exit_secret_key: key,
-                ..relay.secrets.clone()
-            },
+            secrets: both.clone(),
         };
         next.validate()
             .map_err(|error| Error::invalid(error.to_string()))?;
-        self.write_exit(&relay, &next)?;
+        Relay {
+            state: relay.state.clone(),
+            secrets: both,
+        }
+        .save_secrets(self.secrets)?;
+        self.write_out(&relay, &next).inspect_err(|_| {
+            let _ = relay.save_secrets(self.secrets);
+        })?;
+        Relay {
+            secrets: Secrets {
+                exit_secret_key: key,
+                ..next.secrets.clone()
+            },
+            ..next
+        }
+        .save_secrets(self.secrets)?;
         self.restart_xray()
     }
 
@@ -332,15 +352,6 @@ impl Manager<'_> {
         after.save_state(self.state)?;
         write_config(after, self.config, &self.placement).inspect_err(|_| {
             let _ = before.save_state(self.state);
-        })
-    }
-
-    /// [`Manager::write_out`] for a change that also touches the secrets, which go first so the
-    /// state never names a key that is not there.
-    fn write_exit(&self, before: &Relay, after: &Relay) -> Result<(), Error> {
-        after.save_secrets(self.secrets)?;
-        self.write_out(before, after).inspect_err(|_| {
-            let _ = before.save_secrets(self.secrets);
         })
     }
 
