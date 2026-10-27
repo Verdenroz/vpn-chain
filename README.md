@@ -57,9 +57,10 @@ stays open either way.
    device alone, paste the `.conf` in **Settings → Connection → Import**, then tap
    **Use as entry hop**.
 
-To exit through a WireGuard provider instead of the VPS's own address, copy the
-provider's `.conf` to the VPS and add it to the command:
-`... | sudo bash -s -- --wireguard /root/wg0.conf`.
+To exit through a WireGuard provider instead of the VPS's own address, open
+**Settings → Devices → Exit** in the app, tap **Use a WireGuard exit**, and paste the
+`.conf` your provider gave you. The relay restarts, so everyone drops for a few
+seconds. The same row switches back to the VPS's address.
 
 Running the command again repairs the install and keeps your keys and devices. On a
 relay set up with the old `server/deploy-server.sh`, it takes the relay over the
