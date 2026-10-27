@@ -19,26 +19,21 @@ your VPN provider, and the VPS never sees your real address.
 
 ## Setup
 
-You need a Debian or Ubuntu VPS you can SSH into as root, with TCP port 443 open.
+You need a Debian or Ubuntu VPS with TCP port 443 open. If you sign in to it with
+an SSH key, add the key first: setup then turns off password sign-in. Port 22
+stays open either way.
 
-1. On your computer, copy the server scripts to the VPS and run the setup.
-   Replace `203.0.113.10` with your VPS's address.
-
-   ```
-   git clone https://github.com/Verdenroz/vpn-chain && cd vpn-chain
-   scp -r server root@203.0.113.10:
-   ssh root@203.0.113.10 'DEVICE_NAME=laptop bash server/deploy-server.sh'
-   ```
-
-2. Copy this device's connection details down, then delete them from the VPS:
+1. On the VPS, run:
 
    ```
-   mkdir -p -m 700 ~/.config/vpn-chain
-   scp root@203.0.113.10:vpn-chain-laptop.env ~/.config/vpn-chain/secrets.env
-   ssh root@203.0.113.10 rm vpn-chain-laptop.env
+   curl -fsSL https://github.com/Verdenroz/vpn-chain/releases/latest/download/setup.sh | sudo bash
    ```
 
-3. Install the app.
+   It checks that the download is ours, sets up your relay, and prints a QR code
+   and a link. They work once, for 15 minutes. If they run out, `sudo relayd pair`
+   on the VPS prints new ones.
+
+2. Install the app.
    - **Linux (x64, Debian or Ubuntu):** download `vpn-chain_<version>_amd64.deb` from the
      [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest) and install it:
 
@@ -54,32 +49,34 @@ You need a Debian or Ubuntu VPS you can SSH into as root, with TCP port 443 open
      [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest)
      and install it.
 
-4. In the app, open **Settings → Connection → Import** and import
-   `~/.config/vpn-chain/secrets.env`. On Android, scan **Show QR** from the
-   desktop app instead, or paste the file's contents. Tap **Connect**.
+3. Open the app and scan the QR code, or paste the link (on Linux, paste). The app
+   connects and makes this device the admin of your relay. The code stops working
+   once it is used, so a photo of it is no use to anyone.
 
-5. Optional entry hop: create a WireGuard config at your VPN provider for this
-   device alone, and paste the `.conf` in **Import**, then tap **Use as entry hop**.
+4. Optional entry hop: create a WireGuard config at your VPN provider for this
+   device alone, paste the `.conf` in **Settings → Connection → Import**, then tap
+   **Use as entry hop**.
 
-To exit through a WireGuard provider instead of the VPS's own address, set the
-`EXIT_WG_*` values listed at the top of `server/deploy-server.sh` and run it
-again. Running it again keeps your keys and devices.
+To exit through a WireGuard provider instead of the VPS's own address, copy the
+provider's `.conf` to the VPS and add it to the command:
+`... | sudo bash -s -- --wireguard /root/wg0.conf`.
+
+Running the command again repairs the install and keeps your keys and devices. On a
+relay set up with the old `server/deploy-server.sh`, it takes the relay over the
+same way; add `--device laptop` to get a code for a device it already has.
 
 ## Devices
 
-Give each phone or computer its own identity, so you can cut one off without
-touching the others. For now you do this from your computer over SSH, with your
-usual keys (set `VPN_CHAIN_SSH_KEY` to pick one); it moves into the app later.
+Give each phone or computer its own code, so you can cut one off without touching
+the others. On the VPS:
 
 ```
-server/devices.sh add phone      # writes ~/.config/vpn-chain/devices/phone.env
-server/devices.sh list           # each device, its traffic, when it was last seen
-server/devices.sh revoke phone   # cuts that device off
+sudo relayd pair --new phone       # prints a code for a new device; scan or paste it there
+sudo relayd device list            # each device, its traffic, when it was last seen
+sudo relayd device revoke phone    # cuts that device off
 ```
 
-Import `phone.env` on the phone, then delete your copy. **Show QR** shares the
-desktop's own identity, so revoking either device would revoke both. For a lost
-phone, also delete its WireGuard config at your VPN provider.
+For a lost phone, also delete its WireGuard config at your VPN provider.
 
 ## What you can set
 
@@ -109,10 +106,10 @@ Your connection details stay on your devices: in `~/.config/vpn-chain`
   internet → VPN → the gear next to vpn-chain → turn on **Always-on VPN** and
   **Block connections without VPN**.
 - **Connects but nothing loads:** check that TCP 443 is open on the VPS, then run
-  `server/deploy-server.sh` there again. It installs the Xray version the apps are
-  tested against; Xray 26.10.21 does not work with them.
+  the setup command there again. It installs the Xray version the apps are tested
+  against; Xray 26.10.21 does not work with them.
 - **SSH to the VPS drops during a change:** while you are connected, SSH runs
-  through the VPS, and the change restarts it. Reconnect; `server/devices.sh list`
+  through the VPS, and the change restarts it. Reconnect; `sudo relayd device list`
   shows whether it applied.
 - **`TUNSETIFF: operation not permitted` on Linux:** the app could not start its
   background service. Install the package again with
