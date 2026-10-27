@@ -13,6 +13,7 @@ mod error;
 mod fake;
 mod handler;
 mod proto;
+mod stats;
 mod user;
 
 use std::future::Future;
@@ -23,20 +24,23 @@ use tonic::transport::{Channel, Endpoint};
 use tonic::{Response, Status};
 
 pub use error::Error;
+pub use stats::{ALL_USERS, Traffic};
 pub use user::{UserId, VlessUser};
 
 use proto::xray::app::proxyman::command::handler_service_client::HandlerServiceClient;
+use proto::xray::app::stats::command::stats_service_client::StatsServiceClient;
 
 /// A connection to one xray instance's API inbound.
 #[derive(Debug, Clone)]
 pub struct XrayApi {
     handler: HandlerServiceClient<Channel>,
+    stats: StatsServiceClient<Channel>,
     timeout: Duration,
 }
 
 impl XrayApi {
-    /// Points at the API inbound at `addr` without connecting. Every call,
-    /// connecting included, fails with [`Error::Timeout`] after `timeout`.
+    /// Points at the API inbound at `addr` without connecting. No call,
+    /// connecting included, waits longer than `timeout`.
     ///
     /// Must be called inside a tokio runtime.
     pub fn new(addr: SocketAddr, timeout: Duration) -> Self {
@@ -45,7 +49,8 @@ impl XrayApi {
             .connect_timeout(timeout)
             .connect_lazy();
         Self {
-            handler: HandlerServiceClient::new(channel),
+            handler: HandlerServiceClient::new(channel.clone()),
+            stats: StatsServiceClient::new(channel),
             timeout,
         }
     }

@@ -14,6 +14,10 @@ use crate::proto::xray::app::proxyman::command::handler_service_server::{
 use crate::proto::xray::app::proxyman::command::{
     AlterInboundRequest, AlterInboundResponse, GetInboundUserRequest, GetInboundUserResponse,
 };
+use crate::proto::xray::app::stats::command::stats_service_server::{
+    StatsService, StatsServiceServer,
+};
+use crate::proto::xray::app::stats::command::{QueryStatsRequest, QueryStatsResponse, Stat};
 use crate::proto::xray::common::protocol::User;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_millis(300);
@@ -28,7 +32,9 @@ pub(crate) enum Reply {
 #[derive(Default)]
 struct Seen {
     alters: Vec<AlterInboundRequest>,
+    queries: Vec<QueryStatsRequest>,
     users: Vec<User>,
+    stats: Vec<Stat>,
 }
 
 /// An in-process stand-in for xray's API inbound.
@@ -49,6 +55,7 @@ impl FakeXray {
         };
         let server = Server::builder()
             .add_service(HandlerServiceServer::new(fake.clone()))
+            .add_service(StatsServiceServer::new(fake.clone()))
             .serve_with_incoming(TcpListenerStream::new(listener));
         tokio::spawn(server);
         fake
@@ -62,8 +69,16 @@ impl FakeXray {
         self.seen.lock().unwrap().alters.last().cloned()
     }
 
+    pub(crate) fn last_query(&self) -> Option<QueryStatsRequest> {
+        self.seen.lock().unwrap().queries.last().cloned()
+    }
+
     pub(crate) fn set_users(&self, users: Vec<User>) {
         self.seen.lock().unwrap().users = users;
+    }
+
+    pub(crate) fn set_stats(&self, stats: Vec<Stat>) {
+        self.seen.lock().unwrap().stats = stats;
     }
 
     async fn reply<T>(&self, ok: T) -> Result<Response<T>, Status> {
@@ -94,5 +109,20 @@ impl HandlerService for FakeXray {
     ) -> Result<Response<GetInboundUserResponse>, Status> {
         let users = self.seen.lock().unwrap().users.clone();
         self.reply(GetInboundUserResponse { users }).await
+    }
+}
+
+#[tonic::async_trait]
+impl StatsService for FakeXray {
+    async fn query_stats(
+        &self,
+        request: Request<QueryStatsRequest>,
+    ) -> Result<Response<QueryStatsResponse>, Status> {
+        let stat = {
+            let mut seen = self.seen.lock().unwrap();
+            seen.queries.push(request.into_inner());
+            seen.stats.clone()
+        };
+        self.reply(QueryStatsResponse { stat }).await
     }
 }
