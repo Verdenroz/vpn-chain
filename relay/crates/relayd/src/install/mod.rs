@@ -3,7 +3,8 @@
 //! device.
 //!
 //! It is safe to run again: every step compares what is there first, and a run that finds a
-//! finished install only refreshes the binaries, the units and SSH hardening.
+//! finished install refreshes the binaries, the units and SSH hardening, and prints a new
+//! pairing link while no device has enrolled.
 
 mod host;
 mod pinned;
@@ -22,7 +23,7 @@ use relay_jobs::{JobId, JobKind, JobState, Jobs, Layout};
 use self::host::{
     give, give_all, have, output, put, require, run, run_reporting, say, systemctl, uid,
 };
-use crate::pairing::{self, Public};
+use crate::pairing::{self, Public, Purpose};
 use crate::{
     AGENT_PORT, Agent, Api, DEVICES_LOCK, Device, Error, Exit, INBOUND_TAG, Inbound, Placement,
     Relay, Role, SCHEMA, SECRETS_SCHEMA, SPARES, Secrets, State, XRAY_VERSION, Xray, adopt_with,
@@ -108,14 +109,26 @@ pub fn run_install(options: &Options) -> Result<(), Error> {
     start(&site, &created)?;
     save_public(&site, options)?;
     ssh::harden()?;
+    say("done; run this command again for a new code until the first device is set up");
+    print_first_code(&site, created.device.as_deref())
+}
+
+/// Prints the first admin device's pairing code, and for a relay that already had devices says
+/// what happens to them.
+fn print_first_code(site: &Site, device: Option<&str>) -> Result<(), Error> {
     let link = pairing::issue(
         &site.state,
         &site.secrets,
         Path::new(DEVICES_LOCK),
-        created.device.as_deref(),
+        device,
+        Purpose::FirstAdmin,
     )?;
-    say("done; `relayd pair` prints a new link when you need one");
-    print!("{}", pairing::show(&link));
+    print!("{}", pairing::show(&link, Purpose::FirstAdmin));
+    if Relay::load(&site.state, &site.secrets)?.state.devices.len() > 1 {
+        say(
+            "devices that already connect keep working; the admin can give each of them a code in the app (Devices > New code) to manage them there",
+        );
+    }
     Ok(())
 }
 
@@ -187,8 +200,13 @@ fn refresh(site: &Site, changed: bool) -> Result<(), Error> {
         say("updated relayd and its units");
     }
     ssh::harden()?;
-    say("already installed; `relayd pair` prints a new pairing link");
-    Ok(())
+    if relay.state.keys.is_empty() {
+        say("already installed; no device is set up yet, so here is a new code");
+        print_first_code(site, None)
+    } else {
+        say("already set up; add devices from the app (Settings → Devices)");
+        Ok(())
+    }
 }
 
 fn check_options(options: &Options) -> Result<(), Error> {
@@ -431,7 +449,7 @@ fn start(site: &Site, created: &Created) -> Result<(), Error> {
     systemctl(&["enable", "--now", "relayd.service"])?;
     if created.restart {
         say(
-            "restarting xray to load the new config; a session that runs through this relay will drop, so reconnect and run `relayd pair`",
+            "restarting xray to load the new config; a session that runs through this relay will drop, so reconnect and run the setup command again for the code",
         );
         restart_detached(relay.state.inbound.port)?;
     }

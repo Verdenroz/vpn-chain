@@ -2,9 +2,10 @@
 # Boots a fresh Debian or Ubuntu VPS in a container with systemd as PID 1, installs on it the
 # way a user does (setup.sh with a release served on loopback), and drives the relay it made
 # with the sing-box clients the apps ship:
-#   a) a download that fails its checksum installs nothing; a fresh install prints one pairing link, leaves no copy of it, and is quiet when run again
+#   a) a download that fails its checksum installs nothing; a fresh install prints one pairing link, leaves no copy of it,
+#      and prints a new one when run again until a device has enrolled
 #   b) the link connects; enrolling with a P-256 key works once, a used token gets 401, an
-#      expired one 410, and the old identity is refused afterwards
+#      expired one 410, a replaced one 401, and the old identity is refused afterwards
 #   c) the nft rules stop a name that rebinds to loopback, keep the agent and the internet
 #      reachable, leave other tables alone and come back with the unit
 #   d) a relay made by server/deploy-server.sh is adopted with its keypair and clients intact
@@ -60,8 +61,10 @@ pass "stdout holds the link once, as text and a QR code, and stderr never shows 
 eq "$(link_field "$W/out" n)" admin
 eq "$(link_field "$W/out" h)" "$(addr 10)"
 eq "$(link_field "$W/out" v)" 1
-[ "$(( $(link_field "$W/out" e) - $(g date +%s) ))" -gt 800 ]
-pass "the link names the admin device, the host and a fifteen-minute expiry"
+eq "$(link_field "$W/out" f)" 1
+first_ttl=$(( $(link_field "$W/out" e) - $(g date +%s) ))
+[ "$first_ttl" -gt 86300 ] && [ "$first_ttl" -le 86400 ]
+pass "the link names the admin device and the host, is marked as the first admin's, and expires in about 24 hours"
 for unit in xray relayd vpn-chain-egress relay-privileged.path; do
     eq "$(g systemctl is-active "$unit")" active
 done
@@ -89,9 +92,9 @@ case "$DISTRO" in
         pass "without an authorized key password login stays on and install says so" ;;
 esac
 
-step "a) running install again changes nothing"
+step "a) running install again before a device enrolls prints a new code and changes nothing else"
 snapshot() {
-    g bash -c "cd / && sha256sum $STATE_DIR/*.json /usr/local/etc/xray/config.json /etc/systemd/system/*.service \
+    g bash -c "cd / && sha256sum \$(ls $STATE_DIR/*.json | grep -v enroll.json) /usr/local/etc/xray/config.json /etc/systemd/system/*.service \
         /etc/ssh/sshd_config.d/* /usr/local/bin/relay* 2>/dev/null; nft list ruleset | sha256sum; \
         systemctl show xray relayd -p MainPID; ls /usr/local/etc/xray"
 }
@@ -99,9 +102,18 @@ snapshot >"$W/before"
 g /usr/local/bin/relayd install --host "$(addr 10)" --sni dest.test >"$W/out2" 2>"$W/err2"
 snapshot >"$W/after"
 diff "$W/before" "$W/after"
-no grep -q 'vpnchain://' "$W/out2"
+eq "$(grep -c 'vpnchain://pair' "$W/out2")" 1
+eq "$(grep -c 'vpnchain://' "$W/err2" || true)" 0
 grep -q 'already installed' "$W/err2"
-pass "state, config, units, rules and processes are identical, and no second link is printed"
+grep -q 'for 24 hours' "$W/out2"
+[ "$(link_field "$W/out2" t)" != "$TOKEN" ]
+eq "$(link_field "$W/out2" f)" 1
+second_ttl=$(( $(link_field "$W/out2" e) - $(g date +%s) ))
+[ "$second_ttl" -gt 86300 ] && [ "$second_ttl" -le 86400 ]
+NEW_TOKEN="$(link_field "$W/out2" t)"
+NEW_LINK="$(grep -o 'vpnchain://[^ ]*' "$W/out2")"
+no g grep -rlF -e "$NEW_TOKEN" -e "$NEW_LINK" /var /etc /root /usr/local /opt/vpn-chain
+pass "state, config, units, rules and processes are identical, and the second link is new, lasts a day and is kept nowhere"
 no g /usr/local/bin/relayd install --port 8443 2>"$W/err4"
 grep -q 'already has one' "$W/err4"
 pass "a flag that only shapes a new relay is refused on one that exists"
@@ -135,7 +147,7 @@ for version in "${SINGBOX_VERSIONS[@]}"; do
     n=$((n + 1))
     step "b) sing-box $version: connect with the link, enroll, then reuse and expiry"
     if [ "$n" -eq 1 ]; then
-        cp "$W/out" "$W/link-$tag"
+        cp "$W/out2" "$W/link-$tag"
     else
         g relayd pair >"$W/link-$tag"
     fi
@@ -145,6 +157,10 @@ for version in "${SINGBOX_VERSIONS[@]}"; do
     pass "sing-box $version connects with the identity in the link, and the agent wants a signature"
 
     new_key "k-$tag"
+    if [ "$n" -eq 1 ]; then
+        eq "$(enroll "c-$tag" "$TOKEN" "k-$tag" | cut -d' ' -f1)" 401
+        pass "the first run's code was replaced by the second, so it gets 401"
+    fi
     reply="$(enroll "c-$tag" "$(link_field "$W/link-$tag" t)" "k-$tag")"
     eq "${reply%% *}" 200
     body="${reply#* }"
@@ -162,6 +178,13 @@ for version in "${SINGBOX_VERSIONS[@]}"; do
 
     eq "$(enroll "e-$tag" "$(link_field "$W/link-$tag" t)" "k-$tag" | cut -d' ' -f1)" 401
     pass "the same QR a second time gets 401"
+
+    if [ "$n" -eq 1 ]; then
+        g /usr/local/bin/relayd install --host "$(addr 10)" --sni dest.test >"$W/out3" 2>"$W/err3"
+        no grep -q 'vpnchain://' "$W/out3" "$W/err3"
+        grep -q 'already set up; add devices from the app' "$W/err3"
+        pass "running install again after a device enrolled prints no code and points to the app"
+    fi
 
     client_from "o-$tag" "$version" "$W/link-$tag"
     eq "$(through "o-$tag" "http://$(addr 50)/")" ""
@@ -251,7 +274,9 @@ touch /var/log/xray/error.log /var/log/xray/access.log && chown -R nobody /var/l
         device1) eq "$(link_field "$W/out-$label" id)" "$old_uuid"; eq "$(link_field "$W/out-$label" sid)" "$old_sid" ;;
         *) [ "$(link_field "$W/out-$label" id)" != "$old_uuid" ]; [ "$(link_field "$W/out-$label" id)" != "$phone_uuid" ] ;;
     esac
-    pass "$label: the link is for $paired and carries the existing public key"
+    eq "$(link_field "$W/out-$label" f)" 1
+    grep -q 'keep working' "$W/err-$label"
+    pass "$label: the link is for $paired, carries the existing public key, and the output says existing devices keep working"
     client_up "$label-after-1" "$version" "$ip" 443 dest.test "$pbk" "$old_sid" "$old_uuid"
     client_up "$label-after-2" "$version" "$ip" 443 dest.test "$pbk" "$phone_sid" "$phone_uuid"
     eq "$(through "$label-after-1" "http://$(addr 50)/")" public
@@ -276,6 +301,7 @@ touch /var/log/xray/error.log /var/log/xray/access.log && chown -R nobody /var/l
 }
 
 step "b) a second device is paired without signing out the first"
+sleep 61 # the failed enrolls above fill the agent's five-a-minute limit
 g relayd pair --new phone >"$W/link-phone"
 eq "$(g stat -c '%U:%G %a' $STATE_DIR/relay.json $STATE_DIR/relay.secrets.json | paste -sd' ')" "relayd:relayd 600 relayd:relayd 600"
 eq "$(g stat -c '%U:%G %a' /usr/local/etc/xray/config.json)" relayd:xray\ 640

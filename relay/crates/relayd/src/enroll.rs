@@ -17,6 +17,9 @@ const TOKEN_BYTES: usize = 32;
 /// How long a pairing link works, in seconds.
 pub const TOKEN_TTL: u64 = 15 * 60;
 
+/// How long the first admin device's link works, in seconds.
+pub const FIRST_ADMIN_TTL: u64 = 24 * 60 * 60;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Pending {
@@ -58,8 +61,8 @@ impl Enrollments {
         }
     }
 
-    /// A new token for `device`, replacing any it still had. It is returned once and kept only
-    /// as a hash.
+    /// A new token for `device` that works for `ttl` seconds, replacing any it still had. It is
+    /// returned once and kept only as a hash.
     pub fn issue(
         &self,
         lock: &Path,
@@ -67,6 +70,7 @@ impl Enrollments {
         device: &str,
         role: Role,
         now: u64,
+        ttl: u64,
     ) -> Result<Secret, Error> {
         let mut bytes = [0u8; TOKEN_BYTES];
         getrandom::fill(&mut bytes).expect("the OS provides randomness");
@@ -80,7 +84,7 @@ impl Enrollments {
             hash: digest(&token),
             device: device.to_owned(),
             role,
-            expires: now + TOKEN_TTL,
+            expires: now + ttl,
         });
         self.write(&tokens)?;
         Ok(Secret::new(token))

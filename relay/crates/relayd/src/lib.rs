@@ -47,7 +47,7 @@ pub use adopt::{adopt, adopt_with};
 pub use clock::now;
 pub use config_file::{Placement, write_config};
 pub use devices::{Manager, SPARES};
-pub use enroll::{Enrollments, TOKEN_TTL, Verdict};
+pub use enroll::{Enrollments, FIRST_ADMIN_TTL, TOKEN_TTL, Verdict};
 pub use error::{Error, Kind};
 pub use identity::Identity;
 pub use import::import;

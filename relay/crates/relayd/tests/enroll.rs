@@ -109,7 +109,7 @@ impl Rig {
 
     fn token_for(&self, device: &str, role: Role) -> String {
         self.tokens()
-            .issue(&self.lock(), WAIT, device, role, seconds())
+            .issue(&self.lock(), WAIT, device, role, seconds(), TOKEN_TTL)
             .unwrap()
             .expose()
             .to_owned()
@@ -148,7 +148,7 @@ fn a_token_is_good_once() {
     let rig = Rig::start();
     let tokens = rig.tokens();
     let token = tokens
-        .issue(&rig.lock(), WAIT, "laptop", Role::Admin, NOW)
+        .issue(&rig.lock(), WAIT, "laptop", Role::Admin, NOW, TOKEN_TTL)
         .unwrap();
 
     let first = tokens
@@ -173,7 +173,7 @@ fn a_token_is_expired_after_fifteen_minutes_and_burned_by_the_attempt() {
     let rig = Rig::start();
     let tokens = rig.tokens();
     let token = tokens
-        .issue(&rig.lock(), WAIT, "laptop", Role::Member, NOW)
+        .issue(&rig.lock(), WAIT, "laptop", Role::Member, NOW, TOKEN_TTL)
         .unwrap();
 
     let late = tokens
@@ -191,13 +191,13 @@ fn a_new_token_replaces_the_devices_earlier_one() {
     let rig = Rig::start();
     let tokens = rig.tokens();
     let old = tokens
-        .issue(&rig.lock(), WAIT, "laptop", Role::Member, NOW)
+        .issue(&rig.lock(), WAIT, "laptop", Role::Member, NOW, TOKEN_TTL)
         .unwrap();
     let other = tokens
-        .issue(&rig.lock(), WAIT, "shared", Role::Member, NOW)
+        .issue(&rig.lock(), WAIT, "shared", Role::Member, NOW, TOKEN_TTL)
         .unwrap();
     tokens
-        .issue(&rig.lock(), WAIT, "laptop", Role::Member, NOW)
+        .issue(&rig.lock(), WAIT, "laptop", Role::Member, NOW, TOKEN_TTL)
         .unwrap();
 
     let replaced = tokens
@@ -283,6 +283,7 @@ fn an_expired_token_gets_410_and_a_made_up_one_401() {
             "laptop",
             Role::Member,
             seconds() - TOKEN_TTL - 5,
+            TOKEN_TTL,
         )
         .unwrap();
 

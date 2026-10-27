@@ -18,6 +18,7 @@ use super::reply::ApiError;
 use super::{Principal, Service};
 use crate::clock::seconds;
 use crate::install::wireguard;
+use crate::pairing::Purpose;
 use crate::{Error, Exit, Role, TOKEN_TTL, pairing, valid_name};
 
 type Outcome = Result<Response, ApiError>;
@@ -298,8 +299,13 @@ async fn pair_device(
                 ));
             }
             let expires = seconds() + TOKEN_TTL;
-            let link =
-                pairing::issue(&service.state, &service.secrets, &service.lock, Some(&name))?;
+            let link = pairing::issue(
+                &service.state,
+                &service.secrets,
+                &service.lock,
+                Some(&name),
+                Purpose::Device,
+            )?;
             Ok((link.expose().to_owned(), expires))
         })
         .await?;

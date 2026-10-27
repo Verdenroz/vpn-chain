@@ -8,7 +8,7 @@ use qrcode::{Color, EcLevel, QrCode};
 use serde::{Deserialize, Serialize};
 
 use crate::clock::seconds;
-use crate::{Enrollments, Error, Relay, Role, Secret, TOKEN_TTL, store};
+use crate::{Enrollments, Error, FIRST_ADMIN_TTL, Relay, Role, Secret, TOKEN_TTL, store};
 
 const LINK_VERSION: u32 = 1;
 const PUBLIC_SCHEMA: u32 = 1;
@@ -53,13 +53,40 @@ impl Public {
     }
 }
 
+/// What a pairing link is for, which sets how long it works.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Purpose {
+    /// A device the relay already has, for [`TOKEN_TTL`] seconds.
+    Device,
+    /// The first admin device, for [`FIRST_ADMIN_TTL`] seconds. The link is marked `f=1` so the
+    /// app can say where to get another.
+    FirstAdmin,
+}
+
+impl Purpose {
+    fn ttl(self) -> u64 {
+        match self {
+            Self::Device => TOKEN_TTL,
+            Self::FirstAdmin => FIRST_ADMIN_TTL,
+        }
+    }
+
+    fn lifetime(self) -> String {
+        match self.ttl() {
+            ttl if ttl >= 3600 => format!("{} hours", ttl / 3600),
+            ttl => format!("{} minutes", ttl / 60),
+        }
+    }
+}
+
 /// A new pairing link for `device`, or for the first admin when none is named. The token in it
-/// works once, for [`TOKEN_TTL`] seconds, and only its hash is stored. The link is a secret.
+/// works once, for as long as `purpose` says, and only its hash is stored. The link is a secret.
 pub fn issue(
     state: &Path,
     secrets: &Path,
     lock: &Path,
     device: Option<&str>,
+    purpose: Purpose,
 ) -> Result<Secret, Error> {
     let relay = Relay::load(state, secrets)?;
     let device = match device {
@@ -73,14 +100,15 @@ pub fn issue(
     .ok_or_else(|| Error::missing("no such device; name one with --device"))?;
     let public = Public::read(&Public::beside(state))?;
     let now = seconds();
+    let ttl = purpose.ttl();
     let token =
-        Enrollments::beside(state).issue(lock, LOCK_WAIT, &device.name, device.role, now)?;
+        Enrollments::beside(state).issue(lock, LOCK_WAIT, &device.name, device.role, now, ttl)?;
     let inbound = &relay.state.inbound;
     let host = match public.host.parse::<Ipv6Addr>() {
         Ok(_) => format!("[{}]", public.host),
         Err(_) => public.host.clone(),
     };
-    let pairs = [
+    let mut pairs = vec![
         ("v", LINK_VERSION.to_string()),
         ("h", host),
         ("p", inbound.port.to_string()),
@@ -90,8 +118,11 @@ pub fn issue(
         ("id", device.uuid.expose().to_owned()),
         ("n", device.name.clone()),
         ("t", token.expose().to_owned()),
-        ("e", (now + TOKEN_TTL).to_string()),
+        ("e", (now + ttl).to_string()),
     ];
+    if purpose == Purpose::FirstAdmin {
+        pairs.push(("f", "1".to_owned()));
+    }
     let query: Vec<String> = pairs
         .iter()
         .map(|(name, value)| format!("{name}={}", encode(value)))
@@ -101,14 +132,14 @@ pub fn issue(
 
 /// The link as a QR code and as text, for the terminal. The link is a credential, so this is
 /// the only place it is written out.
-pub fn show(link: &Secret) -> String {
+pub fn show(link: &Secret, purpose: Purpose) -> String {
     let code = QrCode::with_error_correction_level(link.expose(), EcLevel::L)
         .expect("a pairing link fits in a QR code");
     let mut text = String::new();
     writeln!(
         text,
-        "Scan this with the vpn-chain app, or paste the link below it. It works once and for {} minutes.\n",
-        TOKEN_TTL / 60
+        "Scan this with the vpn-chain app, or paste the link below it. It works once and for {}.\n",
+        purpose.lifetime()
     )
     .expect("writing to a string cannot fail");
     text.push_str(&render(&code, std::io::stdout().is_terminal()));

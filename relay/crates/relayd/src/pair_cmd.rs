@@ -6,6 +6,8 @@ use relayd::{
     layout, now, pairing, secrets_path,
 };
 
+use relayd::pairing::Purpose;
+
 use crate::args::Args;
 use crate::target::XRAY_GROUP;
 
@@ -47,8 +49,8 @@ pub fn pair(args: &[&str]) -> Option<Result<(), Error>> {
         }
     };
     Some(paired.and_then(|name| {
-        let link = pairing::issue(&state, &secrets, &lock, name)?;
-        print!("{}", pairing::show(&link));
+        let link = pairing::issue(&state, &secrets, &lock, name, Purpose::Device)?;
+        print!("{}", pairing::show(&link, Purpose::Device));
         Ok(())
     }))
 }
