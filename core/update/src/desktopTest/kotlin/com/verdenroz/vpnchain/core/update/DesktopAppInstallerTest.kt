@@ -33,36 +33,48 @@ class DesktopAppInstallerTest {
 
     @Test
     fun `a development run is not offered updates`() {
-        val installer = DesktopAppInstaller(DebInstall(root), appPath = null)
+        val installer = DesktopAppInstaller(PackageInstall(root), appPath = null)
 
         assertNull(installer.artifactKey)
     }
 
     @Test
     fun `a launcher outside the package is not offered updates`() {
-        val installer = DesktopAppInstaller(DebInstall(root), appPath = Files.createFile(temp.resolve("elsewhere")).toString())
+        val installer = DesktopAppInstaller(PackageInstall(root), appPath = Files.createFile(temp.resolve("elsewhere")).toString())
 
         assertNull(installer.artifactKey)
     }
 
     @Test
     fun `a machine without the package is not offered updates`() {
-        val installer = DesktopAppInstaller(DebInstall(temp.resolve("missing")), appPath = launcher.toString())
+        val installer = DesktopAppInstaller(PackageInstall(temp.resolve("missing")), appPath = launcher.toString())
 
         assertNull(installer.artifactKey)
     }
 
     @Test
     fun `the packaged app is offered the linux build`() {
-        val installer = DesktopAppInstaller(DebInstall(root), appPath = launcher.toString())
+        val installer = DesktopAppInstaller(PackageInstall(root), appPath = launcher.toString())
 
         assertEquals("linux-x64", installer.artifactKey)
     }
 
     @Test
+    fun `a package that names its build is offered that build`() = runTest {
+        Files.createDirectories(root.resolve("libexec"))
+        Files.writeString(root.resolve("libexec/artifact-key"), "linux-x64-arch\n")
+        val arch = AppRelease("0.1.7", mapOf("linux-x64-arch" to ReleaseArtifact("vpn-chain.pkg.tar.zst", 3, sha256)))
+        val install = PackageInstall(root, pkexec("cat >/dev/null"))
+        val installer = DesktopAppInstaller(install, appPath = launcher.toString(), relaunch = {})
+
+        assertEquals("linux-x64-arch", installer.artifactKey)
+        assertEquals(InstallResult.Started, installer.install(deb().toOkioPath(), arch))
+    }
+
+    @Test
     fun `hands the helper the hash and the package and relaunches`() = runTest {
         val record = temp.resolve("record")
-        val install = DebInstall(root, pkexec("echo \"\$@\" > $record; cat >> $record"))
+        val install = PackageInstall(root, pkexec("echo \"\$@\" > $record; cat >> $record"))
         val relaunched = mutableListOf<Path>()
         val installer = DesktopAppInstaller(install, appPath = launcher.toString(), relaunch = { relaunched.add(it) })
 
@@ -75,7 +87,7 @@ class DesktopAppInstallerTest {
 
     @Test
     fun `a failed install reports the helper's last line and does not relaunch`() = runTest {
-        val install = DebInstall(root, pkexec("echo noise; echo 'the download does not match its SHA-256'; exit 1"))
+        val install = PackageInstall(root, pkexec("echo noise; echo 'the download does not match its SHA-256'; exit 1"))
         val relaunched = mutableListOf<Path>()
         val installer = DesktopAppInstaller(install, appPath = launcher.toString(), relaunch = { relaunched.add(it) })
 
