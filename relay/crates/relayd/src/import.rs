@@ -242,7 +242,7 @@ fn section<T: DeserializeOwned>(config: &Value, list: &str, tag: &str) -> Result
     };
     T::deserialize(entry)
         .map(Some)
-        .map_err(|error| Error::new(format!("the {tag} entry: {}", store::redacted(&error))))
+        .map_err(|error| Error::new(format!("the {tag} entry: {}", store::described(&error))))
 }
 
 fn refuse_unmodelled(config: &Value, relay: &Relay) -> Result<(), Error> {

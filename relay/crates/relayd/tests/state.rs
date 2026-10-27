@@ -110,7 +110,7 @@ fn an_unknown_field_is_refused() {
     let (_dir, path) = scratch();
     write_state(&path, |state| state["inbound"]["listen"] = "0.0.0.0".into());
 
-    assert!(load_error(&path).contains("unknown field `listen`"));
+    assert!(load_error(&path).contains("a missing, unknown or invalid value at line"));
 }
 
 #[test]
@@ -133,7 +133,7 @@ fn a_mistyped_key_is_refused_without_quoting_it() {
     });
 
     let error = load_error(&path);
-    assert!(error.contains("invalid type: string \"..\""), "{error}");
+    assert!(error.contains("invalid value at line"), "{error}");
     assert_no_secret(&error);
 }
 

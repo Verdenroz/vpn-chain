@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::{Error, Secret, store};
 
@@ -167,11 +166,13 @@ impl Relay {
 }
 
 fn read_versioned<T: DeserializeOwned>(path: &Path) -> Result<T, Error> {
-    let json: Value = store::read_json(path)?;
-    match json.get("v").and_then(Value::as_u64) {
-        Some(v) if v == u64::from(SCHEMA) => {
-            T::deserialize(json).map_err(|error| Error::at(path, store::redacted(&error)))
-        }
+    #[derive(Deserialize)]
+    struct Envelope {
+        v: Option<u64>,
+    }
+    let text = fs::read_to_string(path).map_err(|error| Error::at(path, error))?;
+    match store::parse::<Envelope>(path, &text)?.v {
+        Some(v) if v == u64::from(SCHEMA) => store::parse(path, &text),
         Some(other) => Err(Error::at(
             path,
             format!("written by schema v{other}; this relayd reads v{SCHEMA}"),

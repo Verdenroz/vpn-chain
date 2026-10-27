@@ -224,7 +224,7 @@ fn a_tracked_short_id_the_config_does_not_offer_is_refused() {
 fn an_unknown_devices_json_field_is_refused() {
     let error = import_edited(|_| {}, |devices| devices["laptop"]["role"] = json!("admin"));
 
-    assert!(error.contains("unknown field `role`"), "{error}");
+    assert!(error.contains("invalid value at line"), "{error}");
 }
 
 #[test]
@@ -305,5 +305,30 @@ fn a_mistyped_short_id_list_is_refused_without_quoting_it() {
         |_| {},
     );
 
-    assert!(error.contains("invalid type: string \"..\""), "{error}");
+    assert!(
+        error.contains("the vless-reality-443 entry: a missing, unknown or invalid value"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_numeric_short_id_stays_out_of_the_error() {
+    let error = import_edited(
+        |_| {},
+        |devices| devices["laptop"]["shortId"] = json!(987654321012_u64),
+    );
+
+    assert!(error.contains("invalid value at line"), "{error}");
+    assert!(!error.contains("987654321012"), "{error}");
+}
+
+#[test]
+fn a_value_with_an_escaped_quote_stays_out_of_the_error() {
+    let error = import_edited(
+        |_| {},
+        |devices| devices["laptop"]["up"] = json!("s3cr\"et-value"),
+    );
+
+    assert!(!error.contains("s3cr"), "{error}");
+    assert!(!error.contains("et-value"), "{error}");
 }

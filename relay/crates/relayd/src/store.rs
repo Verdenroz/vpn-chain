@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde_json::error::Category;
 
 use crate::Error;
 
@@ -14,26 +15,29 @@ pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, Error> {
 
 /// Like [`read_json`], with a missing file as `None`. Any other read error still fails.
 pub fn read_json_if_present<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, Error> {
-    let text = match fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(Error::at(path, error)),
-    };
-    serde_json::from_str(&text)
-        .map(Some)
-        .map_err(|error| Error::at(path, redacted(&error)))
+    match fs::read_to_string(path) {
+        Ok(text) => parse(path, &text).map(Some),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(Error::at(path, error)),
+    }
 }
 
-/// serde's message with every quoted value blanked, since the value may be a key or UUID.
-/// Field and variant names are quoted with backticks and survive.
-pub fn redacted(error: &serde_json::Error) -> String {
-    error
-        .to_string()
-        .split('"')
-        .enumerate()
-        .map(|(index, part)| if index % 2 == 1 { ".." } else { part })
-        .collect::<Vec<_>>()
-        .join("\"")
+pub fn parse<T: DeserializeOwned>(path: &Path, text: &str) -> Result<T, Error> {
+    serde_json::from_str(text).map_err(|error| Error::at(path, described(&error)))
+}
+
+/// What went wrong and where, without serde's message, which quotes the rejected value.
+pub fn described(error: &serde_json::Error) -> String {
+    let reason = match error.classify() {
+        Category::Syntax => "not valid JSON",
+        Category::Eof => "JSON that ends early",
+        Category::Data => "a missing, unknown or invalid value",
+        Category::Io => "an unreadable value",
+    };
+    match error.line() {
+        0 => reason.to_owned(),
+        line => format!("{reason} at line {line} column {}", error.column()),
+    }
 }
 
 /// Pretty-printed with a trailing newline, as jq writes it.
