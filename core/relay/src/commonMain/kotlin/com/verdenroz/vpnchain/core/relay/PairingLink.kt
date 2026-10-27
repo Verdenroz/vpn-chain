@@ -21,6 +21,8 @@ data class PairingLink(
     val deviceName: String,
     val token: String,
     val expires: Long,
+    /** Set on the code printed for the relay's first admin device, which only the server can reissue. */
+    val firstAdmin: Boolean = false,
 ) {
     fun isExpired(nowSeconds: Long) = nowSeconds >= expires
 
@@ -35,6 +37,7 @@ data class PairingLink(
         append("&n=").append(encode(deviceName))
         append("&t=").append(encode(token))
         append("&e=").append(expires)
+        if (firstAdmin) append("&f=1")
     }
 
     override fun toString() = "PairingLink(host=$host)"
@@ -81,6 +84,7 @@ data class PairingLink(
                 deviceName = fields.field("n").takeIf(deviceNameText::matches) ?: throw invalid("n"),
                 token = fields.field("t").takeIf(base64Url::matches) ?: throw invalid("t"),
                 expires = fields.field("e").toLongOrNull()?.takeIf { it > 0 } ?: throw invalid("e"),
+                firstAdmin = fields["f"] == "1",
             )
         }
 
