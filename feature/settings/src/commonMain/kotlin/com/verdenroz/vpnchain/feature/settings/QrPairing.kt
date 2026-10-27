@@ -26,3 +26,7 @@ expect fun renderQrCode(text: String): ImageBitmap?
  */
 @Composable
 expect fun rememberQrScanLauncher(onResult: (String?) -> Unit): () -> Unit
+
+/** Opens the platform's share sheet with the text, or null where there is none. */
+@Composable
+expect fun rememberTextSharer(): ((String) -> Unit)?

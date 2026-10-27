@@ -5,7 +5,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -30,8 +28,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.verdenroz.vpnchain.core.common.Platform
@@ -57,11 +53,13 @@ import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.settings.component.AboutSection
 import com.verdenroz.vpnchain.feature.settings.component.DnsFilterPicker
 import com.verdenroz.vpnchain.feature.settings.component.PairingStatusPanel
+import com.verdenroz.vpnchain.feature.settings.component.QrImage
 import com.verdenroz.vpnchain.feature.settings.component.ProfileForm
 import com.verdenroz.vpnchain.feature.settings.component.ProfilePicker
 import com.verdenroz.vpnchain.feature.settings.component.ThemePicker
 import com.verdenroz.vpnchain.feature.settings.component.WarpModePicker
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_allow_local_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_allow_local_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_always_on_active
@@ -126,8 +124,6 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_window_title
-import kotlin.math.max
-import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -204,6 +200,7 @@ fun SettingsRoute(
         onDeleteProfile = viewModel::deleteProfile,
         onRenameProfile = viewModel::renameProfile,
         onOpenSystemVpnSettings = viewModel::openSystemVpnSettings,
+        devices = { DevicesRoute() },
         modifier = modifier,
     )
 }
@@ -243,6 +240,7 @@ fun SettingsScreen(
     onDeleteProfile: (String) -> Unit,
     onRenameProfile: (String, String) -> Unit,
     onOpenSystemVpnSettings: () -> Unit,
+    devices: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = VpnChainTheme.colors
@@ -384,6 +382,10 @@ fun SettingsScreen(
                     Spacer(Modifier.height(16.dp))
                     uiState.profile?.relay?.let { QrPairingPanel(it, uiState.profile?.wireGuard) }
                 }
+            }
+
+            if (uiState.profile?.relay != null) {
+                SectionCard(title = stringResource(Res.string.devices_title)) { devices() }
             }
 
             SectionCard(title = stringResource(Res.string.settings_automation_title)) {
@@ -759,7 +761,6 @@ private fun ImportSection(
 @Composable
 private fun QrPairingPanel(profile: ChainProfile, entryHop: WireGuardEntry?) {
     val colors = VpnChainTheme.colors
-    val bitmap = remember(profile, entryHop) { renderQrCode(SecretsEnvParser.format(SecretsEnvParser.Parsed(profile, entryHop))) }
     Column {
         Text(
             stringResource(Res.string.settings_qr_warning),
@@ -767,22 +768,7 @@ private fun QrPairingPanel(profile: ChainProfile, entryHop: WireGuardEntry?) {
             color = colors.reroutedText,
         )
         Spacer(Modifier.height(12.dp))
-        bitmap?.let {
-            // Round to a whole number of device pixels per module. Any fractional
-            // scale makes neighbouring modules differ in width, and that uneven
-            // grid is what a phone camera fails to lock onto.
-            val density = LocalDensity.current
-            val modulePx = with(density) { QR_TARGET_SIZE.toPx() } / it.width
-            val scale = max(QR_MIN_MODULE_PX, modulePx.roundToInt())
-            Image(
-                bitmap = it,
-                contentDescription = null,
-                // Nearest-neighbor, not the default bilinear: the integer upscale
-                // above keeps every module square, which filtering would blur back out.
-                filterQuality = FilterQuality.None,
-                modifier = Modifier.size(with(density) { (it.width * scale).toDp() }),
-            )
-        }
+        QrImage(SecretsEnvParser.format(SecretsEnvParser.Parsed(profile, entryHop)))
     }
 }
 
