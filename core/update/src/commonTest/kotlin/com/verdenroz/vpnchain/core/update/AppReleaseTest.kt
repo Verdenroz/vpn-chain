@@ -12,12 +12,12 @@ class AppReleaseTest {
             """
             {"version":1,"versionName":"0.1.7","versionCode":107,"artifacts":{
               "android-arm64-v8a":{"path":"vpn-chain-0.1.7-android-arm64-v8a.apk","size":27,"sha256":"aa"},
-              "linux-x64":{"path":"vpn-chain-0.1.7-linux-x64.tar.gz","size":22,"sha256":"bb"}}}
+              "linux-x64":{"path":"vpn-chain-0.1.7-linux-x64.deb","size":22,"sha256":"bb"}}}
             """,
         )
 
         assertEquals("0.1.7", release.versionName)
-        assertEquals(ReleaseArtifact("vpn-chain-0.1.7-linux-x64.tar.gz", 22, "bb"), release.artifacts["linux-x64"])
+        assertEquals(ReleaseArtifact("vpn-chain-0.1.7-linux-x64.deb", 22, "bb"), release.artifacts["linux-x64"])
         assertEquals(setOf("android-arm64-v8a", "linux-x64"), release.artifacts.keys)
     }
 
