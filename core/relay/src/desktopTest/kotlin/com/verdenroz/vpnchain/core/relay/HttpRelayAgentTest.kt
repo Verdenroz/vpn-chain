@@ -164,6 +164,28 @@ class HttpRelayAgentTest {
     }
 
     @Test
+    fun `pair signs an empty POST and decodes the code without printing it`() = runTest {
+        route = { _, _ -> Reply(200, """{"link":"vpnchain://pair?v=1&t=tokenvalue","expires":$NOW}""") }
+        val (client, fake) = agent()
+
+        val code = client.pair("phone")
+
+        assertEquals(PairingCode("vpnchain://pair?v=1&t=tokenvalue", NOW), code)
+        assertEquals("POST /v1/devices/phone/pair", fake.seen.single().let { "${it.method} ${it.target}" })
+        assertFalse("tokenvalue" in code.toString())
+    }
+
+    @Test
+    fun `pairing the calling device is refused with the agent's wording`() = runTest {
+        route = { _, _ -> Reply(409, """{"error":"this device cannot pair itself"}""") }
+        val (client, _) = agent()
+
+        val refused = assertFailsWith<AgentException> { client.pair("laptop") }
+
+        assertEquals(409, refused.status)
+    }
+
+    @Test
     fun `no tunnel and a closed port both read as unreachable`() = runTest {
         val noTunnel = HttpRelayAgent(key, { null }, createAgentTransport(), { localClock })
         val closed = java.net.ServerSocket(0).use { it.localPort }

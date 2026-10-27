@@ -42,6 +42,12 @@ data class AgentIdentity(
     override fun toString() = "AgentIdentity(name=$name)"
 }
 
+/** A pairing link the agent issued, valid until unix second [expires]. It is a secret, so [toString] shows the expiry only. */
+@Serializable
+data class PairingCode(val link: String, val expires: Long) {
+    override fun toString() = "PairingCode(expires=$expires)"
+}
+
 /** What the agent answers to a revoke. [job] is set when the short ID's removal needs an xray restart. */
 @Serializable
 data class Revoked(val countersLost: Boolean, val job: String? = null)
