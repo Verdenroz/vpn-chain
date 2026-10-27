@@ -16,11 +16,15 @@ kotlin {
             implementation(projects.core.config)
             implementation(projects.core.update)
         }
+        // Both targets are JVM, so the QR encoder is compiled into each.
+        androidMain { kotlin.srcDir("src/jvmShared/kotlin") }
+        desktopMain { kotlin.srcDir("src/jvmShared/kotlin") }
         desktopMain.dependencies {
-            // QR generation for pairing with the Android app — pure-Java, no AWT/Android deps.
+            // QR generation for pairing devices — pure-Java, no AWT/Android deps.
             implementation(libs.zxing.core)
         }
         androidMain.dependencies {
+            implementation(libs.zxing.core)
             // CameraX + ML Kit for QR pairing
             implementation(libs.androidx.camera.camera2)
             implementation(libs.androidx.camera.lifecycle)

@@ -1,7 +1,9 @@
 package com.verdenroz.vpnchain.feature.settings
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -25,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -38,8 +41,25 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan_no_camera_permission
 import org.jetbrains.compose.resources.stringResource
 
-// No display surface worth rendering to on a phone — Android only scans.
-actual fun renderQrCode(text: String): ImageBitmap? = null
+actual fun renderQrCode(text: String): ImageBitmap? = runCatching {
+    val matrix = qrMatrix(text)
+    val pixels = IntArray(matrix.width * matrix.height) { if (matrix[it % matrix.width, it / matrix.width]) BLACK else WHITE }
+    Bitmap.createBitmap(pixels, matrix.width, matrix.height, Bitmap.Config.ARGB_8888).asImageBitmap()
+}.getOrNull()
+
+@Composable
+actual fun rememberTextSharer(): ((String) -> Unit)? {
+    val context = LocalContext.current
+    return remember(context) {
+        { text ->
+            val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+            context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+}
+
+private const val BLACK = 0xFF000000.toInt()
+private const val WHITE = 0xFFFFFFFF.toInt()
 
 private enum class ScanState { Idle, Scanning, PermissionDenied }
 
