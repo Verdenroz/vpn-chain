@@ -152,8 +152,8 @@ class LibboxConnectionCloserTest {
             probe = ProbeProxy(relayPort = 41001, warpPort = 41002, fallbackPort = 0, username = "u", password = "p"),
         )
 
-        assertTrue(wantsConnectionEvents(probed, routedSites = false))
-        assertTrue(wantsConnectionEvents(learned, routedSites = true))
-        assertFalse(wantsConnectionEvents(learned, routedSites = false))
+        assertTrue(wantsConnectionEvents(probed, closesWanted = false))
+        assertTrue(wantsConnectionEvents(learned, closesWanted = true))
+        assertFalse(wantsConnectionEvents(learned, closesWanted = false))
     }
 }

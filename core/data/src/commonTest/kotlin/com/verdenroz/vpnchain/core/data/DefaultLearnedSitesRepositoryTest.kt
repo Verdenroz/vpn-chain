@@ -9,29 +9,23 @@ import com.verdenroz.vpnchain.core.config.RuleSetKind
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
-import com.verdenroz.vpnchain.core.tunnel.ConnectionCloser
-import com.verdenroz.vpnchain.core.tunnel.HostMatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.currentTime
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.yield
 
 private const val WEEK = 7L * 24 * 60 * 60 * 1000
 
-private class RecordingStore : LearnedRuleSetStore {
+internal class RecordingStore : LearnedRuleSetStore {
     var failing = false
     val files = mutableMapOf<RuleSetKind, LearnedRules>()
     val written get() = files[RuleSetKind.Warp]?.let { it.exact + it.suffixes }
@@ -45,246 +39,34 @@ private class RecordingStore : LearnedRuleSetStore {
     }
 }
 
-private class LearnedSitesPreferences(private val yielding: Boolean = false) : DataStore<Preferences> {
+/** [nextReadGate] holds the next read, which then returns the state from before it waited. */
+internal class LearnedSitesPreferences : DataStore<Preferences> {
     private val state = MutableStateFlow(emptyPreferences())
-    override val data: Flow<Preferences> = state
-    override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences {
-        if (yielding) yield()
-        return transform(state.value).also { state.value = it }
+    var nextReadGate: CompletableDeferred<Unit>? = null
+
+    override val data: Flow<Preferences> = flow {
+        val snapshot = state.value
+        nextReadGate?.also { nextReadGate = null }?.await()
+        emit(snapshot)
+        emitAll(state)
     }
+
+    override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
+        transform(state.value).also { state.value = it }
 }
 
-private class RecordingCloser(private val store: RecordingStore) : ConnectionCloser {
-    var failing = false
-    val closed = mutableListOf<Pair<HostMatch, List<String>>>()
-    val batches = mutableListOf<Long>()
-    val tracked = mutableListOf<Boolean>()
-    lateinit var scheduler: TestCoroutineScheduler
-
-    override suspend fun close(matches: Collection<HostMatch>) {
-        if (failing) throw IllegalStateException("clash API unreachable")
-        batches += scheduler.currentTime
-        closed += matches.map { it to store.writtenDirect.orEmpty() }
-    }
-
-    override fun track(routedSites: Boolean) {
-        tracked += routedSites
-    }
-}
-
-@OptIn(ExperimentalCoroutinesApi::class)
 class DefaultLearnedSitesRepositoryTest {
     private var clock = 1_000L
     private val scope = TestScope()
     private val store = RecordingStore()
-    private val closer = RecordingCloser(store).apply { scheduler = scope.testScheduler }
-    private val repository = repository(LearnedSitesPreferences())
-
-    private fun repository(preferences: LearnedSitesPreferences) = DefaultLearnedSitesRepository(
-        preferences = VpnChainPreferencesDataSource(preferences),
+    private val repository = DefaultLearnedSitesRepository(
+        preferences = VpnChainPreferencesDataSource(LearnedSitesPreferences()),
         store = store,
-        closer = closer,
+        closer = NoopConnectionCloser(),
         now = { clock },
         logger = SilentLogger(),
         scope = scope,
-        timeSource = scope.testScheduler.timeSource,
     )
-
-    @Test
-    fun `a move whose write failed is closed after the next write that succeeds`() = scope.runTest {
-        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
-        store.failing = true
-        repository.allowDirect("www.bank.example")
-        advanceUntilIdle()
-
-        store.failing = false
-        repository.learn("reddit.com", LearnedRoute.Warp, BlockReason.Forbidden)
-        advanceUntilIdle()
-
-        assertEquals(
-            setOf(HostMatch("www.bank.example", subdomains = false), HostMatch("reddit.com", subdomains = true)),
-            closer.closed.map { it.first }.toSet(),
-        )
-        assertEquals(listOf("www.bank.example"), store.writtenDirect)
-    }
-
-    @Test
-    fun `verdicts that move nothing do not postpone a pending close`() = scope.runTest {
-        repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
-        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
-        advanceUntilIdle()
-        val start = currentTime
-
-        repository.allowDirect("www.bank.example")
-        repeat(4) {
-            advanceTimeBy(300)
-            repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
-        }
-        advanceUntilIdle()
-
-        assertEquals(start + 1_000, closer.batches.last())
-    }
-
-    @Test
-    fun `steady moves close within three seconds of the first`() = scope.runTest {
-        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
-        val start = currentTime
-
-        repository.allowDirect("www.bank.example")
-        repeat(6) { n ->
-            advanceTimeBy(800)
-            repository.learn("site$n.com", LearnedRoute.Warp, BlockReason.Forbidden)
-        }
-        advanceUntilIdle()
-
-        assertEquals(start + 3_000, closer.batches.first())
-        assertTrue(HostMatch("www.bank.example", subdomains = false) in closer.closed.map { it.first })
-    }
-
-    @Test
-    fun `a route change and a removal at once both close the host`() = scope.runTest {
-        val racing = repository(LearnedSitesPreferences(yielding = true))
-        racing.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
-
-        coroutineScope {
-            launch { racing.allowDirect("www.bank.example") }
-            launch { racing.remove("www.bank.example") }
-        }
-        advanceUntilIdle()
-
-        assertTrue(racing.sites.first().isEmpty())
-        assertEquals(emptyList(), store.writtenDirect)
-        assertEquals(listOf(HostMatch("www.bank.example", subdomains = false) to emptyList()), closer.closed)
-    }
-
-    @Test
-    fun `the engine hears whether any learned site is routed`() = scope.runTest {
-        backgroundScope.launch { reportRoutedSites(repository.sites, closer) }
-        runCurrent()
-
-        repository.learn("b.com", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
-        runCurrent()
-        repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
-        runCurrent()
-        repository.remove("a.com")
-        runCurrent()
-
-        assertEquals(listOf(false, true, false), closer.tracked)
-    }
-
-    @Test
-    fun `sending a site direct closes its connections once sing-box has reloaded the rule-set`() = scope.runTest {
-        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
-
-        repository.allowDirect("www.bank.example")
-        advanceTimeBy(999)
-
-        assertTrue(closer.closed.isEmpty())
-
-        advanceTimeBy(2)
-
-        assertEquals(listOf(HostMatch("www.bank.example", subdomains = false) to listOf("www.bank.example")), closer.closed)
-    }
-
-    @Test
-    fun `a burst of rule-set writes holds every close until a second after the last one`() = scope.runTest {
-        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
-
-        repository.allowDirect("www.bank.example")
-        advanceTimeBy(800)
-        repository.learn("reddit.com", LearnedRoute.Warp, BlockReason.Forbidden)
-        advanceTimeBy(999)
-
-        assertTrue(closer.closed.isEmpty())
-
-        advanceTimeBy(2)
-
-        assertEquals(
-            setOf(HostMatch("www.bank.example", subdomains = false), HostMatch("reddit.com", subdomains = true)),
-            closer.closed.map { it.first }.toSet(),
-        )
-    }
-
-    @Test
-    fun `undo closes the connections sent direct`() = scope.runTest {
-        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
-        repository.allowDirect("www.bank.example")
-        advanceUntilIdle()
-
-        repository.forget("www.bank.example")
-        advanceUntilIdle()
-
-        assertEquals(HostMatch("www.bank.example", subdomains = false) to emptyList(), closer.closed.last())
-    }
-
-    @Test
-    fun `a warp route at a registrable domain closes the names under it`() = scope.runTest {
-        repository.learn("reddit.com", LearnedRoute.Warp, BlockReason.Forbidden)
-        repository.learn("github.io", LearnedRoute.Warp, BlockReason.Forbidden)
-        repository.learn("login.bank.example", LearnedRoute.FailOpen, BlockReason.Forbidden)
-        advanceUntilIdle()
-
-        assertEquals(
-            listOf(
-                HostMatch("reddit.com", subdomains = true),
-                HostMatch("github.io", subdomains = false),
-                HostMatch("login.bank.example", subdomains = false),
-            ),
-            closer.closed.map { it.first },
-        )
-    }
-
-    @Test
-    fun `removing a warp site closes its connections`() = scope.runTest {
-        repository.learn("reddit.com", LearnedRoute.Warp, BlockReason.Forbidden)
-        advanceUntilIdle()
-
-        repository.remove("reddit.com")
-        advanceUntilIdle()
-
-        assertEquals(List(2) { HostMatch("reddit.com", subdomains = true) }, closer.closed.map { it.first })
-    }
-
-    @Test
-    fun `a verdict that moves nothing closes nothing`() = scope.runTest {
-        repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
-        repository.learn("a.com", LearnedRoute.Warp, BlockReason.RateLimited)
-        repository.learn("b.com", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
-        repository.learn("c.com", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
-        repository.remove("c.com")
-        advanceUntilIdle()
-
-        assertEquals(listOf(HostMatch("a.com", subdomains = true)), closer.closed.map { it.first })
-    }
-
-    @Test
-    fun `an unwritten rule-set closes nothing`() = scope.runTest {
-        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
-        store.failing = true
-
-        repository.allowDirect("www.bank.example")
-        advanceUntilIdle()
-
-        assertTrue(closer.closed.isEmpty())
-    }
-
-    @Test
-    fun `a close that fails leaves the route change in place`() = scope.runTest {
-        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
-        closer.failing = true
-
-        repository.allowDirect("www.bank.example")
-        advanceUntilIdle()
-
-        assertEquals(LearnedRoute.Direct, repository.sites.first().single().route)
-        assertEquals(listOf("www.bank.example"), store.writtenDirect)
-
-        closer.failing = false
-        repository.forget("www.bank.example")
-        advanceUntilIdle()
-
-        assertEquals(listOf(HostMatch("www.bank.example", subdomains = false) to emptyList()), closer.closed)
-    }
 
     @Test
     fun `a learned site is stored with its reason and time and written to the rule-set`() = scope.runTest {

@@ -89,7 +89,10 @@ internal class DefaultChainRepository(
         // A stop from Android's notification key or an OS revoke never reaches
         // disconnect(), so clear intent here or it reads as a drop to reconnect.
         scope.launch {
-            controller.userStops.collect { preferences.setConnectionIntent(false) }
+            controller.userStops.collect {
+                preferences.setConnectionIntent(false)
+                learnedSites.forgetPendingCloses()
+            }
         }
         controller.installConfigProvider {
             preferences.setConnectionIntent(true)
@@ -155,6 +158,7 @@ internal class DefaultChainRepository(
         preferences.setConnectionIntent(false)
         runCatching { controller.stop() }
             .onFailure { logger.e(TAG, "disconnect failed", it) }
+        learnedSites.forgetPendingCloses()
     }
 
     override suspend fun release() {

@@ -106,6 +106,15 @@ class ClashConnectionCloserTest {
     }
 
     @Test
+    fun `a connection that ended before its delete is already closed`() = runTest {
+        FakeClashApi(deleteStatus = 404).use { api ->
+            ClashConnectionCloser(MutableStateFlow(api.config)).close(listOf(HostMatch("reddit.com", subdomains = true)))
+
+            assertEquals(listOf("d", "e"), api.deleted)
+        }
+    }
+
+    @Test
     fun `a null connection list is nothing to close, not a failure`() = runTest {
         FakeClashApi(listing = """{"downloadTotal":0,"uploadTotal":0,"connections":null}""").use { api ->
             ClashConnectionCloser(MutableStateFlow(api.config)).close(listOf(HostMatch("reddit.com", subdomains = true)))

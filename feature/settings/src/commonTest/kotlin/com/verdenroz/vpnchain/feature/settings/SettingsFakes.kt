@@ -109,4 +109,5 @@ internal class FakeLearnedSites(private val log: MutableList<String> = mutableLi
     override suspend fun reachable(): Map<String, Long> = emptyMap()
     override suspend fun saveReachable(domains: Map<String, Long>) = Unit
     override suspend fun syncRuleSets() = Unit
+    override suspend fun forgetPendingCloses() = Unit
 }

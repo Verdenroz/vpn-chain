@@ -70,7 +70,7 @@ internal class LibboxConnectionCloser(
         throw failure as? Exception ?: IllegalStateException("libbox could not close a connection", failure)
     }
 
-    override fun track(routedSites: Boolean) = tracking(routedSites)
+    override fun track(wanted: Boolean) = tracking(wanted)
 
     private inline fun nonFatal(block: () -> Unit): Throwable? = try {
         block()

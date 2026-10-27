@@ -740,7 +740,7 @@ internal fun staleTunRelease(previousFd: Int?, newFd: Int): StaleTunRelease =
 
 /**
  * Detection reads the connection stream whenever the config has probes. Closing a
- * rerouted site's connections needs it only while a learned site is routed.
+ * rerouted site's connections needs it only while a site is routed or a close is pending.
  */
-internal fun wantsConnectionEvents(config: String, routedSites: Boolean): Boolean =
-    ProbeProxy.fromConfig(config) != null || (routedSites && SingBoxConfigFactory.routesLearnedSites(config))
+internal fun wantsConnectionEvents(config: String, closesWanted: Boolean): Boolean =
+    ProbeProxy.fromConfig(config) != null || (closesWanted && SingBoxConfigFactory.routesLearnedSites(config))

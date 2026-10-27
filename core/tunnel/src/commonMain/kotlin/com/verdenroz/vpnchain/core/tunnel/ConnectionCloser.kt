@@ -19,8 +19,8 @@ interface ConnectionCloser {
     suspend fun close(matches: Collection<HostMatch>)
 
     /**
-     * Whether any learned site is routed, so a later [close] could have work.
+     * Whether a later [close] could have work: a learned site is routed, or a close is pending.
      * An engine that has to watch its connections to close them can skip that while this is false.
      */
-    fun track(routedSites: Boolean) = Unit
+    fun track(wanted: Boolean) = Unit
 }

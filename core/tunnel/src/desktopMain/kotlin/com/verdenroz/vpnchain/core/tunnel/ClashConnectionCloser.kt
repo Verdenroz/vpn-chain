@@ -32,7 +32,9 @@ internal class ClashConnectionCloser(private val runningConfig: StateFlow<String
             readTimeout = TIMEOUT_MS
         }
         try {
-            if (connection.responseCode !in 200..299) throw IOException("clash API answered ${connection.responseCode}")
+            val code = connection.responseCode
+            // A connection that ended after the listing answers 404.
+            if (code !in 200..299 && code != HttpURLConnection.HTTP_NOT_FOUND) throw IOException("clash API answered $code")
         } finally {
             connection.disconnect()
         }

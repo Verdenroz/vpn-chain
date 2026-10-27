@@ -108,6 +108,7 @@ private class FakeLearned(vararg initial: LearnedSite) : LearnedSitesRepository 
     override suspend fun reachable(): Map<String, Long> = emptyMap()
     override suspend fun saveReachable(domains: Map<String, Long>) = Unit
     override suspend fun syncRuleSets() = Unit
+    override suspend fun forgetPendingCloses() = Unit
 
     private fun reroute(domain: String, route: LearnedRoute) {
         sites.value = sites.value.map { if (it.domain == domain) it.copy(route = route) else it }
