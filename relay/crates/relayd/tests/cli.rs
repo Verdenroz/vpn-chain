@@ -327,8 +327,9 @@ fn a_device_change_with_no_xray_api_fails_before_touching_anything() {
 
     let refused = relayd(&[
         "device".as_ref(),
-        "revoke".as_ref(),
+        "rename".as_ref(),
         "shared".as_ref(),
+        "desk".as_ref(),
         "--state".as_ref(),
         &state,
         "--config".as_ref(),
