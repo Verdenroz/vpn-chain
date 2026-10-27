@@ -5,7 +5,9 @@ import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.relay.AgentDevice
 import com.verdenroz.vpnchain.core.relay.AgentException
+import com.verdenroz.vpnchain.core.relay.AgentExit
 import com.verdenroz.vpnchain.core.relay.AgentUnreachable
+import com.verdenroz.vpnchain.core.relay.ExitChange
 import com.verdenroz.vpnchain.core.relay.JobState
 import com.verdenroz.vpnchain.core.relay.PairingCode
 import com.verdenroz.vpnchain.core.relay.RelayAgent
@@ -32,6 +34,9 @@ data class DeviceBoard(
     val poolEmpty: Boolean,
 )
 
+/** Where the relay's traffic leaves. [exit] is null for a member, who is not told. */
+data class ExitBoard(val admin: Boolean, val exit: AgentExit?)
+
 /** Manages the active connection's relay through its agent. */
 interface RelayDevices {
     /** Emits when the active relay's key or the tunnel's reachability changes, which is when [load] may answer differently. */
@@ -52,6 +57,11 @@ interface RelayDevices {
 
     /** Tops up the spare short IDs and waits out the xray restart, which drops every device briefly. */
     suspend fun refillPool(): Result<Unit>
+
+    suspend fun loadExit(): Result<ExitBoard>
+
+    /** Switches the exit and waits out the xray restart, which drops every device briefly. */
+    suspend fun setExit(change: ExitChange): Result<Unit>
 }
 
 private const val HTTP_CONFLICT = 409
@@ -99,6 +109,17 @@ class ManageDevicesUseCase(
     override suspend fun refillPool() = call {
         keyed()
         agent.refillPool().job?.let { finish(it) }
+        Unit
+    }
+
+    override suspend fun loadExit() = call {
+        val relay = keyed()
+        ExitBoard(relay.managementAdmin, if (relay.managementAdmin) agent.exit() else null)
+    }
+
+    override suspend fun setExit(change: ExitChange) = call {
+        keyed()
+        agent.setExit(change)?.let { finish(it) }
         Unit
     }
 

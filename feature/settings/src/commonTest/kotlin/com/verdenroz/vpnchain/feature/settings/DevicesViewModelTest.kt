@@ -2,9 +2,12 @@ package com.verdenroz.vpnchain.feature.settings
 
 import com.verdenroz.vpnchain.core.domain.DeviceBoard
 import com.verdenroz.vpnchain.core.domain.DevicesFailed
+import com.verdenroz.vpnchain.core.domain.ExitBoard
 import com.verdenroz.vpnchain.core.domain.RelayDevices
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.relay.AgentDevice
+import com.verdenroz.vpnchain.core.relay.AgentExit
+import com.verdenroz.vpnchain.core.relay.ExitChange
 import com.verdenroz.vpnchain.core.relay.DeviceRole
 import com.verdenroz.vpnchain.core.relay.PairingCode
 import kotlinx.coroutines.Dispatchers
@@ -241,6 +244,8 @@ private class FakeDevices(private val log: MutableList<String>) : RelayDevices {
     var addResult = Result.success(CODE)
     var refillResult = Result.success(Unit)
     var cutOffResult = Result.success(Unit)
+    var exitBoard = Result.success(ExitBoard(admin = true, exit = AgentExit.Direct))
+    var setExitResult = Result.success(Unit)
     override var changes: Flow<Unit> = flowOf(Unit)
 
     override suspend fun load(): Result<DeviceBoard> {
@@ -271,5 +276,15 @@ private class FakeDevices(private val log: MutableList<String>) : RelayDevices {
     override suspend fun refillPool(): Result<Unit> {
         log += "refill"
         return refillResult
+    }
+
+    override suspend fun loadExit(): Result<ExitBoard> {
+        log += "loadExit"
+        return exitBoard
+    }
+
+    override suspend fun setExit(change: ExitChange): Result<Unit> {
+        log += "setExit:${change::class.simpleName}"
+        return setExitResult
     }
 }
