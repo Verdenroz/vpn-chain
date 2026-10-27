@@ -121,7 +121,7 @@ pass "a flag that only shapes a new relay is refused on one that exists"
 if [ "$DISTRO" = ubuntu ]; then
     step "a) a key added later turns key-only login on at the next run"
     g bash -c 'install -d -m700 /root/.ssh && echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test" >/root/.ssh/authorized_keys'
-    g /usr/local/bin/relayd install >/dev/null 2>"$W/err3"
+    g /usr/local/bin/relayd install >"$W/out2" 2>"$W/err3"
     eq "$(g sshd -T | grep -ci '^passwordauthentication no')" 1
     pass "running install again after adding a key hardens SSH, and nothing else changes"
 fi
