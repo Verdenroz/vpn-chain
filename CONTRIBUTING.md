@@ -117,7 +117,8 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`.
 The release carries the signed APKs (arm64-v8a, x86_64), the `.deb`, and
 `manifest.json` with the size and SHA-256 of each. The installed app downloads the
 `.deb`, checks those, and hands it to `desktopApp/deb/vpn-chain-install-update`
-through `pkexec`, which hashes its own copy again before `apt` installs it.
+through `pkexec`, which hashes its own copy again before `apt` installs it. Copies
+installed from the old tarball cannot update; reinstall the `.deb` once by hand.
 
 ### Signing
 

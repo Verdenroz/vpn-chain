@@ -4,12 +4,29 @@ Source: https://github.com/Verdenroz/vpn-chain
 
 Files: *
 Copyright: 2026 Harvey Tseng
-License: Proprietary
- All rights reserved.
+License: GPL-3+
+
+Files: opt/vpn-chain/lib/*
+Copyright: the authors of the bundled JRE, Compose, Kotlin and other libraries
+License: other
+ Each keeps its own license: the runtime's are under opt/vpn-chain/lib/runtime/legal
+ and every jar carries its own.
 
 Files: opt/vpn-chain/libexec/sing-box
 Copyright: nekohasekai <contact-git@sekai.icu>
 License: GPL-3+
- Source: https://github.com/SagerNet/sing-box
- On Debian systems the full text of the GNU General Public License version 3
- is in /usr/share/common-licenses/GPL-3.
+Comment: Source: https://github.com/SagerNet/sing-box
+
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 3 can be found in "/usr/share/common-licenses/GPL-3".
