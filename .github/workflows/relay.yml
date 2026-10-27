@@ -38,5 +38,5 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install
-      - run: crates/xray-api/tests/fetch-bins.sh
+      - run: crates/live-harness/fetch-bins.sh
       - run: cargo test -p xray-api --locked --test live -- --ignored

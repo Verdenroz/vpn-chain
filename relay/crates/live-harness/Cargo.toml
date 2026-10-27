@@ -1,0 +1,11 @@
+[package]
+name = "live-harness"
+version.workspace = true
+edition.workspace = true
+description = "Docker harness for the live tests: an Xray relay and sing-box clients"
+publish.workspace = true
+
+[dependencies]
+serde_json = "1"
+tokio = { version = "1.54.1", features = ["rt", "net", "io-util", "process", "time"] }
+uuid = { version = "1.29.0", features = ["v4"] }

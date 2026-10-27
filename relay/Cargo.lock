@@ -405,6 +405,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
+name = "live-harness"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "log"
 version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1127,6 +1136,7 @@ dependencies = [
 name = "xray-api"
 version = "0.1.0"
 dependencies = [
+ "live-harness",
  "prost",
  "protoc-bin-vendored",
  "serde_json",
