@@ -38,6 +38,7 @@ import org.jetbrains.compose.resources.stringResource
 import org.koin.core.context.startKoin
 
 internal fun runGui() {
+    installShutdownWatchdog()
     // Resolved from the Koin instance directly rather than through Compose
     // locals: this runs outside any KoinApplication composition.
     val koin = startKoin { modules(engineModules + controlServerModule + uiModules) }.koin
