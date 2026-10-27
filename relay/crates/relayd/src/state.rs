@@ -139,6 +139,33 @@ impl Relay {
         store::create(state, &store::to_json(&self.state), 0o600)
     }
 
+    /// The same relay with the device `name` an admin.
+    pub fn with_admin(self, name: &str) -> Result<Self, Error> {
+        if !self.state.devices.iter().any(|device| device.name == name) {
+            return Err(Error::new(format!("no device named {name}")));
+        }
+        let devices = self
+            .state
+            .devices
+            .into_iter()
+            .map(|device| Device {
+                role: if device.name == name {
+                    Role::Admin
+                } else {
+                    device.role
+                },
+                ..device
+            })
+            .collect();
+        Ok(Self {
+            state: State {
+                devices,
+                ..self.state
+            },
+            secrets: self.secrets,
+        })
+    }
+
     /// Replaces the state file, leaving the secrets alone.
     pub fn save_state(&self, state: &Path) -> Result<(), Error> {
         self.validate()?;

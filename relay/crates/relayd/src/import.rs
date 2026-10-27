@@ -95,6 +95,11 @@ struct Peer {
 /// import refuses to run while another tool holds it.
 pub fn import(config: &Path, devices: &Path, lock: &Path) -> Result<Relay, Error> {
     let _held = store::lock(lock)?;
+    import_held(config, devices)
+}
+
+/// [`import`] for a caller that already holds the lock.
+pub(crate) fn import_held(config: &Path, devices: &Path) -> Result<Relay, Error> {
     let tracked: BTreeMap<String, Tracked> =
         store::read_json_if_present(devices)?.unwrap_or_default();
     let config_json: Value = store::read_json(config)?;

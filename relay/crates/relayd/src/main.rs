@@ -1,74 +1,76 @@
-use std::collections::HashMap;
+mod args;
+mod device_cmd;
+
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use relayd::{DEVICES_LOCK, Error, Placement, Relay, import, secrets_path, write_config};
+use relayd::{
+    DEVICES_LOCK, Error, Placement, Relay, Restart, Systemctl, adopt, import, secrets_path,
+    write_config,
+};
 
-const USAGE: &str = "usage: relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>] [--lock <file>]
-       relayd render --state <state.json> [--secrets <secrets.json>] --out <config.json> [--group <name>] [--swap [--xray <path>]]";
+use args::Args;
+
+const USAGE: &str = "usage: relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>]
+       relayd adopt --config <config.json> [--devices <devices.json>] --state <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>] [--xray <path>] [--group <name>] [--restart]
+       relayd render --state <state.json> [--secrets <secrets.json>] --out <config.json> [--group <name>] [--swap [--xray <path>]]
+       relayd device list --state <state.json> [--secrets <secrets.json>]
+       relayd device add <name> --out <identity.json> [--role member|admin] [--allow-restart] <target>
+       relayd device rename <old> <new> <target>
+       relayd device rekey <name> --out <identity.json> <target>
+       relayd device revoke <name> [--force] <target>
+       relayd maintenance refill-pool <target>
+target: --state <state.json> --config <config.json> [--secrets <secrets.json>] [--lock <file>] [--xray <path>] [--group <name>] [--spares <n>]";
 
 const EX_USAGE: u8 = 64;
 const XRAY_GROUP: &str = "xray";
-const SWAP: &str = "--swap";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let result = match args.split_first() {
-        Some((command, rest)) if command == "import" => {
-            flags(rest, &["config", "devices", "out", "secrets", "lock"]).map(run_import)
-        }
-        Some((command, rest)) if command == "render" => {
-            let swap = rest.iter().any(|arg| arg == SWAP);
-            let rest: Vec<String> = rest.iter().filter(|arg| *arg != SWAP).cloned().collect();
-            flags(&rest, &["state", "secrets", "out", "group", "xray"])
-                .map(|flags| run_render(flags, swap))
-        }
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let result = match args.as_slice() {
+        ["import", rest @ ..] => run_import(rest),
+        ["adopt", rest @ ..] => run_adopt(rest),
+        ["render", rest @ ..] => run_render(rest),
+        ["device", rest @ ..] => device_cmd::device(rest),
+        ["maintenance", rest @ ..] => device_cmd::maintenance(rest),
         _ => None,
     };
     match result {
-        Some(Some(Ok(()))) => ExitCode::SUCCESS,
-        Some(Some(Err(error))) => {
+        Some(Ok(())) => ExitCode::SUCCESS,
+        Some(Err(error)) => {
             eprintln!("relayd: {error}");
             ExitCode::FAILURE
         }
-        _ => {
+        None => {
             eprintln!("{USAGE}");
             ExitCode::from(EX_USAGE)
         }
     }
 }
 
-/// `--name value` pairs, each named in `allowed` and given once.
-fn flags(args: &[String], allowed: &[&str]) -> Option<HashMap<String, PathBuf>> {
-    let mut flags = HashMap::new();
-    for pair in args.chunks(2) {
-        let [flag, value] = pair else { return None };
-        let name = flag
-            .strip_prefix("--")
-            .filter(|name| allowed.contains(name))?;
-        if flags
-            .insert(name.to_owned(), PathBuf::from(value))
-            .is_some()
-        {
-            return None;
-        }
-    }
-    Some(flags)
-}
-
-fn run_import(mut flags: HashMap<String, PathBuf>) -> Option<Result<(), Error>> {
-    let config = flags.remove("config")?;
-    let out = flags.remove("out")?;
-    let devices = flags
-        .remove("devices")
+fn run_import(args: &[&str]) -> Option<Result<(), Error>> {
+    let mut args = Args::parse(
+        args,
+        &["config", "devices", "out", "secrets", "lock", "admin"],
+        &[],
+    )?;
+    let [] = args.words()?;
+    let config = args.path("config")?;
+    let out = args.path("out")?;
+    let devices = args
+        .path("devices")
         .unwrap_or_else(|| config.with_file_name("devices.json"));
-    let secrets = flags
-        .remove("secrets")
-        .unwrap_or_else(|| secrets_path(&out));
-    let lock = flags
-        .remove("lock")
+    let secrets = args.path("secrets").unwrap_or_else(|| secrets_path(&out));
+    let lock = args
+        .path("lock")
         .unwrap_or_else(|| PathBuf::from(DEVICES_LOCK));
+    let admin = args.value("admin");
     Some(import(&config, &devices, &lock).and_then(|relay| {
+        let relay = match admin {
+            Some(name) => relay.with_admin(&name)?,
+            None => relay,
+        };
         relay.create(&out, &secrets)?;
         let names: Vec<&str> = relay
             .state
@@ -86,21 +88,81 @@ fn run_import(mut flags: HashMap<String, PathBuf>) -> Option<Result<(), Error>> 
     }))
 }
 
-fn run_render(mut flags: HashMap<String, PathBuf>, swap: bool) -> Option<Result<(), Error>> {
-    let state = flags.remove("state")?;
-    let out = flags.remove("out")?;
-    let secrets = flags
-        .remove("secrets")
-        .unwrap_or_else(|| secrets_path(&state));
-    let group = flags
-        .remove("group")
-        .unwrap_or_else(|| PathBuf::from(XRAY_GROUP));
-    let xray = match (swap, flags.remove("xray")) {
-        (false, Some(_)) => return None,
-        (_, xray) => xray.unwrap_or_else(|| PathBuf::from("xray")),
-    };
+fn run_adopt(args: &[&str]) -> Option<Result<(), Error>> {
+    let mut args = Args::parse(
+        args,
+        &[
+            "config", "devices", "state", "secrets", "lock", "admin", "xray", "group",
+        ],
+        &["restart"],
+    )?;
+    let [] = args.words()?;
+    let config = args.path("config")?;
+    let state = args.path("state")?;
+    let devices = args
+        .path("devices")
+        .unwrap_or_else(|| config.with_file_name("devices.json"));
+    let secrets = args.path("secrets").unwrap_or_else(|| secrets_path(&state));
+    let lock = args
+        .path("lock")
+        .unwrap_or_else(|| PathBuf::from(DEVICES_LOCK));
+    let xray = args.path("xray").unwrap_or_else(|| PathBuf::from("xray"));
+    let group = args.value("group").unwrap_or_else(|| XRAY_GROUP.to_owned());
+    let admin = args.value("admin");
+    let restart = args.has("restart");
     let placement = Placement {
-        group: group.to_str()?,
+        group: &group,
+        swap: Some(&xray),
+    };
+    Some(
+        adopt(
+            &config,
+            &devices,
+            &state,
+            &secrets,
+            &lock,
+            admin.as_deref(),
+            &placement,
+        )
+        .and_then(|needs_restart| {
+            println!("adopted {} into {}", config.display(), state.display());
+            match (needs_restart, restart) {
+                (false, _) => Ok(()),
+                (true, true) => {
+                    Systemctl.restart()?;
+                    println!("restarted xray; it now serves HandlerService");
+                    Ok(())
+                }
+                (true, false) => {
+                    println!(
+                        "xray serves only StatsService until it restarts: run `systemctl restart xray` before changing devices (open connections drop)"
+                    );
+                    Ok(())
+                }
+            }
+        }),
+    )
+}
+
+fn run_render(args: &[&str]) -> Option<Result<(), Error>> {
+    let mut args = Args::parse(
+        args,
+        &["state", "secrets", "out", "group", "xray"],
+        &["swap"],
+    )?;
+    let [] = args.words()?;
+    let state = args.path("state")?;
+    let out = args.path("out")?;
+    let secrets = args.path("secrets").unwrap_or_else(|| secrets_path(&state));
+    let group = args.value("group").unwrap_or_else(|| XRAY_GROUP.to_owned());
+    let xray = args.path("xray");
+    let swap = args.has("swap");
+    if xray.is_some() && !swap {
+        return None;
+    }
+    let xray = xray.unwrap_or_else(|| PathBuf::from("xray"));
+    let placement = Placement {
+        group: &group,
         swap: swap.then_some(xray.as_path()),
     };
     Some(Relay::load(&state, &secrets).and_then(|relay| write_config(&relay, &out, &placement)))
