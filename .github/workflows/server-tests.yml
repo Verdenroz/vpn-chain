@@ -1,12 +1,13 @@
-# Runs the server script suites and the Xray x sing-box e2e matrix.
+# Runs the server script suites and the Xray x sing-box e2e matrix. The matrix also runs
+# refuse.sh, which loads the egress rules from the static relayd.
 name: server-tests
 
 on:
   pull_request:
-    paths: ["server/**", ".github/workflows/server-tests.yml"]
+    paths: ["server/**", "relay/crates/relayd/src/egress*.rs", ".github/workflows/server-tests.yml"]
   push:
     branches: [main]
-    paths: ["server/**", ".github/workflows/server-tests.yml"]
+    paths: ["server/**", "relay/crates/relayd/src/egress*.rs", ".github/workflows/server-tests.yml"]
 
 permissions:
   contents: read
@@ -20,6 +21,11 @@ jobs:
           persist-credentials: false
       - name: Suites
         run: server/tests/run.sh
+      - name: Toolchain for the static relayd
+        working-directory: relay
+        run: |
+          rustup toolchain install
+          rustup target add x86_64-unknown-linux-musl
       - name: Matrix
         env:
           KNOWN_BAD: "1"

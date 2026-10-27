@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016 # remote command bodies expand in the container
-# A relay deployed by deploy-server.sh must refuse every loopback and private target a
-# REALITY-authenticated sing-box asks for, whether it names an address or a name that
-# resolves to one, and still reach a public-style address. Throwaway docker networks: one of
+# A relay deployed by deploy-server.sh, with the egress rules `relayd egress` loads for the
+# xray user, must refuse every loopback and private target a REALITY-authenticated sing-box
+# asks for, whether it names an address or a name that resolves to one (or to one only on the
+# second lookup), and still reach a public-style address. Throwaway docker networks: one of
 # ordinary public addresses, one of private ones. The relay itself is deployed in a container.
 # REFUSE_XRAY_VERSION picks the relay (default: the pin); SINGBOX_VERSIONS the clients.
+# Needs the static relayd: rustup target add $(uname -m)-unknown-linux-musl, CARGO to override.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,6 +15,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SINGBOX_VERSIONS="${SINGBOX_VERSIONS:-$SINGBOX_VERSIONS_DEFAULT}"
 XRAY_DIR="$(dirname "$("$HERE/fetch-xray.sh" ${REFUSE_XRAY_VERSION:+"$REFUSE_XRAY_VERSION"})")"
+TARGET="$(uname -m)-unknown-linux-musl"
+# shellcheck disable=SC2086
+(cd "$ROOT/relay" && ${CARGO:-cargo} build -q --locked --target "$TARGET" -p relayd)
+RELAYD="${CARGO_TARGET_DIR:-$ROOT/relay/target}/$TARGET/debug/relayd"
 PUB=vpnchain-refuse-pub PRIV=vpnchain-refuse-priv
 PUB_NET=11.253.77 PRIV_NET=198.19.77
 W="$(mktemp -d)"
@@ -54,16 +60,21 @@ docker run -d --name refuse-priv --network "$PRIV" --ip "$PRIV_NET.50" -v "$W/pr
 docker run -d --name refuse-dns --network "$PUB" --ip "$PUB_NET.60" -v "$HERE/rebind-dns.py":/rebind-dns.py:ro "$IMG" \
     python3 /rebind-dns.py "$PUB_NET.50" >/dev/null
 
-# The relay: names resolve as a hostile client would want them to, and web servers listen on its loopback.
-RELOAD='pkill -x xray; sleep 0.3; setsid nohup /opt/xray/xray run -config /usr/local/etc/xray/config.json </dev/null >/var/log/xray/out.log 2>&1 &'
+# The relay: names resolve as a hostile client would want them to, web servers listen on its
+# loopback, and xray runs as its own user so the egress rules can tell it from everyone else.
+RELOAD='pkill -x xray; sleep 0.3; setsid nohup setpriv --reuid=xray --regid=xray --clear-groups /opt/xray/xray run -config /usr/local/etc/xray/config.json </dev/null >/var/log/xray/out.log 2>&1 &'
 docker run -d --name refuse-srv --network "$PUB" --ip "$PUB_NET.10" --dns "$PUB_NET.60" --init \
+    --cap-add NET_ADMIN --sysctl net.ipv4.ip_unprivileged_port_start=0 \
     --add-host "loop.test:127.0.0.1" --add-host "public.test:$PUB_NET.50" --add-host "private.test:$PRIV_NET.50" \
-    -v "$ROOT":/repo:ro -v "$XRAY_DIR":/opt/xray:ro "$IMG" sleep infinity >/dev/null
+    -v "$ROOT":/repo:ro -v "$XRAY_DIR":/opt/xray:ro -v "$RELAYD":/usr/local/bin/relayd:ro "$IMG" sleep infinity >/dev/null
 docker network connect "$PRIV" refuse-srv
+docker exec refuse-srv sh -c 'useradd --system xray && touch /var/log/xray/error.log && chown -R xray /var/log/xray'
 docker exec -d refuse-srv sh -c 'mkdir /srv/loop && echo loopback > /srv/loop/index.html && cd /srv/loop && (python3 -m http.server 80 --bind 127.0.0.1 &) && exec python3 -m http.server 8081 --bind 127.0.0.1'
 docker exec refuse-srv env DEPLOY_SKIP_INSTALL=1 XRAY_BIN=/opt/xray/xray VPS_IP=srv SNI=dest.test DEST=dest:443 \
     SETTLE=1 RELOAD_CMD="$RELOAD" ACTIVE_CMD='pgrep -x xray' DEVICE_FILE_DIR=/root \
     bash /repo/server/deploy-server.sh >/dev/null 2>&1 || { echo "deploy-server.sh failed in the container" >&2; exit 1; }
+egress() { docker exec refuse-srv relayd egress --agent-port 10086; }
+egress
 
 env_of() { docker exec refuse-srv sed -n "s/^$1=//p" /root/vpn-chain-device1.env; }
 UUID="$(env_of VLESS_UUID)" SID="$(env_of SHORT_ID)" PBK="$(env_of REALITY_PUBKEY)"
@@ -108,11 +119,10 @@ for sb in $SINGBOX_VERSIONS; do
     check "sing-box $sb is refused a name for loopback" refused loop.test:8081
     check "sing-box $sb is refused xray's API port by address" api_refused 127.0.0.1
     check "sing-box $sb is refused xray's API port by name" api_refused localhost
-    if [ "$(fetch "rb-${sb//./-}.test:80")" = loopback ]; then
-        printf 'KNOWN GAP: sing-box %s reached loopback through a name that changes its answer\n' "$sb"
-    else
-        printf 'FAIL: the rebinding gap is closed; turn this probe into a check\n'; FAIL=$((FAIL + 1))
-    fi
+    check "sing-box $sb is refused a name that changes its answer" refused "rb-${sb//./-}.test:80"
+    docker exec refuse-srv nft delete table inet vpn_chain_egress
+    check "sing-box $sb reaches loopback by such a name without the egress rules" test "$(fetch "rb-${sb//./-}-open.test:80")" = loopback
+    egress
     docker rm -f refuse-sb >/dev/null
 done
 
