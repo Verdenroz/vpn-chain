@@ -68,7 +68,7 @@ pass "neither the link nor its token is in any file or log on the VPS"
 case "$DISTRO" in
     debian)
         eq "$(g sshd -T | grep -ci '^passwordauthentication no')" 1
-        g ss -ltn | grep -q ':22 '
+        grep -q ':22 ' <<<"$(g ss -ltn)"
         grep -q 'key-only' "$W/err"
         pass "password login is off, the key stays and port 22 still listens" ;;
     ubuntu)
@@ -110,7 +110,7 @@ g nft add rule inet userfw input tcp dport 22 accept
 USER_RULES="$(g nft list table inet userfw)"
 g /usr/local/bin/relayd egress --state $STATE_DIR/relay.json
 eq "$(g nft list table inet userfw)" "$USER_RULES"
-g nft list table inet vpn_chain_egress | grep -q "meta skuid != $(g id -u xray) return"
+grep -q "meta skuid != $(g id -u xray) return" <<<"$(g nft list table inet vpn_chain_egress)"
 pass "applying the egress rules leaves another table as it was"
 
 g bash -c 'mkdir -p /srv/loop && echo loopback >/srv/loop/index.html'
@@ -184,7 +184,7 @@ step "c) the rules and xray come back with the unit, as after a reboot"
 g systemctl stop vpn-chain-egress
 no g nft list table inet vpn_chain_egress 2>/dev/null
 g systemctl start xray
-for _ in $(seq 60); do g ss -ltn | grep -q ':443 ' && break; sleep 0.5; done
+for _ in $(seq 60); do grep -q ':443 ' <<<"$(g ss -ltn)" && break; sleep 0.5; done
 g nft list table inet vpn_chain_egress >/dev/null
 eq "$(through "e-$tag" "http://$(addr 50)/")" public
 reply="$(signed_full "e-$tag" "k-$tag" "$key_id" POST /v1/devices '{"name":"tablet"}')"
