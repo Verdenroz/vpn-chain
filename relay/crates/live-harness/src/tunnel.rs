@@ -53,6 +53,15 @@ impl Tunnel {
         Ok(Self(stream))
     }
 
+    /// Sends `request` and reads until the far side closes. A target the relay blocks gives
+    /// back no bytes.
+    pub async fn exchange(mut self, request: &[u8]) -> io::Result<Vec<u8>> {
+        self.0.get_mut().write_all(request).await?;
+        let mut reply = Vec::new();
+        within(self.0.read_to_end(&mut reply)).await?;
+        Ok(reply)
+    }
+
     pub async fn echo(&mut self, payload: &[u8]) -> io::Result<()> {
         self.0.get_mut().write_all(payload).await?;
         let mut back = vec![0; payload.len()];
