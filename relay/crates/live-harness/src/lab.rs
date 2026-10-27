@@ -1,4 +1,5 @@
 use std::net::TcpListener;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -10,6 +11,9 @@ use uuid::Uuid;
 
 /// libbox in the Android app, and the desktop's sing-box.
 pub const SING_BOX: [&str; 2] = ["1.13.14", "1.14.3"];
+/// A name the relay resolves to its own loopback, where the tests' echo server listens. Relayd
+/// blocks private addresses, but only by IP, so a name reaches it.
+pub const ECHO_HOST: &str = "echo.test";
 /// The server name the REALITY inbound borrows, served by the lab's own destination.
 pub const SNI: &str = "dest.test";
 
@@ -52,6 +56,11 @@ impl Lab {
             containers: Mutex::default(),
         };
         std::fs::write(lab.dir.join("Caddyfile"), caddyfile(lab.dest_port)).unwrap();
+        std::fs::write(
+            lab.dir.join("hosts"),
+            format!("127.0.0.1 localhost {ECHO_HOST}\n"),
+        )
+        .unwrap();
         lab.run(
             "dest",
             DEST_IMAGE,
@@ -73,9 +82,18 @@ impl Lab {
         self.dir.join("xray.json")
     }
 
-    /// The pinned xray on the host, for `xray -test`.
-    pub fn xray_binary() -> PathBuf {
-        bins().join(XRAY).join("xray")
+    /// An `xray` for `xray -test` on this lab's files. The host cannot open the error log path
+    /// relayd renders, so the script runs the pinned xray in docker with a scratch log directory.
+    pub fn xray_test_command(&self) -> PathBuf {
+        let script = self.dir.join("xray-in-docker");
+        let body = format!(
+            "#!/bin/sh\nexec docker run --rm --network none -v {bins}:/opt/bins:ro -v {dir}:{dir}:ro \\\n  --tmpfs /var/log/xray {BASE_IMAGE} /opt/bins/{XRAY}/xray \"$@\"\n",
+            bins = bins().display(),
+            dir = self.dir.display(),
+        );
+        std::fs::write(&script, body).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        script
     }
 
     /// Writes `config` and starts xray on it.
@@ -90,7 +108,12 @@ impl Lab {
         self.run(
             "xray",
             BASE_IMAGE,
-            &["--tmpfs", "/var/log/xray"],
+            &[
+                "--tmpfs",
+                "/var/log/xray",
+                "-v",
+                &format!("{}/hosts:/etc/hosts:ro", self.dir.display()),
+            ],
             &[&xray, "run", "-c", "/etc/relay/xray.json"],
         )
         .await;

@@ -27,10 +27,14 @@ pub struct Tunnel(BufReader<TcpStream>);
 
 impl Tunnel {
     pub async fn open(proxy: u16, target: u16) -> io::Result<Self> {
+        Self::open_to(proxy, "127.0.0.1", target).await
+    }
+
+    /// Like [`Tunnel::open`], naming the target by `host`.
+    pub async fn open_to(proxy: u16, host: &str, target: u16) -> io::Result<Self> {
         let stream = within(TcpStream::connect(("127.0.0.1", proxy))).await?;
         let mut stream = BufReader::new(stream);
-        let connect =
-            format!("CONNECT 127.0.0.1:{target} HTTP/1.1\r\nHost: 127.0.0.1:{target}\r\n\r\n");
+        let connect = format!("CONNECT {host}:{target} HTTP/1.1\r\nHost: {host}:{target}\r\n\r\n");
         stream.get_mut().write_all(connect.as_bytes()).await?;
         let mut status = String::new();
         within(stream.read_line(&mut status)).await?;
@@ -63,6 +67,14 @@ impl Tunnel {
 
 pub async fn roundtrip(proxy: u16, target: u16, payload: &[u8]) -> io::Result<()> {
     Tunnel::open(proxy, target).await?.echo(payload).await
+}
+
+/// Like [`roundtrip`], naming the target by `host`.
+pub async fn roundtrip_to(proxy: u16, host: &str, target: u16, payload: &[u8]) -> io::Result<()> {
+    Tunnel::open_to(proxy, host, target)
+        .await?
+        .echo(payload)
+        .await
 }
 
 async fn within<T>(io: impl Future<Output = io::Result<T>>) -> io::Result<T> {
