@@ -47,7 +47,7 @@ object SingBoxConfigFactory {
         val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.Automatic }
         val opensDirect = failOpen && warpMode == WarpMode.Automatic
         // No entry hop here, so only sites the user sent to the bare link leave the relay.
-        val openPath = learnedDirectPath.takeIf { opensDirect }
+        val directPath = learnedDirectPath.takeIf { opensDirect }
         return render {
             putLog(connectionLog)
             putExperimental(clashApi, cacheFile = false, cachePath = null)
@@ -72,12 +72,12 @@ object SingBoxConfigFactory {
             }
             putJsonObject("route") {
                 put("auto_detect_interface", false)
-                putRuleSets(DnsFilter.Off, learnedPath, openPath)
+                putRuleSets(DnsFilter.Off, learnedPath, learnedOpenPath = null, learnedDirectPath = directPath)
                 putJsonArray("rules") {
                     addJsonObject { put("action", "sniff") }
                     probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy", fallbackTag = null) }
                     learnedPath?.let { addLearnedRule(LEARNED_WARP_TAG, WARP_TAG) }
-                    openPath?.let { addLearnedRule(LEARNED_OPEN_TAG, DIRECT_TAG) }
+                    directPath?.let { addLearnedRule(LEARNED_DIRECT_TAG, DIRECT_TAG) }
                 }
                 put("final", if (tail != null && warpMode == WarpMode.AllTraffic) WARP_TAG else "proxy")
             }
@@ -114,12 +114,12 @@ object SingBoxConfigFactory {
         val tail = warp.takeIf { warpMode != WarpMode.Off }
         val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.Automatic }
         val opensOutside = failOpen && warpMode == WarpMode.Automatic
-        // Past the relay, not through it. The entry hop takes what it was probed and found
-        // to reach; without one, the bare link takes only sites the user sent there.
-        val openPath = (if (entry != null) learnedOpenPath else learnedDirectPath).takeIf { opensOutside }
-        val openTag = if (entry != null) ENTRY_HOP_TAG else DIRECT_TAG
+        // Past the relay, not through it. Each path takes only the sites the user sent there:
+        // the entry hop the ones it was probed and found to reach, the bare link the rest.
+        val openPath = learnedOpenPath.takeIf { opensOutside && entry != null }
+        val directPath = learnedDirectPath.takeIf { opensOutside }
         val probesFallback = opensOutside && entry != null
-        val directMark = FAIL_OPEN_MARK.takeIf { markDirect && entry == null && openPath != null }
+        val directMark = FAIL_OPEN_MARK.takeIf { markDirect && directPath != null }
         return render {
             putLog(connectionLog, logPath)
             // The rule-set is remote, so it needs somewhere to persist between
@@ -159,7 +159,7 @@ object SingBoxConfigFactory {
             }
             putJsonObject("route") {
                 put("auto_detect_interface", true)
-                putRuleSets(dnsFilter, learnedPath, openPath)
+                putRuleSets(dnsFilter, learnedPath, openPath, learnedDirectPath = directPath)
                 putJsonArray("rules") {
                     addTunBaseRules()
                     probe?.let {
@@ -170,7 +170,8 @@ object SingBoxConfigFactory {
                         )
                     }
                     learnedPath?.let { addLearnedRule(LEARNED_WARP_TAG, WARP_TAG) }
-                    openPath?.let { addLearnedRule(LEARNED_OPEN_TAG, openTag) }
+                    openPath?.let { addLearnedRule(LEARNED_OPEN_TAG, ENTRY_HOP_TAG) }
+                    directPath?.let { addLearnedRule(LEARNED_DIRECT_TAG, DIRECT_TAG) }
                 }
                 put(
                     "final",
@@ -211,7 +212,7 @@ object SingBoxConfigFactory {
             putJsonArray("outbounds") { addDirectOutbound() }
             putJsonObject("route") {
                 put("auto_detect_interface", true)
-                putRuleSets(dnsFilter, learnedWarpPath = null, learnedOpenPath = null, detour = ENTRY_HOP_TAG)
+                putRuleSets(dnsFilter, null, null, null, detour = ENTRY_HOP_TAG)
                 putJsonArray("rules") { addTunBaseRules() }
                 put("final", ENTRY_HOP_TAG)
             }
@@ -273,21 +274,23 @@ object SingBoxConfigFactory {
         filter: DnsFilter,
         learnedWarpPath: String?,
         learnedOpenPath: String?,
+        learnedDirectPath: String?,
         detour: String = VLESS_TAG,
     ) {
         val blocklists = blocklistsFor(filter)
-        if (blocklists.isEmpty() && learnedWarpPath == null && learnedOpenPath == null) return
+        if (blocklists.isEmpty() && learnedWarpPath == null && learnedOpenPath == null && learnedDirectPath == null) return
         putJsonArray("rule_set") {
             blocklists.forEach { addBlocklistRuleSet(it, detour) }
             learnedWarpPath?.let { addLearnedRuleSet(LEARNED_WARP_TAG, it) }
             learnedOpenPath?.let { addLearnedRuleSet(LEARNED_OPEN_TAG, it) }
+            learnedDirectPath?.let { addLearnedRuleSet(LEARNED_DIRECT_TAG, it) }
         }
     }
 
     /** Whether a rendered config routes by a learned rule-set; false for one that cannot be read. */
     fun routesLearnedSites(configJson: String): Boolean = runCatching {
         Json.parseToJsonElement(configJson).jsonObject["route"]?.jsonObject?.get("rule_set")?.jsonArray.orEmpty()
-            .any { it.jsonObject["tag"]?.jsonPrimitive?.contentOrNull in setOf(LEARNED_WARP_TAG, LEARNED_OPEN_TAG) }
+            .any { it.jsonObject["tag"]?.jsonPrimitive?.contentOrNull in setOf(LEARNED_WARP_TAG, LEARNED_OPEN_TAG, LEARNED_DIRECT_TAG) }
     }.getOrDefault(false)
 
     private fun JsonArrayBuilder.addLearnedRuleSet(tag: String, path: String) = addJsonObject {
@@ -523,6 +526,7 @@ object SingBoxConfigFactory {
     private const val WARP_TAG = "warp-exit"
     private const val LEARNED_WARP_TAG = "learned-warp"
     private const val LEARNED_OPEN_TAG = "learned-open"
+    private const val LEARNED_DIRECT_TAG = "learned-direct"
     const val DIRECT_TAG = "direct"
 
     /**
@@ -538,7 +542,7 @@ object SingBoxConfigFactory {
      * an older one's. A relay outlives the app under systemd, so on adoption a
      * config stamped with another schema is rendered again rather than reused.
      */
-    const val RENDER_SCHEMA = 2
+    const val RENDER_SCHEMA = 3
 
     private data class Blocklist(val tag: String, val url: String)
 

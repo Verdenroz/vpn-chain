@@ -112,7 +112,7 @@ class DefaultLearnedSitesRepositoryTest {
 
         assertEquals(LearnedRoute.Direct, repository.sites.first().single().route)
         assertEquals(listOf("www.bank.example"), store.writtenDirect)
-        assertEquals(listOf("www.bank.example"), store.writtenOpen)
+        assertEquals(emptyList(), store.writtenOpen)
 
         repository.forget("www.bank.example")
 
@@ -152,7 +152,7 @@ class DefaultLearnedSitesRepositoryTest {
         repository.allowDirect("www.shop.example")
 
         assertEquals(LearnedRules(exact = listOf("github.io", "s3.amazonaws.com"), suffixes = listOf("reddit.com")), store.files[RuleSetKind.Warp])
-        assertEquals(LearnedRules(exact = listOf("login.bank.example", "www.shop.example")), store.files[RuleSetKind.Open])
+        assertEquals(LearnedRules(exact = listOf("login.bank.example")), store.files[RuleSetKind.Open])
         assertEquals(LearnedRules(exact = listOf("www.shop.example")), store.files[RuleSetKind.Direct])
     }
 

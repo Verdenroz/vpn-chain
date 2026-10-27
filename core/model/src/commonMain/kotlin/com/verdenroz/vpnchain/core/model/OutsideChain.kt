@@ -23,18 +23,18 @@ fun SavedProfile?.outsideExitFor(settings: UserSettings): OutsideExit? {
     return if (entryDialled) OutsideExit.EntryHop else OutsideExit.Direct
 }
 
-/** Whether a site both exits refuse may be sent over the bare link once the user allows it. */
-fun SavedProfile?.offersDirect(settings: UserSettings): Boolean =
-    this != null && outsideExitFor(settings) == OutsideExit.Direct
+/** Whether a site the chain refuses may be sent over the bare link once the user allows it. */
+fun SavedProfile?.offersOutside(settings: UserSettings): Boolean =
+    this != null && outsideExitFor(settings) != null
 
 /**
  * The way [this] leaves outside the chain, or null when it still goes through
  * the relay. A [LearnedRoute.FailOpen] site was checked through the entry hop
  * and leaves only by it; only a site the user sent [LearnedRoute.Direct] may
- * take the bare link.
+ * take the bare link, whether or not an entry hop is dialled.
  */
 fun LearnedSite.outsideExit(settings: UserSettings, profile: SavedProfile?): OutsideExit? = when (route) {
-    LearnedRoute.Direct -> profile.outsideExitFor(settings)
+    LearnedRoute.Direct -> OutsideExit.Direct.takeIf { profile.outsideExitFor(settings) != null }
     LearnedRoute.FailOpen -> profile.outsideExitFor(settings)?.takeIf { it == OutsideExit.EntryHop }
     else -> null
 }

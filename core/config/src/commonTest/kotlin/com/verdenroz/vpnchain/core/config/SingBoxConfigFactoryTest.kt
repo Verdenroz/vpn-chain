@@ -817,8 +817,8 @@ class SingBoxConfigFactoryTest {
         )
 
         val route = config.getValue("route").jsonObject
-        assertEquals("/run/learned-direct.json", route.array("rule_set").taggedWith("learned-open")?.getValue("path")?.jsonPrimitive?.content)
-        val rule = route.array("rules").map { it.jsonObject }.single { "learned-open" in it.toString() }
+        assertEquals("/run/learned-direct.json", route.array("rule_set").taggedWith("learned-direct")?.getValue("path")?.jsonPrimitive?.content)
+        val rule = route.array("rules").map { it.jsonObject }.single { "learned-direct" in it.toString() }
         assertEquals("direct", rule.getValue("outbound").jsonPrimitive.content)
     }
 
@@ -835,9 +835,32 @@ class SingBoxConfigFactoryTest {
         )
 
         val route = config.getValue("route").jsonObject
-        assertEquals("/run/learned-direct.json", route.array("rule_set").taggedWith("learned-open")?.getValue("path")?.jsonPrimitive?.content)
-        val rule = route.array("rules").map { it.jsonObject }.single { "learned-open" in it.toString() }
+        assertEquals("/run/learned-direct.json", route.array("rule_set").taggedWith("learned-direct")?.getValue("path")?.jsonPrimitive?.content)
+        val rule = route.array("rules").map { it.jsonObject }.single { "learned-direct" in it.toString() }
         assertEquals("direct", rule.getValue("outbound").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `with an entry hop tapped sites split between the entry hop and the bare link`() {
+        val config = parse(
+            SingBoxConfigFactory.androidChainConfig(
+                profile(), entry(),
+                warp = warp(),
+                warpMode = WarpMode.Automatic,
+                learnedWarpPath = "/run/learned-warp.json",
+                learnedOpenPath = "/run/learned-open.json",
+                learnedDirectPath = "/run/learned-direct.json",
+                failOpen = true,
+            ),
+        )
+
+        val rules = config.getValue("route").jsonObject.array("rules").map { it.jsonObject }
+        fun exitOf(list: String) =
+            rules.single { list in it["rule_set"].toString() }.getValue("outbound").jsonPrimitive.content
+        assertEquals("warp-exit", exitOf("learned-warp"))
+        assertEquals("entry-hop", exitOf("learned-open"))
+        assertEquals("direct", exitOf("learned-direct"))
+        assertEquals("vless-proxy", config.getValue("route").jsonObject.getValue("final").jsonPrimitive.content)
     }
 
     @Test
@@ -870,7 +893,7 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `the direct outbound is marked only when a chain without an entry hop fails open`() {
+    fun `the direct outbound is marked whenever sites the user sent direct are rendered`() {
         fun mark(entry: WireGuardEntry? = null, failOpen: Boolean = true, markDirect: Boolean = true) = parse(
             SingBoxConfigFactory.androidChainConfig(
                 profile(), entry,
@@ -883,7 +906,7 @@ class SingBoxConfigFactoryTest {
         ).array("outbounds").taggedWith("direct")?.get("routing_mark")?.jsonPrimitive?.int
 
         assertEquals(0x760000, mark())
-        assertEquals(null, mark(entry()))
+        assertEquals(0x760000, mark(entry()))
         assertEquals(null, mark(failOpen = false))
         assertEquals(null, mark(markDirect = false))
     }

@@ -75,7 +75,8 @@ invisible in testing.
 - [ ] It is never in the kill switch's exemption list.
 - [ ] Probe inbounds listen on loopback only, with per-config random port and credentials.
 - [ ] The bare link is never probed, and a site goes there only on the user's
-      "Send direct" tap, matched by exact host.
+      "Send direct" tap, matched by exact host. The order is relay, WARP, entry hop
+      (automatic), then the bare link, which alone needs the user's tap.
 - [ ] WARP keys and probe credentials are never logged or exported.
 
 **Kill switch, desktop** (`cli/killswitch/vpn-chain-killswitch.c` header, `KillSwitchHelper.kt`)
@@ -83,7 +84,7 @@ invisible in testing.
 - [ ] Firewall rules, not routing-table changes (sing-box's interface detection reads the routes).
 - [ ] `reject`, not `drop`; keep the `tun0` exemption.
 - [ ] Torn down on Disconnect, not on a crash.
-- [ ] The fail-open mark exists only on desktop, in `automatic` mode, with no entry hop.
+- [ ] The fail-open mark exists only on desktop, when the config renders a learned-direct rule-set (sites the user sent direct).
 
 **Android resilience** (`VpnChainService`, `ChainProbe`, `AndroidWakeGuard`, `NetworkMonitor.linkChanges`, `ChainSupervisor.awaitUsableLink`)
 - [ ] The service's lifetime is the user's intent, not the engine's: a drop keeps the foreground service.

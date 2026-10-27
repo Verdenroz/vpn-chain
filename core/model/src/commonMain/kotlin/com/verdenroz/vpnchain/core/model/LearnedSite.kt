@@ -14,12 +14,12 @@ enum class LearnedRoute {
     FailOpen,
 
     /**
-     * Both refuse it and there is no entry hop, so only the bare link is left.
+     * The relay, WARP and any entry hop refuse it, or there is no entry hop to try.
      * Nothing is sent that way until the user allows it ([Direct]).
      */
     DirectAvailable,
 
-    /** The user chose to send it by the bare link after both refused it. */
+    /** The user chose to send it by the bare link. */
     Direct,
 
     /** Every path refuses it, so the refusal is about the client, not the address. */

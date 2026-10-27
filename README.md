@@ -90,7 +90,7 @@ things work on the VPS if you ever lose the app: `sudo relayd pair --new phone`,
 | Settings → Profiles | Keeps several connections: your VPS, a plain WireGuard VPN, or both chained |
 | Settings → Routing → WireGuard entry hop | Hides your address from the VPS; turn it off without deleting it |
 | Settings → Routing → Cloudflare WARP | Sends sites that refuse your VPS through Cloudflare instead (automatic by default) |
-| Sites tab, **Use my connection** | Lets a site that refuses both open on your own address, one site at a time |
+| Sites tab, **Use my connection** | Lets a site that refuses the relay, WARP and your entry hop open on your own address, one site at a time |
 | Settings → DNS | Blocks malware and scam sites, and optionally ads and trackers |
 | Settings → Kill switch | Blocks all traffic while the VPN is down |
 | Settings → Routing → Route all apps (Linux) | Off: only apps set to the proxy `127.0.0.1:1080` use the VPN |

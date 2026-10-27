@@ -148,9 +148,8 @@ internal class DefaultLearnedSitesRepository(
         fun hosts(route: LearnedRoute) = learned.filter { it.route == route }.map { it.domain }
         val (suffixes, exact) = hosts(LearnedRoute.Warp).partition(::isWarpSuffix)
         store.write(RuleSetKind.Warp, LearnedRules(exact = exact, suffixes = suffixes))
-        val direct = hosts(LearnedRoute.Direct)
-        store.write(RuleSetKind.Open, LearnedRules(exact = hosts(LearnedRoute.FailOpen) + direct))
-        store.write(RuleSetKind.Direct, LearnedRules(exact = direct))
+        store.write(RuleSetKind.Open, LearnedRules(exact = hosts(LearnedRoute.FailOpen)))
+        store.write(RuleSetKind.Direct, LearnedRules(exact = hosts(LearnedRoute.Direct)))
         Written(seenSeq, routed = learned.any { it.route in ROUTED })
     }
 

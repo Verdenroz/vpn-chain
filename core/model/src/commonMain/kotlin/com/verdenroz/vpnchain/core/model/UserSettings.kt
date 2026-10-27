@@ -61,9 +61,9 @@ data class UserSettings(
      */
     val learnBlockedSites: Boolean = true,
     /**
-     * Let a site both the relay and WARP refuse leave by the entry hop alone,
-     * or the bare link with no entry hop, when that path reaches it. Such a site
-     * is seen at that path's address rather than the relay's.
+     * Offer a site both the relay and WARP refuse the entry hop alone, then the
+     * bare link, each only when the user allows it. Such a site is seen at that
+     * path's address rather than the relay's.
      */
     val failOpen: Boolean = true,
     /**

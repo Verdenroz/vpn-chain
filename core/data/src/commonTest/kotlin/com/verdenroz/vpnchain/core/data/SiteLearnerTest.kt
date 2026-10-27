@@ -117,7 +117,7 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `a site both exits refuse but the fallback reaches is learned to fail open`() = runTest {
+    fun `a site both exits refuse but the entry hop reaches is learned to fail open`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
         runCurrent()
 
@@ -128,7 +128,7 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `a double refusal is probed again once the session can fail open`() = runTest {
+    fun `a double refusal is probed again once the session has an entry hop`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
         world.settings.value = UserSettings(warpMode = WarpMode.Automatic, failOpen = false)
         world.sessions.value = LearningSession(PROBE.copy(fallbackPort = 0), clashApi = null)
@@ -238,7 +238,7 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `failing open through the entry hop is learned for the exact host`() = runTest {
+    fun `an entry hop that reaches a site is learned for the exact host`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
         runCurrent()
 
@@ -263,7 +263,7 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `an api host refused everywhere is never learned for warp`() = runTest {
+    fun `a site every probed exit refuses is offered the bare link, not learned for warp`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, _ -> REFUSED }
         runCurrent()
 
@@ -271,8 +271,35 @@ class SiteLearnerTest {
         runCurrent()
 
         val site = world.learned.sites.first().single()
-        assertEquals(LearnedRoute.RefusedEverywhere, site.route)
+        assertEquals("api.example.com", site.domain)
+        assertEquals(LearnedRoute.DirectAvailable, site.route)
         assertEquals(listOf(1, 2, 3), world.fetcher.calls.map { it.second })
+    }
+
+    @Test
+    fun `a site the entry hop refuses too waits for the tap, then leaves by the bare link`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, _ -> REFUSED }
+        runCurrent()
+        world.feed.hosts.emit("login.bank.example")
+        runCurrent()
+
+        assertEquals(LearnedRoute.DirectAvailable, world.learned.sites.first().single().route)
+        assertEquals(listOf(1, 2, 3), world.fetcher.calls.map { it.second })
+        world.learned.allowDirect("login.bank.example")
+
+        assertEquals(LearnedRoute.Direct, world.learned.sites.first().single().route)
+    }
+
+    @Test
+    fun `with warp off nothing is probed`() = runTest {
+        val world = LearnerWorld(backgroundScope) { _, _ -> REFUSED }
+        world.settings.value = UserSettings(warpMode = WarpMode.Off)
+        runCurrent()
+
+        world.feed.hosts.emit("example.com")
+        runCurrent()
+
+        assertTrue(world.fetcher.calls.isEmpty())
     }
 
     @Test

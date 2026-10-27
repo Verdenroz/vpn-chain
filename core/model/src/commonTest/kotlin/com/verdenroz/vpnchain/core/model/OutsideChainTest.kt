@@ -45,8 +45,8 @@ class OutsideChainTest {
     }
 
     @Test
-    fun `a site the user sent direct still takes the entry hop when there is one`() {
-        assertEquals(OutsideExit.EntryHop, DIRECT_SITE.outsideExit(UserSettings(), profile(ENTRY)))
+    fun `a site the user sent direct takes the bare link even with an entry hop`() {
+        assertEquals(OutsideExit.Direct, DIRECT_SITE.outsideExit(UserSettings(), profile(ENTRY)))
     }
 
     @Test
@@ -88,9 +88,10 @@ class OutsideChainTest {
     }
 
     @Test
-    fun `only a relay with no entry hop dialled offers the bare link`() {
-        assertEquals(true, profile().offersDirect(UserSettings()))
-        assertEquals(false, profile(ENTRY).offersDirect(UserSettings()))
-        assertEquals(false, null.offersDirect(UserSettings()))
+    fun `only a relay offers a way outside the chain`() {
+        assertEquals(true, profile().offersOutside(UserSettings()))
+        assertEquals(true, profile(ENTRY).offersOutside(UserSettings()))
+        assertEquals(false, null.offersOutside(UserSettings()))
+        assertEquals(false, profile().offersOutside(UserSettings(failOpen = false)))
     }
 }
