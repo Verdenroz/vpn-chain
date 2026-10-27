@@ -7,6 +7,7 @@ pub enum Kind {
     Invalid,
     Missing,
     Conflict,
+    Unsupported,
     Failed,
 }
 
@@ -36,6 +37,11 @@ impl Error {
     /// The request is fine but the relay's state refuses it.
     pub fn conflict(reason: impl Into<String>) -> Self {
         Self::of(Kind::Conflict, reason)
+    }
+
+    /// The relay is not set up for what the request asks.
+    pub fn unsupported(reason: impl Into<String>) -> Self {
+        Self::of(Kind::Unsupported, reason)
     }
 
     pub fn at(path: &Path, reason: impl fmt::Display) -> Self {
