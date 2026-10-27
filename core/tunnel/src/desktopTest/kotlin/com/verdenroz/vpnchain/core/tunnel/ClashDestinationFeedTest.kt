@@ -30,4 +30,9 @@ class ClashDestinationFeedTest {
 
         assertEquals(emptySet(), ClashDestinationFeed.parseHosts(body))
     }
+
+    @Test
+    fun `a null connection list reads as empty`() {
+        assertEquals(emptySet(), ClashDestinationFeed.parseHosts("""{"connections":null}"""))
+    }
 }

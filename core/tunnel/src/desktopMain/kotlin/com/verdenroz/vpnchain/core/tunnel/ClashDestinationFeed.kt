@@ -9,9 +9,9 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -50,7 +50,8 @@ internal data class ClashConnection(val id: String, val host: String)
 
 /** Live connections with a sniffed name. Clash reports the inbound as `type/tag`; probe connections are ours, not the user's. */
 internal fun parseUserConnections(body: String): List<ClashConnection> =
-    Json.parseToJsonElement(body).jsonObject.getValue("connections").jsonArray
+    // sing-box answers `"connections": null` while nothing is open.
+    (Json.parseToJsonElement(body).jsonObject.getValue("connections") as? JsonArray).orEmpty()
         .map { it.jsonObject }
         .filterNot { ProbeProxy.isProbeInbound(it.metadata("type").substringAfter('/')) }
         .mapNotNull { connection ->
