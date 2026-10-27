@@ -16,7 +16,7 @@ import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.bareHost
-import com.verdenroz.vpnchain.core.model.offersDirect
+import com.verdenroz.vpnchain.core.model.offersOutside
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -40,8 +40,8 @@ data class ChainUiState(
 data class BlockedSite(val domain: String, val host: String)
 
 /**
- * The newest site waiting on the user's say-so to leave by the bare link, other
- * than ones [dismissed]. Only a connection with no entry hop dialled offers it.
+ * The newest site waiting on the user's say-so to leave the chain, other than
+ * ones [dismissed].
  */
 internal fun blockedSite(
     sites: List<LearnedSite>,
@@ -49,13 +49,15 @@ internal fun blockedSite(
     profile: SavedProfile?,
     dismissed: Set<String>,
 ): BlockedSite? {
-    if (!profile.offersDirect(settings)) return null
+    if (!profile.offersOutside(settings)) return null
     val newest = sites
-        .filter { it.route == LearnedRoute.DirectAvailable && it.domain !in dismissed }
+        .filter { it.route in OFFERED && it.domain !in dismissed }
         .maxByOrNull { it.learnedAtMillis }
         ?: return null
     return BlockedSite(newest.domain, bareHost(newest.domain, sites.mapTo(HashSet()) { it.domain }))
 }
+
+private val OFFERED = setOf(LearnedRoute.EntryAvailable, LearnedRoute.DirectAvailable)
 
 class ChainViewModel(
     private val connectChain: ConnectChainUseCase,

@@ -35,12 +35,13 @@ interface LearnedSitesRepository {
     suspend fun remove(domain: String)
 
     /**
-     * Sends a [LearnedRoute.DirectAvailable] site down the bare link. Only the
-     * user's tap calls this: nothing probes or routes a site there on its own.
+     * Sends an [LearnedRoute.EntryAvailable] site by the entry hop alone, or a
+     * [LearnedRoute.DirectAvailable] one down the bare link. Only the user's tap
+     * calls this: nothing probes or routes a site outside the chain on its own.
      */
     suspend fun allowDirect(domain: String)
 
-    /** Takes back [allowDirect]: the site is offered again and leaves the bare link. */
+    /** Takes back [allowDirect]: the site is offered again and stays on the chain. */
     suspend fun forget(domain: String)
 
     /** Domains found reachable on the relay and when that verdict lapses, so a restart does not re-probe them. */
@@ -104,15 +105,16 @@ internal class DefaultLearnedSitesRepository(
         syncKeepingState()
     }
 
-    override suspend fun allowDirect(domain: String) = reroute(domain, from = LearnedRoute.DirectAvailable, to = LearnedRoute.Direct)
+    override suspend fun allowDirect(domain: String) = reroute(domain, ALLOWED)
 
-    override suspend fun forget(domain: String) = reroute(domain, from = LearnedRoute.Direct, to = LearnedRoute.DirectAvailable)
+    override suspend fun forget(domain: String) = reroute(domain, ALLOWED.entries.associate { (from, to) -> to to from })
 
-    private suspend fun reroute(domain: String, from: LearnedRoute, to: LearnedRoute) {
+    private suspend fun reroute(domain: String, moves: Map<LearnedRoute, LearnedRoute>) {
         routeLock.withLock {
-            val site = preferences.learnedSites.first().find { it.domain == domain && it.route == from } ?: return
+            val site = preferences.learnedSites.first().find { it.domain == domain && it.route in moves } ?: return
+            val to = moves.getValue(site.route)
             preferences.putLearnedSite(site.copy(route = to))
-            queueMove(domain, from, to)
+            queueMove(domain, site.route, to)
         }
         syncKeepingState()
     }
@@ -148,9 +150,8 @@ internal class DefaultLearnedSitesRepository(
         fun hosts(route: LearnedRoute) = learned.filter { it.route == route }.map { it.domain }
         val (suffixes, exact) = hosts(LearnedRoute.Warp).partition(::isWarpSuffix)
         store.write(RuleSetKind.Warp, LearnedRules(exact = exact, suffixes = suffixes))
-        val direct = hosts(LearnedRoute.Direct)
-        store.write(RuleSetKind.Open, LearnedRules(exact = hosts(LearnedRoute.FailOpen) + direct))
-        store.write(RuleSetKind.Direct, LearnedRules(exact = direct))
+        store.write(RuleSetKind.Open, LearnedRules(exact = hosts(LearnedRoute.FailOpen)))
+        store.write(RuleSetKind.Direct, LearnedRules(exact = hosts(LearnedRoute.Direct)))
         Written(seenSeq, routed = learned.any { it.route in ROUTED })
     }
 
@@ -180,5 +181,9 @@ internal class DefaultLearnedSitesRepository(
         const val SUPPRESS_MILLIS = 7L * 24 * 60 * 60 * 1000
         val ROUTED = setOf(LearnedRoute.Warp, LearnedRoute.FailOpen, LearnedRoute.Direct)
         val KEPT = setOf(LearnedRoute.FailOpen, LearnedRoute.Direct)
+        val ALLOWED = mapOf(
+            LearnedRoute.EntryAvailable to LearnedRoute.FailOpen,
+            LearnedRoute.DirectAvailable to LearnedRoute.Direct,
+        )
     }
 }

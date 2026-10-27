@@ -126,9 +126,10 @@ internal class SiteLearner(
     /**
      * WARP learns the registrable domain, since the tail still runs through the
      * relay. A route that leaves the relay is learned for the exact host alone,
-     * so one host's verdict never moves its siblings off the chain. With no
-     * entry hop only the bare link is left, and that is never probed or routed
-     * on its own: the site is offered, and waits for the user to allow it.
+     * so one host's verdict never moves its siblings off the chain. The entry
+     * hop is probed but a site it reaches is only offered. The bare link is never
+     * probed or routed on its own: a site every probed exit refuses, or any
+     * refused site with no entry hop, is offered it and waits for the user.
      */
     private suspend fun examine(raw: String, running: ProbeProxy) {
         val host = hostName(raw) ?: return
@@ -156,8 +157,8 @@ internal class SiteLearner(
                 } else {
                     learned.learn(domain, LearnedRoute.RefusedByBoth, outcome.reason)
                 }
-            is ProbeOutcome.FallbackOpen -> learned.learn(host, LearnedRoute.FailOpen, outcome.reason)
-            is ProbeOutcome.RefusedEverywhere -> learned.learn(domain, LearnedRoute.RefusedEverywhere, outcome.reason)
+            is ProbeOutcome.FallbackOpen -> learned.learn(host, LearnedRoute.EntryAvailable, outcome.reason)
+            is ProbeOutcome.RefusedEverywhere -> learned.learn(host, LearnedRoute.DirectAvailable, outcome.reason)
             ProbeOutcome.Reachable, ProbeOutcome.Unknown -> Unit
         }
     }

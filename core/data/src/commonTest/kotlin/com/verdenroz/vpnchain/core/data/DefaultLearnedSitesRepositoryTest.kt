@@ -112,12 +112,29 @@ class DefaultLearnedSitesRepositoryTest {
 
         assertEquals(LearnedRoute.Direct, repository.sites.first().single().route)
         assertEquals(listOf("www.bank.example"), store.writtenDirect)
-        assertEquals(listOf("www.bank.example"), store.writtenOpen)
+        assertEquals(emptyList(), store.writtenOpen)
 
         repository.forget("www.bank.example")
 
         assertEquals(LearnedRoute.DirectAvailable, repository.sites.first().single().route)
         assertEquals(emptyList(), store.writtenDirect)
+        assertEquals(emptyList(), store.writtenOpen)
+    }
+
+    @Test
+    fun `allowing a site the entry hop reaches sends it there and forgetting takes it back`() = scope.runTest {
+        repository.learn("www.bank.example", LearnedRoute.EntryAvailable, BlockReason.Forbidden)
+        assertEquals(null, store.writtenOpen)
+
+        repository.allowDirect("www.bank.example")
+
+        assertEquals(LearnedRoute.FailOpen, repository.sites.first().single().route)
+        assertEquals(listOf("www.bank.example"), store.writtenOpen)
+        assertEquals(emptyList(), store.writtenDirect)
+
+        repository.forget("www.bank.example")
+
+        assertEquals(LearnedRoute.EntryAvailable, repository.sites.first().single().route)
         assertEquals(emptyList(), store.writtenOpen)
     }
 
@@ -152,7 +169,7 @@ class DefaultLearnedSitesRepositoryTest {
         repository.allowDirect("www.shop.example")
 
         assertEquals(LearnedRules(exact = listOf("github.io", "s3.amazonaws.com"), suffixes = listOf("reddit.com")), store.files[RuleSetKind.Warp])
-        assertEquals(LearnedRules(exact = listOf("login.bank.example", "www.shop.example")), store.files[RuleSetKind.Open])
+        assertEquals(LearnedRules(exact = listOf("login.bank.example")), store.files[RuleSetKind.Open])
         assertEquals(LearnedRules(exact = listOf("www.shop.example")), store.files[RuleSetKind.Direct])
     }
 

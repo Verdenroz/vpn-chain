@@ -13,7 +13,7 @@ import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.bareHost
-import com.verdenroz.vpnchain.core.model.offersDirect
+import com.verdenroz.vpnchain.core.model.offersOutside
 import com.verdenroz.vpnchain.core.model.outsideExit
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -46,7 +46,7 @@ internal fun sitesUiState(
     warpRegistered: Boolean,
 ): SitesUiState {
     val domains = sites.mapTo(HashSet()) { it.domain }
-    val directOffered = profile.offersDirect(settings)
+    val outsideOffered = profile.offersOutside(settings)
     val warpActive = warpRegistered && settings.warpMode != WarpMode.Off && profile?.supportsWarpExit == true
     val sections = sites.sortedByDescending { it.learnedAtMillis }.map { site ->
         val exit = site.outsideExit(settings, profile)
@@ -57,9 +57,8 @@ internal fun sitesUiState(
             else -> Section.Blocked
         }
         val action = when {
-            site.route == LearnedRoute.Direct -> SiteAction.Undo
-            section == Section.Blocked && site.route == LearnedRoute.DirectAvailable && directOffered ->
-                SiteAction.UseMyConnection
+            site.route == LearnedRoute.Direct || site.route == LearnedRoute.FailOpen -> SiteAction.Undo
+            section == Section.Blocked && site.route in OFFERED && outsideOffered -> SiteAction.UseMyConnection
             else -> SiteAction.Remove
         }
         section to SiteRow(site.domain, bareHost(site.domain, domains), action)
@@ -71,6 +70,8 @@ internal fun sitesUiState(
         entry = sections[Section.Entry].orEmpty(),
     )
 }
+
+private val OFFERED = setOf(LearnedRoute.EntryAvailable, LearnedRoute.DirectAvailable)
 
 private enum class Section { Blocked, Direct, Warp, Entry }
 

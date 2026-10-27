@@ -56,16 +56,28 @@ class SitesGroupingTest {
     }
 
     @Test
-    fun `a chain lists its fail-open sites under the entry and offers nothing direct`() {
+    fun `a chain offers the entry hop, then the bare link, and lists a tapped entry site under the entry`() {
         val state = sitesUiState(
-            listOf(site("bank.example", LearnedRoute.FailOpen), site("shop.example", LearnedRoute.DirectAvailable)),
+            listOf(
+                site("bank.example", LearnedRoute.FailOpen),
+                site("shop.example", LearnedRoute.DirectAvailable),
+                site("mail.example", LearnedRoute.EntryAvailable),
+                site("news.example", LearnedRoute.Direct),
+            ),
             UserSettings(),
             CHAIN,
             warpRegistered = true,
         )
 
-        assertEquals(listOf(SiteRow("bank.example", "bank.example", SiteAction.Remove)), state.entry)
-        assertEquals(listOf(SiteRow("shop.example", "shop.example", SiteAction.Remove)), state.blocked)
+        assertEquals(listOf(SiteRow("bank.example", "bank.example", SiteAction.Undo)), state.entry)
+        assertEquals(
+            setOf(
+                SiteRow("shop.example", "shop.example", SiteAction.UseMyConnection),
+                SiteRow("mail.example", "mail.example", SiteAction.UseMyConnection),
+            ),
+            state.blocked.toSet(),
+        )
+        assertEquals(listOf(SiteRow("news.example", "news.example", SiteAction.Undo)), state.direct)
     }
 
     @Test

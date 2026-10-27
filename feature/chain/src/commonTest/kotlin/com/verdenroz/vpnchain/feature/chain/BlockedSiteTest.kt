@@ -59,8 +59,8 @@ class BlockedSiteTest {
     }
 
     @Test
-    fun `a chain with its entry hop dialled prompts nothing`() {
-        assertNull(blockedSite(SITES, UserSettings(), CHAIN, dismissed = emptySet()))
+    fun `a chain with its entry hop dialled prompts for the site waiting on a tap`() {
+        assertEquals("www.shop.example", blockedSite(SITES, UserSettings(), CHAIN, dismissed = emptySet())?.domain)
     }
 
     @Test
