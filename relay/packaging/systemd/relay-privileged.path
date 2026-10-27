@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for xray changes requested by relayd
+
+[Path]
+PathExistsGlob=/var/lib/vpn-chain/requests/*.req
+Unit=relay-privileged.service
+
+[Install]
+WantedBy=paths.target

@@ -1,0 +1,7 @@
+d /var/lib/vpn-chain           0755 root   root   -
+d /var/lib/vpn-chain/jobs      0700 relayd relayd -
+d /var/lib/vpn-chain/requests  0700 relayd relayd -
+d /var/lib/vpn-chain/confirm   0700 relayd relayd -
+d /var/lib/vpn-chain/staged    0700 relayd relayd -
+d /var/lib/vpn-chain/snapshots 0700 root   root   -
+d /opt/vpn-chain/xray          0755 root   root   -
