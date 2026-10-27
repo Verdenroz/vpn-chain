@@ -42,6 +42,8 @@ data class ChainProfile(
     val serverPort: Int = DEFAULT_SERVER_PORT,
     /** Local SOCKS/HTTP proxy the rendered relay listens on. */
     val localProxyPort: Int = DEFAULT_LOCAL_PROXY_PORT,
+    /** The id the relay knows this device's management key by; null until the device has enrolled. */
+    val managementKeyId: String? = null,
 ) {
     override fun toString() = "ChainProfile(server=$vpsIp:$serverPort)"
 

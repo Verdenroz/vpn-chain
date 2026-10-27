@@ -11,6 +11,7 @@ kotlin {
             implementation(projects.core.common)
             implementation(projects.core.config)
             implementation(projects.core.datastore)
+            implementation(projects.core.relay)
             implementation(projects.core.tunnel)
             implementation(projects.core.warp)
             implementation(projects.core.logging)

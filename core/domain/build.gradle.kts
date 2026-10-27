@@ -11,6 +11,7 @@ kotlin {
             api(projects.core.data)
             api(projects.core.geoip)
             implementation(projects.core.common)
+            implementation(projects.core.relay)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.koin.core)
         }
