@@ -28,6 +28,12 @@ interface RelayAgent {
     /** A new UUID and short ID for [name], with no restart. */
     suspend fun rekey(name: String): AgentIdentity
 
+    /** Admin only. */
+    suspend fun exit(): AgentExit
+
+    /** Admin only. Restarts xray, which drops every device: follow the returned job id with [awaitJob], if there is one. */
+    suspend fun setExit(change: ExitChange): String?
+
     /** @return the job id. */
     suspend fun startJob(request: JobRequest): String
 

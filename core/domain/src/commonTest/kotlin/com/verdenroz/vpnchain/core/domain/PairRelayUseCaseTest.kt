@@ -15,6 +15,7 @@ import com.verdenroz.vpnchain.core.relay.AgentJob
 import com.verdenroz.vpnchain.core.relay.AgentUnreachable
 import com.verdenroz.vpnchain.core.relay.DeviceRole
 import com.verdenroz.vpnchain.core.relay.Enrolled
+import com.verdenroz.vpnchain.core.relay.ExitChange
 import com.verdenroz.vpnchain.core.relay.JobRequest
 import com.verdenroz.vpnchain.core.relay.ManagementKey
 import com.verdenroz.vpnchain.core.relay.PairingException
@@ -178,6 +179,8 @@ private class PairingAgent(private val enroll: () -> Enrolled) : RelayAgent {
     override suspend fun rekey(name: String) = error("unused")
     override suspend fun pair(name: String) = error("unused")
     override suspend fun refillPool() = error("unused")
+    override suspend fun exit() = error("unused")
+    override suspend fun setExit(change: ExitChange) = error("unused")
     override suspend fun startJob(request: JobRequest) = error("unused")
     override suspend fun job(id: String): AgentJob = error("unused")
     override suspend fun confirm(id: String) = error("unused")
