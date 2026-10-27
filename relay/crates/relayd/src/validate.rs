@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 
-use crate::{Device, Error, Exit, INBOUND_TAG, Relay, Secret, State};
+use crate::{Device, Error, Exit, INBOUND_TAG, Relay, Secret, State, XRAY_VERSION};
 
 const NAME_MAX: usize = 32;
 const SHORT_ID_MAX: usize = 16;
@@ -11,6 +11,12 @@ const KEY_BYTES: usize = 32;
 
 pub(crate) fn relay(relay: &Relay) -> Result<(), Error> {
     let state = &relay.state;
+    if state.xray.version != XRAY_VERSION {
+        return Err(Error::new(format!(
+            "the state is for xray {}, but this relayd renders for xray {XRAY_VERSION}",
+            state.xray.version
+        )));
+    }
     check_inbound(state)?;
     check_devices(&state.devices)?;
     check_short_ids(state)?;

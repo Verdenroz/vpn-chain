@@ -9,7 +9,7 @@ use crate::{Error, Secret, store, validate};
 /// Bump whenever a persisted shape changes, and keep a migration from the version it leaves.
 pub const SCHEMA: u32 = 1;
 
-/// The xray release relayd renders for. Must match the version the server installs.
+/// The xray release relayd renders for: `XRAY_VERSION` in `server/lib/pins.sh`, without the `v`.
 pub const XRAY_VERSION: &str = "26.3.27";
 
 pub const INBOUND_TAG: &str = "vless-reality-443";

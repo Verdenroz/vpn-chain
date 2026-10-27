@@ -1,7 +1,7 @@
 mod common;
 
 use common::{assert_no_secret, relay};
-use relayd::{Api, Relay, Secret};
+use relayd::{Api, Relay, Secret, XRAY_VERSION};
 
 fn refusal(edit: impl FnOnce(&mut Relay)) -> String {
     let mut relay = relay("relay-direct");
@@ -146,4 +146,29 @@ fn a_wireguard_key_that_is_not_32_bytes_of_base64_is_refused() {
         error.contains("WireGuard exit key is not 32 bytes"),
         "{error}"
     );
+}
+
+#[test]
+fn a_state_for_another_xray_is_refused() {
+    let error = refusal(|relay| relay.state.xray.version = "26.10.21".to_owned());
+
+    assert!(
+        error.contains("the state is for xray 26.10.21, but this relayd renders for xray"),
+        "{error}"
+    );
+}
+
+#[test]
+fn the_xray_version_matches_the_server_pin() {
+    let pins = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../server/lib/pins.sh"
+    ))
+    .unwrap();
+
+    let pinned = pins
+        .lines()
+        .find_map(|line| line.strip_prefix("XRAY_VERSION=v"))
+        .unwrap();
+    assert_eq!(pinned, XRAY_VERSION);
 }
