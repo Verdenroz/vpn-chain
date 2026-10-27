@@ -43,6 +43,16 @@ class PairingLinkTest {
     }
 
     @Test
+    fun `the first admin mark is read from f and survives format`() {
+        assertTrue(PairingLink.parse(link(extra = "&f=1")).getOrThrow().firstAdmin)
+        assertFalse(PairingLink.parse(link()).getOrThrow().firstAdmin)
+        assertFalse(PairingLink.parse(link(extra = "&f=0")).getOrThrow().firstAdmin)
+        assertTrue("&f=1" in LINK.copy(firstAdmin = true).format())
+        assertFalse("&f=" in LINK.format())
+        assertEquals(LINK.copy(firstAdmin = true), PairingLink.parse(LINK.copy(firstAdmin = true).format()).getOrThrow())
+    }
+
+    @Test
     fun `an ipv6 host is bracketed on the wire and bare in the link`() {
         val v6 = LINK.copy(host = "2001:db8::1")
 

@@ -23,8 +23,8 @@ class PairingFailed(
     val step: PairingStep,
     val reason: Reason,
     cause: Throwable? = null,
-    /** The link's device name, for telling the user which code to ask for. */
-    val device: String = "",
+    /** Whether the link was the first admin code, which decides where a new one comes from. */
+    val firstAdmin: Boolean = false,
 ) : Exception(reason.name, cause) {
     enum class Reason { Expired, Used, Unreachable, Failed }
 }
@@ -64,7 +64,7 @@ class PairRelayUseCase(
 
     override suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<PairedRelay> = runCatching {
         val link = PairingLink.parse(text).getOrThrow()
-        if (link.isExpired(nowSeconds())) throw PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Expired, device = link.deviceName)
+        if (link.isExpired(nowSeconds())) throw PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Expired, firstAdmin = link.firstAdmin)
         val previous = profiles.activeProfileId.first()
         val wasUp = chain.status.first().state == TunnelState.Connected
         val relay = ChainProfile(
@@ -104,7 +104,7 @@ class PairRelayUseCase(
             HTTP_GONE -> PairingFailed.Reason.Expired
             else -> PairingFailed.Reason.Failed
         }
-        throw PairingFailed(PairingStep.Registering, reason, e, link.deviceName)
+        throw PairingFailed(PairingStep.Registering, reason, e, link.firstAdmin)
     } catch (e: AgentUnreachable) {
         throw PairingFailed(PairingStep.Registering, PairingFailed.Reason.Unreachable, e)
     }
