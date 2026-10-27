@@ -16,8 +16,8 @@ RELAY="$(cd "$HERE/../../../.." && pwd)"
 ROOT="$(cd "$RELAY/.." && pwd)"
 DISTRO="${1:-debian}"
 case "$DISTRO" in
-    debian) SUBNET=11.253.78 ;;
-    ubuntu) SUBNET=11.253.79 ;;
+    debian) SUBNET=11.253.78 PRIV_SUBNET=198.19.78 ;;
+    ubuntu) SUBNET=11.253.79 PRIV_SUBNET=198.19.79 ;;
     *) echo "usage: run.sh [debian|ubuntu]" >&2; exit 64 ;;
 esac
 RELAY_C="relay-$DISTRO-$$"
@@ -35,19 +35,19 @@ SING_BOX="$("$RELAY/crates/live-harness/fetch-bins.sh")"
 docker build -q -t "$TEST_IMG" -f "$ROOT/server/tests/Dockerfile" "$ROOT/server/tests" >/dev/null
 docker build -q -t "$IMG" --build-arg "BASE=$BASE" "$HERE" >/dev/null
 lab_up
-relay_up "$RELAY_C" "$SUBNET.10"
+relay_up "$RELAY_C" "$(addr 10)"
 case "$DISTRO" in
     debian) g bash -c 'install -d -m700 /root/.ssh && echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test" >/root/.ssh/authorized_keys' ;;
 esac
 
 step "a) a fresh install"
-g /opt/build/relayd install --host "$SUBNET.10" --sni dest.test >"$W/out" 2>"$W/err"
+g /opt/build/relayd install --host "$(addr 10)" --sni dest.test >"$W/out" 2>"$W/err"
 eq "$(grep -c 'vpnchain://pair' "$W/out")" 1
 grep -q '█' "$W/out"
 eq "$(grep -c 'vpnchain://' "$W/err" || true)" 0
 pass "stdout holds the link once, as text and a QR code, and stderr never shows it"
 eq "$(link_field "$W/out" n)" admin
-eq "$(link_field "$W/out" h)" "$SUBNET.10"
+eq "$(link_field "$W/out" h)" "$(addr 10)"
 eq "$(link_field "$W/out" v)" 1
 [ "$(( $(link_field "$W/out" e) - $(g date +%s) ))" -gt 800 ]
 pass "the link names the admin device, the host and a fifteen-minute expiry"
@@ -85,7 +85,7 @@ snapshot() {
         systemctl show xray relayd -p MainPID; ls /usr/local/etc/xray"
 }
 snapshot >"$W/before"
-g /usr/local/bin/relayd install --host "$SUBNET.10" --sni dest.test >"$W/out2" 2>"$W/err2"
+g /usr/local/bin/relayd install --host "$(addr 10)" --sni dest.test >"$W/out2" 2>"$W/err2"
 snapshot >"$W/after"
 diff "$W/before" "$W/after"
 no grep -q 'vpnchain://' "$W/out2"
@@ -115,6 +115,7 @@ pass "applying the egress rules leaves another table as it was"
 
 g bash -c 'mkdir -p /srv/loop && echo loopback >/srv/loop/index.html'
 docker exec -d "$RELAY_C" sh -c 'cd /srv/loop && exec python3 -m http.server 80 --bind 127.0.0.1'
+docker exec -d "$RELAY_C" sh -c 'cd /srv/loop && exec python3 -m http.server 8090 --bind 0.0.0.0'
 sleep 1
 
 n=0
@@ -128,7 +129,7 @@ for version in "${SINGBOX_VERSIONS[@]}"; do
         g relayd pair >"$W/link-$tag"
     fi
     client_from "c-$tag" "$version" "$W/link-$tag"
-    eq "$(through "c-$tag" "http://$SUBNET.50/")" public
+    eq "$(through "c-$tag" "http://$(addr 50)/")" public
     eq "$(through "c-$tag" http://agent.vpn-chain.invalid/v1/relay -o /dev/null -w '%{http_code}')" 401
     pass "sing-box $version connects with the identity in the link, and the agent wants a signature"
 
@@ -144,7 +145,7 @@ for version in "${SINGBOX_VERSIONS[@]}"; do
     pass "enrolling returns a new identity and a key id"
 
     client_from "e-$tag" "$version" "$W/link-$tag" "$new_uuid" "$new_sid"
-    eq "$(through "e-$tag" "http://$SUBNET.50/")" public
+    eq "$(through "e-$tag" "http://$(addr 50)/")" public
     eq "$(signed "e-$tag" "k-$tag" "$key_id" GET /v1/relay)" 200
     pass "the new identity connects and a signed GET /v1/relay succeeds"
 
@@ -152,7 +153,7 @@ for version in "${SINGBOX_VERSIONS[@]}"; do
     pass "the same QR a second time gets 401"
 
     client_from "o-$tag" "$version" "$W/link-$tag"
-    eq "$(through "o-$tag" "http://$SUBNET.50/")" ""
+    eq "$(through "o-$tag" "http://$(addr 50)/")" ""
     pass "the old identity is refused after enrolling"
 
     g relayd pair >"$W/link-exp-$tag"
@@ -164,14 +165,16 @@ for version in "${SINGBOX_VERSIONS[@]}"; do
     step "c) sing-box $version: the nft rules"
     ctl="rb-$tag-control.test"
     eq "$(through "e-$tag" "http://rb-$tag-first.test:80/")" ""
-    pass "a name that rebinds to loopback is refused with the rules loaded"
+    eq "$(through "e-$tag" "http://rb-$tag-stub-first.test:8090/")" ""
+    pass "a name that rebinds to loopback, or to the resolver stub at another port, is refused with the rules loaded"
     g nft delete table inet vpn_chain_egress
+    eq "$(through "e-$tag" "http://rb-$tag-stub-open.test:8090/")" loopback
     eq "$(through "e-$tag" "http://$ctl:80/")" loopback
-    pass "with the table removed the same probe reaches loopback, so the rules are what stop it"
+    pass "with the table removed the same probes reach loopback and the stub, so the rules are what stop them"
     g /usr/local/bin/relayd egress --state $STATE_DIR/relay.json
     eq "$(through "e-$tag" "http://rb-$tag-again.test:80/")" ""
     eq "$(through "e-$tag" "http://public.test/")" public
-    eq "$(through "e-$tag" "http://$SUBNET.50/")" public
+    eq "$(through "e-$tag" "http://$(addr 50)/")" public
     eq "$(through "e-$tag" "http://$PRIV_SUBNET.50/")" ""
     eq "$(signed "e-$tag" "k-$tag" "$key_id" GET /v1/relay)" 200
     pass "after the rules are back: a public name and address work, a private one does not, the agent answers"
@@ -183,13 +186,13 @@ no g nft list table inet vpn_chain_egress 2>/dev/null
 g systemctl start xray
 for _ in $(seq 60); do g ss -ltn | grep -q ':443 ' && break; sleep 0.5; done
 g nft list table inet vpn_chain_egress >/dev/null
-eq "$(through "e-$tag" "http://$SUBNET.50/")" public
+eq "$(through "e-$tag" "http://$(addr 50)/")" public
 reply="$(signed_full "e-$tag" "k-$tag" "$key_id" POST /v1/devices '{"name":"tablet"}')"
 eq "${reply%% *}" 201
 tablet="${reply#* }"
-client_up tablet "$version" "$SUBNET.10" 443 dest.test "$(link_field "$W/link-$tag" pbk)" \
+client_up tablet "$version" "$(addr 10)" 443 dest.test "$(link_field "$W/link-$tag" pbk)" \
     "$(jq -r .identity.shortId <<<"$tablet")" "$(jq -r .identity.uuid <<<"$tablet")"
-eq "$(through tablet "http://$SUBNET.50/")" public
+eq "$(through tablet "http://$(addr 50)/")" public
 eq "$(g systemctl is-enabled vpn-chain-egress xray relayd | paste -sd' ')" "enabled enabled enabled"
 pass "starting xray loads the rules first, and relayd still adds a device through xray's API"
 
@@ -224,8 +227,8 @@ touch /var/log/xray/error.log /var/log/xray/access.log && chown -R nobody /var/l
     phone_sid="$(sed -n 's/^SHORT_ID=//p' "$W/phone-$label.env")"
     client_up "$label-before-1" "$version" "$ip" 443 dest.test "$pbk" "$old_sid" "$old_uuid"
     client_up "$label-before-2" "$version" "$ip" 443 dest.test "$pbk" "$phone_sid" "$phone_uuid"
-    eq "$(through "$label-before-1" "http://$SUBNET.50/")" public
-    eq "$(through "$label-before-2" "http://$SUBNET.50/")" public
+    eq "$(through "$label-before-1" "http://$(addr 50)/")" public
+    eq "$(through "$label-before-2" "http://$(addr 50)/")" public
     pass "$label: the deploy-server.sh relay serves two devices before the adoption"
 
     g /opt/build/relayd install --host "$ip" "$@" >"$W/out-$label" 2>"$W/err-$label"
@@ -239,8 +242,8 @@ touch /var/log/xray/error.log /var/log/xray/access.log && chown -R nobody /var/l
     pass "$label: the link is for $paired and carries the existing public key"
     client_up "$label-after-1" "$version" "$ip" 443 dest.test "$pbk" "$old_sid" "$old_uuid"
     client_up "$label-after-2" "$version" "$ip" 443 dest.test "$pbk" "$phone_sid" "$phone_uuid"
-    eq "$(through "$label-after-1" "http://$SUBNET.50/")" public
-    eq "$(through "$label-after-2" "http://$SUBNET.50/")" public
+    eq "$(through "$label-after-1" "http://$(addr 50)/")" public
+    eq "$(through "$label-after-2" "http://$(addr 50)/")" public
     eq "$(g ps -o user= -C xray)" xray
     pass "$label: both existing clients still connect after the adoption, now to an xray run by the xray user"
 
@@ -256,13 +259,13 @@ touch /var/log/xray/error.log /var/log/xray/access.log && chown -R nobody /var/l
         device1) eq "$names" device1,phone ;;
         *) eq "$names" "device1,phone,$paired" ;;
     esac
-    eq "$(through "$label-after-2" "http://$SUBNET.50/")" public
+    eq "$(through "$label-after-2" "http://$(addr 50)/")" public
     pass "$label: $paired enrolls as an admin and lists $names; the phone is unaffected"
 }
 
 step "d) a relay deployed by deploy-server.sh is adopted, pairing an existing device"
-adopt_case existing "$SUBNET.200" device1 --device device1
+adopt_case existing "$(addr 100)" device1 --device device1
 step "d) the same, pairing a new admin device"
-adopt_case newdev "$SUBNET.201" tablet2 --name tablet2
+adopt_case newdev "$(addr 101)" tablet2 --name tablet2
 
 printf '\nrun.sh %s: %d checks passed\n' "$DISTRO" "$PASS"

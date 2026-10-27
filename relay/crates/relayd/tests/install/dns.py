@@ -7,6 +7,7 @@ import sys
 public = bytes(int(part) for part in sys.argv[1].split("."))
 upstream = (sys.argv[2], 53)
 loopback = bytes([127, 0, 0, 1])
+stub = bytes([127, 0, 0, 11])
 asked = {}
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind(("0.0.0.0", 53))
@@ -42,6 +43,7 @@ while True:
     answer = b""
     if qtype == 1:
         asked[name] = asked.get(name, 0) + 1
-        address = public if asked[name] == 1 else loopback
+        later = stub if b"stub" in name else loopback
+        address = public if asked[name] == 1 else later
         answer = b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x00\x00\x04" + address
     sock.sendto(head + question + answer, peer)
