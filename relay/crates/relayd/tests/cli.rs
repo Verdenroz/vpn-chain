@@ -353,7 +353,6 @@ fn a_malformed_device_command_prints_usage() {
     for args in [
         vec!["device".as_ref()],
         vec!["device".as_ref(), "add".as_ref()],
-        vec!["device".as_ref(), "list".as_ref()],
         vec![
             "device".as_ref(),
             "add".as_ref(),
@@ -377,7 +376,6 @@ fn a_malformed_device_command_prints_usage() {
             "c".as_ref(),
         ],
         vec!["maintenance".as_ref()],
-        vec!["maintenance".as_ref(), "refill-pool".as_ref()],
     ] {
         let output = relayd(&args);
         assert_eq!(output.status.code(), Some(64), "{args:?}");
@@ -543,4 +541,48 @@ fn serve_listens_on_loopback_and_nowhere_else() {
         })
         .collect();
     assert_eq!(bound, [format!("0100007F:{port:04X}")]);
+}
+
+#[test]
+fn a_malformed_pair_command_prints_usage() {
+    for args in [
+        vec!["pair", "--new", "phone", "--device", "laptop"],
+        vec!["pair", "--role", "admin"],
+        vec!["pair", "--new", "phone", "--role", "owner"],
+        vec!["pair", "--new"],
+    ] {
+        let args: Vec<&Path> = args.iter().map(Path::new).collect();
+        let output = relayd(&args);
+        assert_eq!(output.status.code(), Some(64), "{args:?}");
+    }
+}
+
+#[test]
+fn pair_new_refuses_an_empty_pool_without_restarting() {
+    let (dir, state) = keyed_relay();
+    let mut json = state_json(&state);
+    json["spareShortIds"] = serde_json::json!([]);
+    fs::write(&state, json.to_string()).unwrap();
+
+    let refused = relayd(&[
+        "pair".as_ref(),
+        "--new".as_ref(),
+        "phone".as_ref(),
+        "--state".as_ref(),
+        &state,
+        "--lock".as_ref(),
+        &dir.path().join("devices.lock"),
+    ]);
+
+    assert_eq!(refused.status.code(), Some(1));
+    assert!(stderr(&refused).contains("no spare short IDs"));
+    assert_eq!(state_json(&state), json);
+}
+
+#[test]
+fn device_commands_default_to_the_installed_relay() {
+    let output = relayd(&["device".as_ref(), "list".as_ref()]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("/var/lib/vpn-chain/relay/relay.json"));
 }

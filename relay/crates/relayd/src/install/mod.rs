@@ -292,7 +292,7 @@ fn fresh(options: &Options, site: &Site) -> Result<Created, Error> {
         }
     }
     written?;
-    own(site)?;
+    own(&site.config)?;
     Ok(Created {
         device: Some(name.to_owned()),
         restart: false,
@@ -322,7 +322,7 @@ fn adopt(options: &Options, site: &Site) -> Result<Created, Error> {
             }
         },
     )?;
-    own(site)?;
+    own(&site.config)?;
     Ok(Created {
         device: existing.or(Some(name)),
         restart,
@@ -384,10 +384,10 @@ fn accepts(site: &Site, config: &Path) -> Result<(), Error> {
 /// Hands relayd its files, xray's group the config, which holds the REALITY private key, and
 /// xray the logs. `xray -test` run as root or relayd opens its log, so the logs are group
 /// writable for relayd, which is in xray's group.
-fn own(site: &Site) -> Result<(), Error> {
+pub fn own(config: &Path) -> Result<(), Error> {
     let (relayd, group, xray) = (uid(RELAYD)?, host::gid(RELAYD)?, host::gid(XRAY_GROUP)?);
     give_all(Path::new(layout::RELAY_DIR), relayd, group)?;
-    give(&site.config, relayd, xray)?;
+    give(config, relayd, xray)?;
     let logs = Path::new(XRAY_LOGS);
     give_all(logs, uid(XRAY_GROUP)?, xray)?;
     for entry in fs::read_dir(logs)
@@ -396,7 +396,7 @@ fn own(site: &Site) -> Result<(), Error> {
     {
         mode(&entry.path(), 0o664)?;
     }
-    let dir = site.config.parent().expect("a config has a directory");
+    let dir = config.parent().expect("a config has a directory");
     for entry in fs::read_dir(dir)
         .map_err(|error| Error::at(dir, error))?
         .flatten()
