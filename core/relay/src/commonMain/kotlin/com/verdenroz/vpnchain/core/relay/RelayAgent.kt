@@ -19,6 +19,9 @@ interface RelayAgent {
 
     suspend fun revoke(name: String): Revoked
 
+    /** Tops up the spare short IDs, which restarts xray: follow [Refilled.job] with [awaitJob]. */
+    suspend fun refillPool(): Refilled
+
     /** A one-time pairing code that enrolls [name] on another device, which is admin only. */
     suspend fun pair(name: String): PairingCode
 

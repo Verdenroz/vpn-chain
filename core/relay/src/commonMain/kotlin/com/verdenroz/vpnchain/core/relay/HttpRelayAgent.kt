@@ -12,8 +12,6 @@ import okio.ByteString.Companion.toByteString
 /** A 401 with a clock this far from ours is read as skew, not as a refused key. */
 private const val SKEW_THRESHOLD_SECONDS = 30L
 
-private val DEVICE_NAME = Regex("[a-z0-9][a-z0-9._-]{0,31}")
-
 private val json = Json { ignoreUnknownKeys = true }
 
 internal class HttpRelayAgent(
@@ -44,6 +42,8 @@ internal class HttpRelayAgent(
     override suspend fun revoke(name: String) = send("DELETE", "/v1/devices/${segment(name)}").decode<Revoked>()
 
     override suspend fun rekey(name: String) = send("POST", "/v1/devices/${segment(name)}/rekey").field<AgentIdentity>("identity")
+
+    override suspend fun refillPool() = send("POST", "/v1/pool/refill").decode<Refilled>()
 
     override suspend fun pair(name: String) = send("POST", "/v1/devices/${segment(name)}/pair").decode<PairingCode>()
 
@@ -105,7 +105,7 @@ internal class HttpRelayAgent(
     }
 
     // A name goes into the signed request target, so it must not be able to change the path.
-    private fun segment(name: String) = name.also { require(DEVICE_NAME.matches(it)) { "not a device name" } }
+    private fun segment(name: String) = name.also { require(isDeviceName(it)) { "not a device name" } }
 
     private fun proxy() = probe.current() ?: throw AgentUnreachable("The tunnel is not connected.")
 

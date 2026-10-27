@@ -186,6 +186,17 @@ class HttpRelayAgentTest {
     }
 
     @Test
+    fun `a refill reports the restart job it queued`() = runTest {
+        route = { _, _ -> Reply(202, """{"added":3,"job":"${"c".repeat(32)}"}""") }
+        val (client, fake) = agent()
+
+        val refilled = client.refillPool()
+
+        assertEquals(Refilled(3, "c".repeat(32)), refilled)
+        assertEquals("POST /v1/pool/refill", fake.seen.single().let { "${it.method} ${it.target}" })
+    }
+
+    @Test
     fun `no tunnel and a closed port both read as unreachable`() = runTest {
         val noTunnel = HttpRelayAgent(key, { null }, createAgentTransport(), { localClock })
         val closed = java.net.ServerSocket(0).use { it.localPort }
