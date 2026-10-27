@@ -75,10 +75,8 @@ fn verify(
         .verifier
         .verify(&relay.state.keys, &signed, seconds())
         .map_err(|refusal| {
-            if let Some(key) = &refusal.key {
-                service
-                    .audit
-                    .record(key, "auth", None, &refusal.why.to_string());
+            if let (Why::Replayed, Some(key)) = (refusal.why, &refusal.key) {
+                service.audit.record(key, "auth", None, "replayed nonce");
             }
             match refusal.why {
                 Why::Overloaded => ApiError::new(

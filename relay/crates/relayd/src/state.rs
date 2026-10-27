@@ -204,12 +204,20 @@ fn read_state(path: &Path) -> Result<State, Error> {
         1 => {
             let mut v1: Value = store::parse(path, &text)?;
             v1["v"] = json!(SCHEMA);
-            v1["agent"] = json!({ "port": AGENT_PORT });
+            v1["agent"] = json!({ "port": free_agent_port(&v1) });
             v1["keys"] = json!([]);
             serde_json::from_value(v1).map_err(|error| Error::at(path, store::described(&error)))
         }
         other => Err(unreadable(path, other, SCHEMA)),
     }
+}
+
+/// [`AGENT_PORT`], or the next port up that the inbound and the stats API do not hold.
+fn free_agent_port(v1: &Value) -> u64 {
+    let taken = [&v1["inbound"]["port"], &v1["api"]["port"]];
+    (u64::from(AGENT_PORT)..)
+        .find(|port| !taken.iter().any(|held| held.as_u64() == Some(*port)))
+        .expect("the port space is not exhausted")
 }
 
 fn read_versioned<T: DeserializeOwned>(path: &Path, schema: u32) -> Result<T, Error> {

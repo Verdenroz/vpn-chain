@@ -204,7 +204,15 @@ impl Manager<'_> {
             .iter()
             .filter(|device| device.role == Role::Admin)
             .count();
-        if device.role == Role::Admin && admins == 1 && !force {
+        let admin_keys = relay
+            .state
+            .keys
+            .iter()
+            .filter(|key| key.role == Role::Admin);
+        let held = admin_keys.clone().filter(|key| key.device == name).count();
+        let last_admin = device.role == Role::Admin && admins == 1;
+        let last_admin_key = held > 0 && held == admin_keys.count();
+        if (last_admin || last_admin_key) && !force {
             return Err(Error::conflict(format!(
                 "{name} is the last admin; revoking it leaves no one to manage the relay (--force to revoke it anyway)"
             )));
