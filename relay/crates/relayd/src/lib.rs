@@ -15,18 +15,25 @@
 //! `devices.json` last recorded them: what xray counted since the scripts last folded its stats
 //! is not read, and folding them before import is still to be built.
 
+mod clock;
 mod config_file;
+mod devices;
 mod error;
+mod identity;
 mod import;
+mod live;
 mod render;
 mod secret;
 mod state;
 mod store;
 mod validate;
 
+pub use clock::now;
 pub use config_file::{Placement, write_config};
+pub use devices::{Manager, SPARES};
 pub use error::Error;
 pub use import::import;
+pub use live::{Live, Restart};
 pub use render::render;
 pub use secret::Secret;
 pub use state::{

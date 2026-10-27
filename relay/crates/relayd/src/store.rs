@@ -2,12 +2,16 @@ use std::fs::{self, File, OpenOptions, Permissions, TryLockError};
 use std::io::{self, ErrorKind, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::error::Category;
 
 use crate::Error;
+
+const LOCK_POLL: Duration = Duration::from_millis(50);
 
 pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, Error> {
     read_json_if_present(path)?.ok_or_else(|| Error::at(path, "no such file"))
@@ -42,19 +46,32 @@ pub fn described(error: &serde_json::Error) -> String {
 
 /// Takes `path` with `flock`, as the server scripts do on fd 9, without waiting for it.
 pub fn lock(path: &Path) -> Result<File, Error> {
+    lock_within(path, Duration::ZERO)
+}
+
+/// Like [`lock`], retrying until `wait` has passed, as the scripts' `flock -w` does.
+pub fn lock_within(path: &Path, wait: Duration) -> Result<File, Error> {
     let file = OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .open(path)
         .map_err(|error| Error::at(path, error))?;
-    match file.try_lock() {
-        Ok(()) => Ok(file),
-        Err(TryLockError::WouldBlock) => Err(Error::at(
-            path,
-            "held by another tool editing the relay; run again once it finishes",
-        )),
-        Err(TryLockError::Error(error)) => Err(Error::at(path, error)),
+    let deadline = Instant::now() + wait;
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(file),
+            Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
+                thread::sleep(LOCK_POLL);
+            }
+            Err(TryLockError::WouldBlock) => {
+                return Err(Error::at(
+                    path,
+                    "held by another tool editing the relay; run again once it finishes",
+                ));
+            }
+            Err(TryLockError::Error(error)) => return Err(Error::at(path, error)),
+        }
     }
 }
 
