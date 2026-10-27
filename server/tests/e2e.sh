@@ -3,17 +3,23 @@
 # End to end on a throwaway docker network: caddy (tls internal) is the REALITY
 # dest and the plain-HTTP target, xray is the relay, one xray client per device.
 # Drives devices.sh through `docker exec`, so add/revoke hit a real running xray.
+# Each sing-box in SINGBOX_VERSIONS then dials the relay with the apps' outbound.
+# E2E_XRAY_VERSION picks the relay (default: the pin). Prints one PAIR line per sing-box.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-XRAY_DIR="$(dirname "$("$HERE/fetch-xray.sh")")"
+# shellcheck source=server/lib/pins.sh
+. "$HERE/../lib/pins.sh"
+SINGBOX_VERSIONS="${SINGBOX_VERSIONS:-$SINGBOX_VERSIONS_DEFAULT}"
+XRAY_DIR="$(dirname "$("$HERE/fetch-xray.sh" ${E2E_XRAY_VERSION:+"$E2E_XRAY_VERSION"})")"
+XRAY_TAG="$(basename "$XRAY_DIR")"; XRAY_TAG="${XRAY_TAG#xray-}"
 NET=vpnchain-e2e
 W="$(mktemp -d)"
 PASS=0 FAIL=0
 IMG=vpn-chain-test
 
 drop() {
-    docker rm -f e2e-srv e2e-dest e2e-cli-a e2e-cli-b e2e-probe >/dev/null 2>&1 || true
+    docker rm -f e2e-srv e2e-dest e2e-cli-a e2e-cli-b e2e-probe e2e-sb-b e2e-sb-a e2e-sb-uuid >/dev/null 2>&1 || true
     docker network rm "$NET" >/dev/null 2>&1 || true
 }
 trap 'drop; rm -rf "$W"' EXIT
@@ -91,6 +97,27 @@ run_client() { # container-name conf-file
     sleep 1
 }
 
+sb_conf() { # uuid short_id
+    jq -n --arg uuid "$1" --arg sid "$2" --arg pbk "$PUB" '{
+        log: {level: "warn"},
+        inbounds: [{type: "mixed", listen: "127.0.0.1", listen_port: 1080}],
+        outbounds: [{type: "vless", tag: "proxy", server: "srv", server_port: 443, uuid: $uuid,
+            flow: "xtls-rprx-vision", network: "tcp", packet_encoding: "xudp", connect_timeout: "3s",
+            tls: {enabled: true, server_name: "dest.test", utls: {enabled: true, fingerprint: "chrome"},
+                reality: {enabled: true, public_key: $pbk, short_id: $sid}}}]}'
+}
+
+# sb_try BIN_DIR NAME UUID SHORT_ID: dial the relay with sing-box; succeeds when the target answers.
+sb_try() {
+    sb_conf "$3" "$4" > "$W/$2.json"
+    docker run -d --name "$2" --network "$NET" -v "$1":/opt/sb:ro -v "$W/$2.json":/c.json:ro \
+        "$IMG" /opt/sb/sing-box run -c /c.json >/dev/null
+    sleep 2
+    [ "$(docker exec "$2" curl -sS --max-time 8 --socks5-hostname 127.0.0.1:1080 http://dest/)" = pong ]
+}
+
+refused() { ! "$@"; }
+
 start_client() { # device
     # shellcheck source=/dev/null
     ( . "$VPN_CHAIN_DEVICES_DIR/$1.env"; client_conf "$VLESS_UUID" "$SHORT_ID" > "$W/client-$1.json" )
@@ -128,6 +155,8 @@ check "device A reaches the target through the relay" test "$(fetch a)" = pong
 check "device B reaches the target through the relay" test "$(fetch b)" = pong
 
 A_SID="$(short_id_of a)"
+A_UUID="$(sed -n 's/^VLESS_UUID=//p' "$VPN_CHAIN_DEVICES_DIR/a.env")"
+B_UUID="$(sed -n 's/^VLESS_UUID=//p' "$VPN_CHAIN_DEVICES_DIR/b.env")"
 B_SID="$(short_id_of b)"
 check "before revoke, REALITY accepts A's short ID (nothing forwarded to dest)" test "$(probe "$A_SID")" = 0
 dev revoke a
@@ -141,6 +170,17 @@ check "an unauthenticated probe gets the dest certificate" bash -c \
 LIST="$(dev list; cat "$W/dev.log")"
 check "list shows traffic for B" bash -c 'grep -E "^b .*up [0-9.]+[KMG]?" <<<"$1" | grep -qv "up -"' _ "$LIST"
 check "list no longer shows A" bash -c '! grep -q "^a " <<<"$1"' _ "$LIST"
+
+for sb in $SINGBOX_VERSIONS; do
+    SB_DIR="$(dirname "$("$HERE/fetch-singbox.sh" "$sb")")"
+    before=$FAIL
+    check "sing-box $sb reaches the target through the relay" sb_try "$SB_DIR" e2e-sb-b "$B_UUID" "$(short_id_of b)"
+    check "sing-box $sb with a revoked short ID and UUID is refused" refused sb_try "$SB_DIR" e2e-sb-a "$A_UUID" "$A_SID"
+    check "sing-box $sb with a valid short ID and an unknown UUID is refused" refused sb_try "$SB_DIR" e2e-sb-uuid "$(cat /proc/sys/kernel/random/uuid)" "$(short_id_of b)"
+    docker rm -f e2e-sb-b e2e-sb-a e2e-sb-uuid >/dev/null
+    [ "$FAIL" -eq "$before" ] && res=PASS || res=FAIL
+    printf 'PAIR xray=%s sing-box=%s %s\n' "$XRAY_TAG" "$sb" "$res"
+done
 
 if [ "$FAIL" -gt 0 ]; then
     docker logs e2e-cli-b 2>&1 | tail -n 5
