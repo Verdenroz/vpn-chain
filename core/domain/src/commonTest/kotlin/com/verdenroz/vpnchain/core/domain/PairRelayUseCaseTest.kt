@@ -114,8 +114,16 @@ class PairRelayUseCaseTest {
         assertEquals(PairingFailed.Reason.Used, used.reason)
         assertEquals(PairingFailed.Reason.Expired, expired.reason)
         assertEquals(PairingStep.Registering, used.step)
-        assertEquals("laptop", used.device)
-        assertEquals("laptop", expired.device)
+    }
+
+    @Test
+    fun `a failed first admin code is marked so the app can say where to get another`() = runTest {
+        val first = "$LINK&f=1"
+        val used = failure(useCase(enroll = { throw AgentException(401, "unauthorized") }).pair(first) { _, _ -> })
+        val expired = failure(useCase(now = 2_000).pair(first) { _, _ -> })
+        val other = failure(useCase(enroll = { throw AgentException(401, "unauthorized") }).pair(LINK) { _, _ -> })
+
+        assertEquals(listOf(true, true, false), listOf(used.firstAdmin, expired.firstAdmin, other.firstAdmin))
     }
 
     @Test

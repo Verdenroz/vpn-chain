@@ -112,8 +112,10 @@
     <string name="settings_pairing_done">Connected to %1$s. This device is its admin.</string>
     <string name="settings_pairing_done_member">Connected to %1$s.</string>
     <string name="settings_pairing_dismiss">Done</string>
-    <string name="settings_pairing_expired">This code has expired. Run sudo relayd pair --device %2$s on your server for a new one.</string>
-    <string name="settings_pairing_used">This code was already used. Run sudo relayd pair --device %2$s on your server for a new one.</string>
+    <string name="settings_pairing_expired">This code has expired. Ask a device that manages this relay for a new code (Settings → Devices).</string>
+    <string name="settings_pairing_expired_first">This code has expired. Run the setup command on your server again for a new code.</string>
+    <string name="settings_pairing_used">This code was already used. Ask a device that manages this relay for a new code (Settings → Devices).</string>
+    <string name="settings_pairing_used_first">This code was already used. Run the setup command on your server again for a new code.</string>
     <string name="settings_pairing_unreachable">Could not reach %1$s. Check that TCP port 443 is open on the server.</string>
     <string name="settings_pairing_no_answer">The relay stopped answering before this device was added. Try again.</string>
     <string name="settings_pairing_reconnect_failed">This device is added to %1$s, but reconnecting failed. Connect from the Chain tab.</string>

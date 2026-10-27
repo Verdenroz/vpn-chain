@@ -31,11 +31,13 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_imported_profile
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_secrets_env_found
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_expired
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_expired_first
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_no_answer
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_reconnect_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_unreachable
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_used
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_used_first
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_cleared
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_name_blank
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_renamed
@@ -276,14 +278,16 @@ class SettingsViewModel(
         val failed = this as? PairingFailed
         val resource = when {
             failed == null -> return message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.settings_pairing_failed)
+            failed.reason == PairingFailed.Reason.Expired && failed.firstAdmin -> Res.string.settings_pairing_expired_first
             failed.reason == PairingFailed.Reason.Expired -> Res.string.settings_pairing_expired
+            failed.reason == PairingFailed.Reason.Used && failed.firstAdmin -> Res.string.settings_pairing_used_first
             failed.reason == PairingFailed.Reason.Used -> Res.string.settings_pairing_used
             failed.reason == PairingFailed.Reason.Unreachable && failed.step == PairingStep.Connecting -> Res.string.settings_pairing_unreachable
             failed.reason == PairingFailed.Reason.Unreachable -> Res.string.settings_pairing_no_answer
             failed.step == PairingStep.Reconnecting -> Res.string.settings_pairing_reconnect_failed
             else -> Res.string.settings_pairing_failed
         }
-        return UiText.Resource(resource, listOf(host, failed.device))
+        return UiText.Resource(resource, listOf(host))
     }
 
     private fun reviewConf(text: String, intoActive: Boolean) =
