@@ -11,6 +11,8 @@ import com.verdenroz.vpnchain.core.tunnel.ConnectionCloser
 import com.verdenroz.vpnchain.core.tunnel.HostMatch
 import com.verdenroz.vpnchain.core.warp.probe.PublicSuffixList
 import com.verdenroz.vpnchain.core.logging.Logger
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -19,6 +21,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
@@ -59,6 +63,12 @@ interface LearnedSitesRepository {
     suspend fun syncRuleSets()
 }
 
+private val ROUTED = setOf(LearnedRoute.Warp, LearnedRoute.FailOpen, LearnedRoute.Direct)
+
+/** Keeps [closer] told whether any learned site is routed; see [ConnectionCloser.track]. */
+internal suspend fun reportRoutedSites(sites: Flow<List<LearnedSite>>, closer: ConnectionCloser) =
+    sites.map { list -> list.any { it.route in ROUTED } }.distinctUntilChanged().collect { closer.track(it) }
+
 internal class DefaultLearnedSitesRepository(
     private val preferences: VpnChainPreferencesDataSource,
     private val store: LearnedRuleSetStore,
@@ -66,13 +76,18 @@ internal class DefaultLearnedSitesRepository(
     private val now: () -> Long,
     private val logger: Logger,
     private val scope: CoroutineScope,
+    private val timeSource: TimeSource = TimeSource.Monotonic,
 ) : LearnedSitesRepository {
 
+    private val routeLock = Mutex()
     private val syncLock = Mutex()
     private var syncFailing = false
     private var closeFailing = false
+
     private val closeLock = Mutex()
+    private val unwritten = mutableSetOf<HostMatch>()
     private val pendingCloses = mutableSetOf<HostMatch>()
+    private var firstPending: TimeMark? = null
     private var closeJob: Job? = null
 
     override val sites: Flow<List<LearnedSite>> = preferences.learnedSites
@@ -82,18 +97,25 @@ internal class DefaultLearnedSitesRepository(
 
     override suspend fun learn(domain: String, route: LearnedRoute, reason: BlockReason) {
         if (isSuppressed(domain)) return
-        val before = preferences.learnedSites.first().find { it.domain == domain }?.route
-        // A host on its way out of the relay stays there until the user changes it.
-        if (before in KEPT && route != before) return
-        preferences.putLearnedSite(LearnedSite(domain, reason, now(), route))
-        // Each write reloads the rule-set in sing-box; a refusal routes nothing.
-        if (before in ROUTED || route in ROUTED) syncAndReconnect(domain, before, route)
+        val moved = routeLock.withLock {
+            val before = routeOf(domain)
+            // A host on its way out of the relay stays there until the user changes it.
+            if (before in KEPT && route != before) return
+            preferences.putLearnedSite(LearnedSite(domain, reason, now(), route))
+            // Each write reloads the rule-set in sing-box; a refusal routes nothing.
+            if (before !in ROUTED && route !in ROUTED) return
+            movedMatch(domain, before, route)
+        }
+        syncAndReconnect(moved)
     }
 
     override suspend fun remove(domain: String) {
-        val before = preferences.learnedSites.first().find { it.domain == domain }?.route
-        preferences.removeLearnedSite(domain, nowMillis = now(), suppressUntilMillis = now() + SUPPRESS_MILLIS)
-        syncAndReconnect(domain, before, null)
+        val moved = routeLock.withLock {
+            val before = routeOf(domain)
+            preferences.removeLearnedSite(domain, nowMillis = now(), suppressUntilMillis = now() + SUPPRESS_MILLIS)
+            movedMatch(domain, before, null)
+        }
+        syncAndReconnect(moved)
     }
 
     override suspend fun allowDirect(domain: String) = reroute(domain, from = LearnedRoute.DirectAvailable, to = LearnedRoute.Direct)
@@ -101,30 +123,55 @@ internal class DefaultLearnedSitesRepository(
     override suspend fun forget(domain: String) = reroute(domain, from = LearnedRoute.Direct, to = LearnedRoute.DirectAvailable)
 
     private suspend fun reroute(domain: String, from: LearnedRoute, to: LearnedRoute) {
-        val site = preferences.learnedSites.first().find { it.domain == domain && it.route == from } ?: return
-        preferences.putLearnedSite(site.copy(route = to))
-        syncAndReconnect(domain, from, to)
+        val moved = routeLock.withLock {
+            val site = preferences.learnedSites.first().find { it.domain == domain && it.route == from } ?: return
+            preferences.putLearnedSite(site.copy(route = to))
+            movedMatch(domain, from, to)
+        }
+        syncAndReconnect(moved)
+    }
+
+    private suspend fun routeOf(domain: String): LearnedRoute? =
+        preferences.learnedSites.first().find { it.domain == domain }?.route
+
+    /** The names whose route changed between [before] and [after]; null when nothing moved. */
+    private fun movedMatch(domain: String, before: LearnedRoute?, after: LearnedRoute?): HostMatch? {
+        if (before == after || (before !in ROUTED && after !in ROUTED)) return null
+        return HostMatch(domain, subdomains = LearnedRoute.Warp in setOf(before, after) && isWarpSuffix(domain))
     }
 
     /**
      * Open connections keep the route they were dialled with, so once the files
-     * are written, the ones a changed route covers are closed and redial under it.
+     * are written, the ones a changed route covers are closed and redial under
+     * it. A move whose write failed waits for the next write that succeeds.
      */
-    private suspend fun syncAndReconnect(domain: String, before: LearnedRoute?, after: LearnedRoute?) {
+    private suspend fun syncAndReconnect(moved: HostMatch?) {
+        if (moved != null) closeLock.withLock { unwritten += moved }
         if (!syncKeepingState()) return
-        val moved = before != after && (before in ROUTED || after in ROUTED)
-        val match = HostMatch(domain, subdomains = LearnedRoute.Warp in setOf(before, after) && isWarpSuffix(domain))
         closeLock.withLock {
-            if (moved) pendingCloses += match
-            if (pendingCloses.isEmpty()) return
+            if (unwritten.isEmpty()) return
+            pendingCloses += unwritten
+            unwritten.clear()
             // sing-box reloads a rule-set 100 ms after its file goes quiet; a redial before that keeps the old route.
+            // The cap keeps steady detection from postponing a close forever.
+            val first = firstPending ?: timeSource.markNow().also { firstPending = it }
+            val wait = minOf(RELOAD_SETTLE_MILLIS, MAX_CLOSE_WAIT_MILLIS - first.elapsedNow().inWholeMilliseconds)
             closeJob?.cancel()
             closeJob = scope.launch {
-                delay(RELOAD_SETTLE_MILLIS)
-                val matches = closeLock.withLock { pendingCloses.toList().also { pendingCloses.clear() } }
-                withContext(NonCancellable) { matches.forEach { closeKeepingState(it) } }
+                delay(wait.coerceAtLeast(0))
+                closePending()
             }
         }
+    }
+
+    private suspend fun closePending() {
+        val matches = closeLock.withLock {
+            pendingCloses.toList().also {
+                pendingCloses.clear()
+                firstPending = null
+            }
+        }
+        withContext(NonCancellable) { closeKeepingState(matches) }
     }
 
     override suspend fun reachable(): Map<String, Long> = preferences.reachableDomains.first()
@@ -169,9 +216,9 @@ internal class DefaultLearnedSitesRepository(
     }
 
     /** A connection left open keeps its old route until it ends, so a failure is logged once per outage and dropped. */
-    private suspend fun closeKeepingState(match: HostMatch) {
+    private suspend fun closeKeepingState(matches: List<HostMatch>) {
         try {
-            closer.close(match)
+            closer.close(matches)
             closeFailing = false
         } catch (e: CancellationException) {
             throw e
@@ -185,7 +232,7 @@ internal class DefaultLearnedSitesRepository(
         const val TAG = "LearnedSites"
         const val SUPPRESS_MILLIS = 7L * 24 * 60 * 60 * 1000
         const val RELOAD_SETTLE_MILLIS = 1_000L
-        val ROUTED = setOf(LearnedRoute.Warp, LearnedRoute.FailOpen, LearnedRoute.Direct)
+        const val MAX_CLOSE_WAIT_MILLIS = 3_000L
         val KEPT = setOf(LearnedRoute.FailOpen, LearnedRoute.Direct)
     }
 }

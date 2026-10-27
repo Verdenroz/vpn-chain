@@ -145,6 +145,11 @@ class VpnChainService : VpnService(), CommandServerHandler {
         }
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        serviceScope.launch { startConnectionsWhenTracked() }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Below API 29 there's no isAlwaysOn() to poll, so this null-intent
         // heuristic is the best available signal there (see TunnelBridge).
@@ -238,7 +243,6 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 TunnelBridge.runningConfig.value = config
                 runCatching { connectionsClient?.disconnect() }
                 connectionsClient = null
-                TunnelBridge.liveConnections.clear()
                 startConnectionsClient(config)
             }
             // A stop that landed mid-reload left this engine for the reload to close, as in bootEngine.
@@ -448,7 +452,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         statusClient = null
         runCatching { connectionsClient?.disconnect() }
         connectionsClient = null
-        TunnelBridge.liveConnections.clear()
+        TunnelBridge.liveConnections.restart()
         runCatching { commandServer?.closeService() }
         runCatching { commandServer?.close() }
         commandServer = null
@@ -482,13 +486,22 @@ class VpnChainService : VpnService(), CommandServerHandler {
         }
     }
 
-    /**
-     * Only a config with probe inbounds has detection listening for destinations,
-     * and only one routing learned sites has connections a route change moves.
-     */
+    /** Call under [lifecycleLock]. Each client gets a fresh generation, so a replaced one's late events are dropped. */
     private fun startConnectionsClient(config: String) {
-        if (ProbeProxy.fromConfig(config) == null && !SingBoxConfigFactory.routesLearnedSites(config)) return
-        connectionsClient = connectClient("connection", ConnectionsHandler()) { addCommand(Libbox.CommandConnections) }
+        val generation = TunnelBridge.liveConnections.restart()
+        if (!wantsConnectionEvents(config, TunnelBridge.trackConnections.value)) return
+        connectionsClient = connectClient("connection", ConnectionsHandler(generation)) { addCommand(Libbox.CommandConnections) }
+    }
+
+    /** The first site learned mid-session needs the stream a config without probes did not start. */
+    private suspend fun startConnectionsWhenTracked() {
+        TunnelBridge.trackConnections.collect { tracked ->
+            if (!tracked) return@collect
+            lifecycleLock.withLock {
+                val config = TunnelBridge.runningConfig.value
+                if (config != null && commandServer != null && connectionsClient == null) startConnectionsClient(config)
+            }
+        }
     }
 
     private fun connectClient(
@@ -652,9 +665,10 @@ class VpnChainService : VpnService(), CommandServerHandler {
      * Hands the names of newly dialled destinations to site detection, and keeps
      * the open ones so a route change can close them.
      */
-    private inner class ConnectionsHandler : NoOpClientHandler() {
+    private inner class ConnectionsHandler(private val generation: Int) : NoOpClientHandler() {
         override fun writeConnectionEvents(message: ConnectionEvents) {
-            if (message.reset) TunnelBridge.liveConnections.clear()
+            val live = TunnelBridge.liveConnections
+            if (message.reset) live.reset(generation)
             val events = message.iterator()
             while (events.hasNext()) {
                 val event = events.next()
@@ -662,10 +676,10 @@ class VpnChainService : VpnService(), CommandServerHandler {
                     Libbox.ConnectionEventNew.toInt() -> {
                         val connection = event.connection
                         if (ProbeProxy.isProbeInbound(connection.inbound)) continue
-                        TunnelBridge.liveConnections.opened(connection.id, connection.domain)
+                        live.opened(generation, connection.id, connection.domain, connection.closedAt)
                         TunnelBridge.destinations.tryEmit(connection.domain)
                     }
-                    Libbox.ConnectionEventClosed.toInt() -> TunnelBridge.liveConnections.closed(event.id)
+                    Libbox.ConnectionEventClosed.toInt() -> live.closed(generation, event.id)
                 }
             }
         }
@@ -723,3 +737,10 @@ internal enum class StaleTunRelease { Close, Detach }
  */
 internal fun staleTunRelease(previousFd: Int?, newFd: Int): StaleTunRelease =
     if (previousFd == newFd) StaleTunRelease.Detach else StaleTunRelease.Close
+
+/**
+ * Detection reads the connection stream whenever the config has probes. Closing a
+ * rerouted site's connections needs it only while a learned site is routed.
+ */
+internal fun wantsConnectionEvents(config: String, routedSites: Boolean): Boolean =
+    ProbeProxy.fromConfig(config) != null || (routedSites && SingBoxConfigFactory.routesLearnedSites(config))

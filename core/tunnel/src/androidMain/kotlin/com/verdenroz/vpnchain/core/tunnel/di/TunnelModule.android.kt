@@ -23,7 +23,9 @@ actual val tunnelModule: Module = module {
     single<NetworkMonitor> { AndroidNetworkMonitor(androidContext()) }
     single<ProbeGate> { AndroidProbeGate(androidContext()) }
     single<DestinationFeed> { AndroidDestinationFeed() }
-    single<ConnectionCloser> { LibboxConnectionCloser(TunnelBridge.liveConnections) }
+    single<ConnectionCloser> {
+        LibboxConnectionCloser(TunnelBridge.liveConnections, tracking = { TunnelBridge.trackConnections.value = it })
+    }
     single<LearnedRuleSetStore> {
         AndroidLearnedRuleSetStore(File(androidContext().filesDir, "sing-box").apply { mkdirs() })
     }

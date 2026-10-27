@@ -11,11 +11,13 @@ import kotlinx.coroutines.withContext
 /** Closes matching connections one by one through the clash API of the config the engine runs. */
 internal class ClashConnectionCloser(private val runningConfig: StateFlow<String?>) : ConnectionCloser {
 
-    override suspend fun close(match: HostMatch) = withContext(Dispatchers.IO) {
+    override suspend fun close(matches: Collection<HostMatch>) = withContext(Dispatchers.IO) {
         val api = runningConfig.value?.let(ClashApi::fromConfig) ?: return@withContext
         val body = ClashStatsClient.fetchConnections(api) ?: throw IOException("clash API listed no connections")
         // An empty id would make the DELETE path `/connections/`, which closes every connection.
-        val ids = parseUserConnections(body).filter { it.id.isNotEmpty() && match.covers(it.host) }.map { it.id }
+        val ids = parseUserConnections(body)
+            .filter { connection -> connection.id.isNotEmpty() && matches.any { it.covers(connection.host) } }
+            .map { it.id }
         val failure = ids.map { runCatching { delete(api, it) } }.firstNotNullOfOrNull { it.exceptionOrNull() }
         if (failure != null) throw failure
     }

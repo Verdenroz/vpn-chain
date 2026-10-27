@@ -324,5 +324,5 @@ internal class SilentLogger : Logger {
 }
 
 internal class NoopConnectionCloser : ConnectionCloser {
-    override suspend fun close(match: HostMatch) = Unit
+    override suspend fun close(matches: Collection<HostMatch>) = Unit
 }

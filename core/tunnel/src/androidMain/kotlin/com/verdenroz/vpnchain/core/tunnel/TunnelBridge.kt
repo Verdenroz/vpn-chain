@@ -64,6 +64,9 @@ internal object TunnelBridge {
 
     val liveConnections = LiveConnections()
 
+    /** Whether any learned site is routed; the data layer reports it through [ConnectionCloser.track]. */
+    val trackConnections = MutableStateFlow(false)
+
     /** The config the engine loaded; null while it is down. */
     val runningConfig = MutableStateFlow<String?>(null)
 

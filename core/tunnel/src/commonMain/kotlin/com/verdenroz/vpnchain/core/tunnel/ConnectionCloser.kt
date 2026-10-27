@@ -15,6 +15,12 @@ data class HostMatch(val host: String, val subdomains: Boolean) {
  * The app's probe connections are never closed.
  */
 interface ConnectionCloser {
-    /** An engine that is down has nothing to close; one that cannot be reached throws. */
-    suspend fun close(match: HostMatch)
+    /** Closes every connection any of [matches] covers. An engine that is down has nothing to close; one that cannot be reached throws. */
+    suspend fun close(matches: Collection<HostMatch>)
+
+    /**
+     * Whether any learned site is routed, so a later [close] could have work.
+     * An engine that has to watch its connections to close them can skip that while this is false.
+     */
+    fun track(routedSites: Boolean) = Unit
 }

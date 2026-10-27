@@ -21,6 +21,7 @@ import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.data.SiteLearner
 import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.data.learningSessionOf
+import com.verdenroz.vpnchain.core.data.reportRoutedSites
 import com.verdenroz.vpnchain.core.datastore.di.dataStoreModule
 import com.verdenroz.vpnchain.core.logging.di.loggingModule
 import com.verdenroz.vpnchain.core.tunnel.ProbeGate
@@ -28,6 +29,7 @@ import com.verdenroz.vpnchain.core.tunnel.TunnelController
 import com.verdenroz.vpnchain.core.tunnel.di.tunnelModule
 import com.verdenroz.vpnchain.core.warp.di.warpModule
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.map
 import org.koin.core.Koin
 import org.koin.dsl.module
@@ -103,9 +105,14 @@ val dataModule = module {
  * - [ChainRepository] has to be watching for out-of-app stops (Android's
  *   notification key, an OS revoke) before one happens.
  * - [LogRepository] buffers tunnel output from the first line.
+ * - The engine learns whether any site is routed before it starts, so it
+ *   watches connections only when a route change could need them closed.
  */
 fun startDataWatchers(koin: Koin) {
     koin.get<SiteLearner>()
     koin.get<ChainRepository>()
     koin.get<LogRepository>()
+    koin.get<CoroutineScope>(applicationScopeQualifier).launch {
+        reportRoutedSites(koin.get<LearnedSitesRepository>().sites, koin.get())
+    }
 }
