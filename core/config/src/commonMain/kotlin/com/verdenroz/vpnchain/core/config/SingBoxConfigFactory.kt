@@ -57,6 +57,7 @@ object SingBoxConfigFactory {
                 addJsonObject {
                     put("type", "mixed")
                     put("tag", "proxy-in")
+                    // No login: every local user can send traffic through the chain, so never bind wider.
                     put("listen", "127.0.0.1")
                     put("listen_port", profile.localProxyPort)
                 }

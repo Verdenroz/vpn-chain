@@ -9,6 +9,8 @@ import kotlinx.serialization.json.putJsonArray
 /**
  * Which list a rule-set file carries: sites sent to WARP, sites that fail open
  * through the entry hop, or the sites the user sent to the bare link.
+ * Open renders only with an entry hop and Direct only without one, so a site
+ * checked through an entry hop never lands on the bare link when it is turned off.
  */
 enum class RuleSetKind { Warp, Open, Direct }
 

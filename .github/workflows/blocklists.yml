@@ -1,9 +1,14 @@
 # Converts hagezi's DNS blocklists to sing-box .srs and publishes them to the
 # rolling `blocklists` release the app's DNS filter points at.
 #
-# Sources (see docs/dns-filtering.md for the tier rationale):
+# Sources:
 #   ads-trackers.srs  hagezi Pro++    (ads, trackers, telemetry)
 #   threats.srs       hagezi TIF med  (malware, phishing, scam)
+#
+# Pro++, not Ultimate: the app has no per-domain allowlist, and Ultimate breaks
+# parts of Facebook and WhatsApp for one more hit on d3ward's adblock test
+# (Pro++ with the geosite ads set scores 130/131). The app also trusts this
+# workflow's compile, so the canaries below gate every publish.
 name: blocklists
 
 on:
