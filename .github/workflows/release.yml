@@ -2,11 +2,9 @@
 #   - Android: release APKs (arm64-v8a + x86_64 splits), signed with the
 #     keystore from secrets. The job fails when they are missing: an APK
 #     signed with another key cannot update an installed one.
-#   - Desktop: jpackage can't cross-compile, so each package builds on its
-#     native runner — Linux .deb + portable .tar.gz, Windows .msi,
-#     macOS .dmg (arm64; unsigned — right-click → Open past Gatekeeper).
-#   - manifest.json: sizes + SHA-256 of the APKs and the Linux tarball, which
-#     the apps' in-app updater reads from the latest release.
+#   - Desktop: the Linux .deb, built and tested by deb.yml.
+#   - manifest.json: sizes + SHA-256 of the APKs and the .deb, which the apps'
+#     in-app updater reads from the latest release.
 #
 # Required secrets for stable Android signing across releases:
 #   ANDROID_KEYSTORE_B64       base64 of the .jks  (base64 -w0 release.jks)
@@ -77,65 +75,7 @@ jobs:
           path: dist/*
 
   desktop:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            label: linux-x64
-            tasks: ":desktopApp:packageReleaseDeb :desktopApp:createReleaseDistributable"
-          - os: windows-latest
-            label: windows-x64
-            tasks: ":desktopApp:packageReleaseMsi"
-          - os: macos-latest
-            label: macos-arm64
-            tasks: ":desktopApp:packageReleaseDmg"
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
-        with:
-          distribution: temurin
-          java-version: "21"
-      - name: Use runner JDK
-        shell: bash
-        run: |
-          mkdir -p ~/.gradle
-          # Java .properties files treat \ as an escape char, so a raw Windows
-          # JAVA_HOME (C:\hostedtoolcache\...) gets silently mangled on load;
-          # cygpath -m gives the same path with forward slashes instead.
-          JDK_HOME="$JAVA_HOME"
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            JDK_HOME="$(cygpath -m "$JAVA_HOME")"
-          fi
-          echo "org.gradle.java.home=$JDK_HOME" >> ~/.gradle/gradle.properties
-      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
-
-      - name: Build desktop packages
-        shell: bash
-        run: ./gradlew ${{ matrix.tasks }}
-
-      - name: Collect packages
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          OUT=desktopApp/build/compose/binaries/main-release
-          mkdir -p dist
-          for pkg in "$OUT"/deb/*.deb "$OUT"/msi/*.msi "$OUT"/dmg/*.dmg; do
-            [ -e "$pkg" ] || continue
-            cp "$pkg" "dist/vpn-chain-$VERSION-${{ matrix.label }}.${pkg##*.}"
-          done
-          # Portable distributable (Linux only)
-          if [ -d "$OUT/app/vpn-chain" ]; then
-            tar -C "$OUT/app" -czf "dist/vpn-chain-$VERSION-${{ matrix.label }}.tar.gz" vpn-chain
-          fi
-          ls -la dist/
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: desktop-${{ matrix.label }}
-          path: dist/*
+    uses: ./.github/workflows/deb.yml
 
   publish:
     needs: [android, desktop]
