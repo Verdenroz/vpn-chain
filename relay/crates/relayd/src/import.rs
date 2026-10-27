@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::render::{API_TAG, EXIT_TAG};
 use crate::{
@@ -258,9 +258,13 @@ fn refuse_unmodelled(config: &Value, relay: &Relay) -> Result<(), Error> {
     }
 }
 
-/// xray treats `shortIds` as a set, and relayd lists device IDs before spares.
+/// xray treats `shortIds` as a set, and relayd lists device IDs before spares. A relay that
+/// serves only `StatsService` is still importable: rendering it adds `HandlerService`.
 fn normalize(config: &Value) -> Value {
     let mut config = config.clone();
+    if config.pointer("/api/services") == Some(&json!(["StatsService"])) {
+        config["api"]["services"] = json!(["HandlerService", "StatsService"]);
+    }
     let ids = config
         .pointer_mut("/inbounds")
         .and_then(Value::as_array_mut)
