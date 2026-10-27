@@ -51,6 +51,8 @@ fn import_then_render_writes_the_deployed_config_back() {
         &state,
         "--out".as_ref(),
         &config,
+        "--group".as_ref(),
+        "relayd-test-no-such-group".as_ref(),
     ]);
     assert!(rendered.status.success(), "{}", stderr(&rendered));
     assert_eq!(
@@ -106,9 +108,58 @@ fn a_malformed_command_line_prints_usage() {
         vec!["render".as_ref(), "--state".as_ref()],
         vec!["render".as_ref(), "--bogus".as_ref(), "x".as_ref()],
         vec!["restart".as_ref()],
+        vec![
+            "render".as_ref(),
+            "--state".as_ref(),
+            "s".as_ref(),
+            "--out".as_ref(),
+            "o".as_ref(),
+            "--xray".as_ref(),
+            "true".as_ref(),
+        ],
     ] {
         let output = relayd(&args);
         assert_eq!(output.status.code(), Some(64));
         assert!(stderr(&output).starts_with("usage: relayd"));
     }
+}
+
+#[test]
+fn render_refuses_to_replace_a_config_without_swap() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config.json");
+    fs::write(&config, "live").unwrap();
+
+    let refused = relayd(&[
+        "render".as_ref(),
+        "--state".as_ref(),
+        &fixture("relay-direct.state.json"),
+        "--secrets".as_ref(),
+        &fixture("relay-direct.secrets.json"),
+        "--out".as_ref(),
+        &config,
+    ]);
+
+    assert_eq!(refused.status.code(), Some(1));
+    assert!(stderr(&refused).contains("refusing to overwrite"));
+    assert_eq!(fs::read_to_string(&config).unwrap(), "live");
+
+    let swapped = relayd(&[
+        "render".as_ref(),
+        "--swap".as_ref(),
+        "--xray".as_ref(),
+        "true".as_ref(),
+        "--state".as_ref(),
+        &fixture("relay-direct.state.json"),
+        "--secrets".as_ref(),
+        &fixture("relay-direct.secrets.json"),
+        "--out".as_ref(),
+        &config,
+    ]);
+
+    assert!(swapped.status.success(), "{}", stderr(&swapped));
+    assert_eq!(
+        fs::read_to_string(&config).unwrap(),
+        read("relay-direct.json")
+    );
 }

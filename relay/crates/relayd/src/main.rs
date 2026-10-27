@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use relayd::{DEVICES_LOCK, Error, Relay, import, secrets_path, write_config};
+use relayd::{DEVICES_LOCK, Error, Placement, Relay, import, secrets_path, write_config};
 
 const USAGE: &str = "usage: relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>] [--lock <file>]
-       relayd render --state <state.json> [--secrets <secrets.json>] --out <config.json>";
+       relayd render --state <state.json> [--secrets <secrets.json>] --out <config.json> [--group <name>] [--swap [--xray <path>]]";
 
 const EX_USAGE: u8 = 64;
+const XRAY_GROUP: &str = "xray";
+const SWAP: &str = "--swap";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -16,7 +18,10 @@ fn main() -> ExitCode {
             flags(rest, &["config", "devices", "out", "secrets", "lock"]).map(run_import)
         }
         Some((command, rest)) if command == "render" => {
-            flags(rest, &["state", "secrets", "out"]).map(run_render)
+            let swap = rest.iter().any(|arg| arg == SWAP);
+            let rest: Vec<String> = rest.iter().filter(|arg| *arg != SWAP).cloned().collect();
+            flags(&rest, &["state", "secrets", "out", "group", "xray"])
+                .map(|flags| run_render(flags, swap))
         }
         _ => None,
     };
@@ -81,11 +86,22 @@ fn run_import(mut flags: HashMap<String, PathBuf>) -> Option<Result<(), Error>> 
     }))
 }
 
-fn run_render(mut flags: HashMap<String, PathBuf>) -> Option<Result<(), Error>> {
+fn run_render(mut flags: HashMap<String, PathBuf>, swap: bool) -> Option<Result<(), Error>> {
     let state = flags.remove("state")?;
     let out = flags.remove("out")?;
     let secrets = flags
         .remove("secrets")
         .unwrap_or_else(|| secrets_path(&state));
-    Some(Relay::load(&state, &secrets).and_then(|relay| write_config(&relay, &out)))
+    let group = flags
+        .remove("group")
+        .unwrap_or_else(|| PathBuf::from(XRAY_GROUP));
+    let xray = match (swap, flags.remove("xray")) {
+        (false, Some(_)) => return None,
+        (_, xray) => xray.unwrap_or_else(|| PathBuf::from("xray")),
+    };
+    let placement = Placement {
+        group: group.to_str()?,
+        swap: swap.then_some(xray.as_path()),
+    };
+    Some(Relay::load(&state, &secrets).and_then(|relay| write_config(&relay, &out, &placement)))
 }

@@ -1,8 +1,6 @@
-use std::path::Path;
-
 use serde_json::{Value, json};
 
-use crate::{Error, Exit, Relay, store};
+use crate::{Exit, Relay};
 
 pub(crate) const API_TAG: &str = "api";
 pub(crate) const EXIT_TAG: &str = "exit-wg";
@@ -30,12 +28,6 @@ pub fn render(relay: &Relay) -> Value {
     config["outbounds"] = outbounds(relay);
     config["routing"] = routing(relay);
     config
-}
-
-/// Writes the rendered config so that a crash leaves either the old file or the new one.
-pub fn write_config(relay: &Relay, path: &Path) -> Result<(), Error> {
-    // xray's service user is not root and must be able to read it.
-    store::replace(path, &store::to_json(&render(relay)), 0o644)
 }
 
 fn inbounds(relay: &Relay) -> Value {

@@ -68,16 +68,26 @@ pub fn to_json<T: Serialize>(value: &T) -> Vec<u8> {
 /// Replaces `path` so that a crash leaves either the old file or the new one.
 pub fn replace(path: &Path, contents: &[u8], mode: u32) -> Result<(), Error> {
     let pending = stage(path, contents, mode)?;
-    fs::rename(&pending, path).map_err(|error| Error::at(path, error))?;
-    sync_parent(path)
+    install(&pending, path)
 }
 
 /// Writes `path` only if nothing is there yet.
 pub fn create(path: &Path, contents: &[u8], mode: u32) -> Result<(), Error> {
     let pending = stage(path, contents, mode)?;
+    install_new(&pending, path)
+}
+
+/// Moves a file from [`stage`] over `path`.
+pub fn install(pending: &Path, path: &Path) -> Result<(), Error> {
+    fs::rename(pending, path).map_err(|error| Error::at(path, error))?;
+    sync_parent(path)
+}
+
+/// Moves a file from [`stage`] to `path`, refusing if something is there.
+pub fn install_new(pending: &Path, path: &Path) -> Result<(), Error> {
     // A hard link fails when the target exists, and a reader never sees it half written.
-    let linked = fs::hard_link(&pending, path);
-    fs::remove_file(&pending).map_err(|error| Error::at(&pending, error))?;
+    let linked = fs::hard_link(pending, path);
+    fs::remove_file(pending).map_err(|error| Error::at(pending, error))?;
     match linked {
         Ok(()) => sync_parent(path),
         Err(error) if error.kind() == ErrorKind::AlreadyExists => Err(exists(path)),
@@ -98,9 +108,11 @@ fn exists(path: &Path) -> Error {
     Error::at(path, "already exists; refusing to overwrite it")
 }
 
-fn stage(path: &Path, contents: &[u8], mode: u32) -> Result<PathBuf, Error> {
+/// Writes `contents` to a hidden file beside `path`, synced and at `mode`.
+pub fn stage(path: &Path, contents: &[u8], mode: u32) -> Result<PathBuf, Error> {
     let name = path.file_name().expect("a file path has a name");
-    let pending = path.with_file_name(format!(".{}.tmp", name.to_string_lossy()));
+    // A prefix keeps the extension: xray picks the config format from it.
+    let pending = path.with_file_name(format!(".tmp-{}", name.to_string_lossy()));
     let at = |error| Error::at(&pending, error);
     match fs::remove_file(&pending) {
         Err(error) if error.kind() != ErrorKind::NotFound => return Err(at(error)),
@@ -123,7 +135,7 @@ fn open_new(path: &Path, mode: u32) -> io::Result<File> {
         .open(path)
 }
 
-fn sync_parent(path: &Path) -> Result<(), Error> {
+pub fn sync_parent(path: &Path) -> Result<(), Error> {
     let parent = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),

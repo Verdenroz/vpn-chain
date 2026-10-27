@@ -15,6 +15,7 @@
 //! `devices.json` last recorded them: what xray counted since the scripts last folded its stats
 //! is not read, and folding them before import is still to be built.
 
+mod config_file;
 mod error;
 mod import;
 mod render;
@@ -23,9 +24,10 @@ mod state;
 mod store;
 mod validate;
 
+pub use config_file::{Placement, write_config};
 pub use error::Error;
 pub use import::import;
-pub use render::{render, write_config};
+pub use render::render;
 pub use secret::Secret;
 pub use state::{
     Api, DEVICES_LOCK, Device, Exit, INBOUND_TAG, Inbound, Relay, Role, SCHEMA, Secrets, State,

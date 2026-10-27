@@ -1,10 +1,7 @@
 mod common;
 
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
-
 use common::{read, relay};
-use relayd::{Secret, render, write_config};
+use relayd::{Secret, render};
 use serde_json::Value;
 
 fn deployed(name: &str) -> Value {
@@ -50,22 +47,4 @@ fn spare_short_ids_follow_the_devices_ids() {
 
     let ids = &config["inbounds"][0]["streamSettings"]["realitySettings"]["shortIds"];
     assert_eq!(ids[2], "99887766");
-}
-
-#[test]
-fn the_written_config_replaces_the_old_one_byte_for_byte_as_jq_writes_it() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("config.json");
-    fs::write(&path, "old").unwrap();
-
-    write_config(&relay("relay-direct"), &path).unwrap();
-
-    assert_eq!(
-        fs::read_to_string(&path).unwrap(),
-        read("relay-direct.json")
-    );
-    assert_eq!(
-        fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-        0o644
-    );
 }
