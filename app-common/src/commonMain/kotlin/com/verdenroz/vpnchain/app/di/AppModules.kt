@@ -6,6 +6,7 @@ import com.verdenroz.vpnchain.core.update.di.updateModule
 import com.verdenroz.vpnchain.feature.chain.di.chainFeatureModule
 import com.verdenroz.vpnchain.feature.logs.di.logsFeatureModule
 import com.verdenroz.vpnchain.feature.settings.di.settingsFeatureModule
+import com.verdenroz.vpnchain.feature.sites.di.sitesFeatureModule
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -24,6 +25,7 @@ val engineModules: List<Module> = listOf(domainModule)
 val uiModules: List<Module> = listOf(
     updateModule,
     chainFeatureModule,
+    sitesFeatureModule,
     settingsFeatureModule,
     logsFeatureModule,
     appModule,

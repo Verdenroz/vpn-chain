@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sites_title">Sites</string>
+    <string name="sites_empty">No sites need a different route.</string>
+    <string name="sites_blocked_title">Blocks VPNs</string>
+    <string name="sites_blocked_detail">Not loading</string>
+    <string name="sites_direct_title">Your connection</string>
+    <string name="sites_direct_detail">Shows your IP</string>
+    <string name="sites_warp_title">Cloudflare WARP</string>
+    <string name="sites_entry_title">Entry</string>
+    <string name="sites_hidden_detail">Hides your IP</string>
+    <string name="sites_use_my_connection">Use my connection</string>
+    <string name="sites_undo">Undo</string>
+    <string name="sites_remove">Remove</string>
+</resources>

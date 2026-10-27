@@ -18,6 +18,7 @@ import com.verdenroz.vpnchain.feature.chain.navigation.chainScreen
 import com.verdenroz.vpnchain.feature.logs.navigation.logsScreen
 import com.verdenroz.vpnchain.feature.settings.QrScanRequest
 import com.verdenroz.vpnchain.feature.settings.navigation.settingsScreen
+import com.verdenroz.vpnchain.feature.sites.navigation.sitesScreen
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -49,6 +50,7 @@ fun VpnChainApp(appViewModel: AppViewModel = koinViewModel()) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 chainScreen(onOpenSettings = { onSelect(TopLevelDestination.SETTINGS) })
+                sitesScreen()
                 logsScreen()
                 settingsScreen()
             }

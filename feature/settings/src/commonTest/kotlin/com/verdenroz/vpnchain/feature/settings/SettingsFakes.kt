@@ -1,15 +1,11 @@
 package com.verdenroz.vpnchain.feature.settings
 
 import com.verdenroz.vpnchain.core.data.ChainRepository
-import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
-import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.DnsFilter
-import com.verdenroz.vpnchain.core.model.LearnedRoute
-import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.ThemeConfig
@@ -91,23 +87,4 @@ internal class FakeSettings : SettingsRepository {
         settings.value = settings.value.copy(connectionLog = enabled)
     }
     override suspend fun setCloseToTray(enabled: Boolean) = Unit
-}
-
-internal class FakeLearnedSites(private val log: MutableList<String> = mutableListOf()) : LearnedSitesRepository {
-    override val sites = MutableStateFlow<List<LearnedSite>>(emptyList())
-    override suspend fun isSuppressed(domain: String) = false
-    override suspend fun learn(domain: String, route: LearnedRoute, reason: BlockReason) = Unit
-    override suspend fun remove(domain: String) {
-        log += "remove:$domain"
-    }
-    override suspend fun allowDirect(domain: String) {
-        log += "allowDirect:$domain"
-    }
-    override suspend fun forget(domain: String) {
-        log += "forget:$domain"
-    }
-    override suspend fun reachable(): Map<String, Long> = emptyMap()
-    override suspend fun saveReachable(domains: Map<String, Long>) = Unit
-    override suspend fun syncRuleSets() = Unit
-    override suspend fun forgetPendingCloses() = Unit
 }

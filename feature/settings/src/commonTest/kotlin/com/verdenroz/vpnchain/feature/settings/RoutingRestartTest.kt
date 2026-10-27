@@ -83,7 +83,6 @@ class RoutingRestartTest {
             importWireGuardConf = ImportWireGuardConfUseCase(profiles, chain),
             switchProfile = SwitchProfileUseCase(profiles, chain),
             chainRepository = chain,
-            learnedSites = FakeLearnedSites(log),
             changeRouting = ChangeRoutingUseCase(settings, chain),
         )
     }

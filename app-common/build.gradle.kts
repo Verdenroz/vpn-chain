@@ -19,6 +19,7 @@ kotlin {
             api(projects.core.update)
             api(projects.feature.chain)
             api(projects.feature.settings)
+            api(projects.feature.sites)
             api(projects.feature.logs)
 
             implementation(libs.kotlinx.coroutines.core)

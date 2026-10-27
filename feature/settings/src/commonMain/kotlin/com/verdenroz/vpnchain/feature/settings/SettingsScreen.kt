@@ -48,8 +48,6 @@ import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ConnectionKind
 import com.verdenroz.vpnchain.core.model.DnsFilter
-import com.verdenroz.vpnchain.core.model.LearnedSite
-import com.verdenroz.vpnchain.core.model.OutsideExit
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
@@ -58,7 +56,6 @@ import com.verdenroz.vpnchain.core.ui.SectionCard
 import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.settings.component.AboutSection
 import com.verdenroz.vpnchain.feature.settings.component.DnsFilterPicker
-import com.verdenroz.vpnchain.feature.settings.component.LearnedSites
 import com.verdenroz.vpnchain.feature.settings.component.ProfileForm
 import com.verdenroz.vpnchain.feature.settings.component.ProfilePicker
 import com.verdenroz.vpnchain.feature.settings.component.ThemePicker
@@ -196,9 +193,6 @@ fun SettingsRoute(
         onSetWarpMode = viewModel::setWarpMode,
         onToggleLearn = viewModel::setLearnBlockedSites,
         onToggleFailOpen = viewModel::setFailOpen,
-        onRemoveLearned = viewModel::removeLearned,
-        onSendDirect = viewModel::sendDirect,
-        onUndoDirect = viewModel::undoDirect,
         onToggleConnectionLog = viewModel::setConnectionLog,
         onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
         onToggleAutoReconnect = viewModel::setAutoReconnect,
@@ -236,9 +230,6 @@ fun SettingsScreen(
     onSetWarpMode: (WarpMode) -> Unit,
     onToggleLearn: (Boolean) -> Unit,
     onToggleFailOpen: (Boolean) -> Unit,
-    onRemoveLearned: (String) -> Unit,
-    onSendDirect: (String) -> Unit,
-    onUndoDirect: (String) -> Unit,
     onToggleConnectionLog: (Boolean) -> Unit,
     onToggleAutoConnect: (Boolean) -> Unit,
     onToggleAutoReconnect: (Boolean) -> Unit,
@@ -469,15 +460,9 @@ fun SettingsScreen(
                         mode = uiState.settings.warpMode,
                         learn = uiState.settings.learnBlockedSites,
                         failOpen = uiState.settings.failOpen,
-                        learned = uiState.learned,
-                        exits = uiState.exits,
-                        directOffered = uiState.directOffered,
                         onSetMode = onSetWarpMode,
                         onToggleLearn = onToggleLearn,
                         onToggleFailOpen = onToggleFailOpen,
-                        onRemoveLearned = onRemoveLearned,
-                        onSendDirect = onSendDirect,
-                        onUndoDirect = onUndoDirect,
                     )
                 }
             }
@@ -554,24 +539,18 @@ fun SettingsScreen(
 }
 
 /**
- * The WARP tail: which traffic takes it and, in automatic mode, what has been
- * learned. The rest only appears for that mode, since it decides nothing in
- * the other two.
+ * The WARP tail: which traffic takes it and, in automatic mode, how blocked
+ * sites are learned. The rest only appears for that mode, since it decides
+ * nothing in the other two.
  */
 @Composable
 private fun WarpSection(
     mode: WarpMode,
     learn: Boolean,
     failOpen: Boolean,
-    learned: List<LearnedSite>,
-    exits: Map<String, OutsideExit>,
-    directOffered: Boolean,
     onSetMode: (WarpMode) -> Unit,
     onToggleLearn: (Boolean) -> Unit,
     onToggleFailOpen: (Boolean) -> Unit,
-    onRemoveLearned: (String) -> Unit,
-    onSendDirect: (String) -> Unit,
-    onUndoDirect: (String) -> Unit,
 ) {
     val colors = VpnChainTheme.colors
     Column {
@@ -605,7 +584,6 @@ private fun WarpSection(
                     checked = failOpen,
                     onCheckedChange = onToggleFailOpen,
                 )
-                LearnedSites(learned, exits, directOffered, onRemoveLearned, onSendDirect, onUndoDirect)
             }
         }
     }

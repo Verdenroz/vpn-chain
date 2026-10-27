@@ -165,7 +165,6 @@ class ConfImportReviewTest {
             importWireGuardConf = ImportWireGuardConfUseCase(profiles, chain),
             switchProfile = SwitchProfileUseCase(profiles, chain),
             chainRepository = chain,
-            learnedSites = FakeLearnedSites(),
             changeRouting = ChangeRoutingUseCase(settings, chain),
         )
     }

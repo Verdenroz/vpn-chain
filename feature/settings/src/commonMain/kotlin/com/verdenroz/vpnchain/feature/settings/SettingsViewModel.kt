@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.config.SecretsEnvParser
 import com.verdenroz.vpnchain.core.config.WireGuardConfParser
-import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.ChangeRoutingUseCase
@@ -14,8 +13,6 @@ import com.verdenroz.vpnchain.core.domain.ImportWireGuardConfUseCase
 import com.verdenroz.vpnchain.core.domain.SwitchProfileUseCase
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
-import com.verdenroz.vpnchain.core.model.LearnedSite
-import com.verdenroz.vpnchain.core.model.OutsideExit
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.TunnelState
@@ -23,8 +20,6 @@ import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
-import com.verdenroz.vpnchain.core.model.outsideExit
-import com.verdenroz.vpnchain.core.model.outsideExitFor
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_failed
@@ -56,10 +51,6 @@ data class SettingsUiState(
     val autostartSupported: Boolean = false,
     val profiles: List<SavedProfile> = emptyList(),
     val activeProfileId: String? = null,
-    val learned: List<LearnedSite> = emptyList(),
-    val exits: Map<String, OutsideExit> = emptyMap(),
-    /** Whether a refused site can be sent down the bare link: failing open on, and no entry hop dialled. */
-    val directOffered: Boolean = false,
 )
 
 /**
@@ -93,7 +84,6 @@ class SettingsViewModel(
     private val importWireGuardConf: ImportWireGuardConfUseCase,
     private val switchProfile: SwitchProfileUseCase,
     private val chainRepository: ChainRepository,
-    private val learnedSites: LearnedSitesRepository,
     private val changeRouting: ChangeRoutingUseCase,
 ) : ViewModel() {
 
@@ -102,13 +92,8 @@ class SettingsViewModel(
             settingsRepository.settings,
             profileRepository.profile,
             chainRepository.alwaysOnDetected,
-            combine(
-                profileRepository.profiles,
-                profileRepository.activeProfileId,
-                learnedSites.sites,
-                ::Triple,
-            ),
-        ) { settings, profile, alwaysOnDetected, (profiles, activeProfileId, learned) ->
+            combine(profileRepository.profiles, profileRepository.activeProfileId, ::Pair),
+        ) { settings, profile, alwaysOnDetected, (profiles, activeProfileId) ->
             SettingsUiState(
                 settings = settings,
                 profile = profile,
@@ -117,9 +102,6 @@ class SettingsViewModel(
                 autostartSupported = settingsRepository.autostartSupported,
                 profiles = profiles,
                 activeProfileId = activeProfileId,
-                learned = learned.sortedByDescending { it.learnedAtMillis },
-                exits = learned.mapNotNull { site -> site.outsideExit(settings, profile)?.let { site.domain to it } }.toMap(),
-                directOffered = profile.outsideExitFor(settings) == OutsideExit.Direct,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -181,18 +163,6 @@ class SettingsViewModel(
 
     private fun Result<Unit>.reportReconnect() {
         onFailure { _message.value = it.toError(Res.string.settings_switch_failed) }
-    }
-
-    fun removeLearned(domain: String) = viewModelScope.launch {
-        learnedSites.remove(domain)
-    }
-
-    fun sendDirect(domain: String) = viewModelScope.launch {
-        learnedSites.allowDirect(domain)
-    }
-
-    fun undoDirect(domain: String) = viewModelScope.launch {
-        learnedSites.forget(domain)
     }
 
     fun setAutoConnectOnLaunch(enabled: Boolean) = viewModelScope.launch {
