@@ -613,6 +613,21 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
+    fun `a config reports whether it routes by a learned rule-set`() {
+        val learned = SingBoxConfigFactory.androidChainConfig(
+            profile(),
+            warp = warp(),
+            warpMode = WarpMode.Automatic,
+            learnedWarpPath = "/run/learned-warp.json",
+        )
+        val unlearned = SingBoxConfigFactory.androidChainConfig(profile(), warp = warp(), warpMode = WarpMode.AllTraffic)
+
+        assertTrue(SingBoxConfigFactory.routesLearnedSites(learned))
+        assertFalse(SingBoxConfigFactory.routesLearnedSites(unlearned))
+        assertFalse(SingBoxConfigFactory.routesLearnedSites("not json"))
+    }
+
+    @Test
     fun `learned sites are a local rule-set routed to the tail`() {
         val config = parse(
             SingBoxConfigFactory.androidChainConfig(

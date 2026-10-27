@@ -17,6 +17,7 @@ import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import com.verdenroz.vpnchain.core.config.ProbeProxy
+import com.verdenroz.vpnchain.core.config.SingBoxConfigFactory
 import com.verdenroz.vpnchain.core.config.isLostPortRace
 import com.verdenroz.vpnchain.core.config.logsConnections
 import com.verdenroz.vpnchain.core.model.TunnelState
@@ -481,9 +482,12 @@ class VpnChainService : VpnService(), CommandServerHandler {
         }
     }
 
-    /** Only a config with probe inbounds has detection listening for destinations. */
+    /**
+     * Only a config with probe inbounds has detection listening for destinations,
+     * and only one routing learned sites has connections a route change moves.
+     */
     private fun startConnectionsClient(config: String) {
-        if (ProbeProxy.fromConfig(config) == null) return
+        if (ProbeProxy.fromConfig(config) == null && !SingBoxConfigFactory.routesLearnedSites(config)) return
         connectionsClient = connectClient("connection", ConnectionsHandler()) { addCommand(Libbox.CommandConnections) }
     }
 

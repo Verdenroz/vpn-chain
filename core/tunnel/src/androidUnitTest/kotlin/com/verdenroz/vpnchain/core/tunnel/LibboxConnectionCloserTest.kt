@@ -42,9 +42,14 @@ class LibboxConnectionCloserTest {
     }
 
     @Test
-    fun `a close the engine refuses is thrown to the caller`() = runTest {
-        val refusing = LibboxConnectionCloser(live) { error("command server gone") }
+    fun `a refused close is thrown after every match was tried, and each is tried once`() = runTest {
+        val tried = mutableListOf<String>()
+        val refusing = LibboxConnectionCloser(live) { tried += it; error("command server gone") }
 
-        assertFailsWith<IllegalStateException> { refusing.close(HostMatch("bank.example", subdomains = false)) }
+        assertFailsWith<IllegalStateException> { refusing.close(HostMatch("reddit.com", subdomains = true)) }
+        refusing.close(HostMatch("reddit.com", subdomains = true))
+
+        assertEquals(setOf("c", "d"), tried.toSet())
+        assertEquals(2, tried.size)
     }
 }

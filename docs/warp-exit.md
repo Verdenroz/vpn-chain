@@ -163,19 +163,19 @@ connect.
 A route applies when a connection opens, and browsers keep reusing pooled
 connections to a host. So whenever a site's route changes (learned for WARP or
 failing open, sent direct, undone, or removed), the app closes the engine's open
-connections to it a second after the files are written, past sing-box's 100 ms
+connections to it a second after the last rule-set write, past sing-box's 100 ms
 reload debounce, and the browser redials under the new rule. A WARP entry at a
 registrable domain closes the names under it too; every other change closes the
 exact host. Nothing else is closed, nor are the app's probe connections.
 
 - Desktop lists `/connections` on the clash API and deletes each match by id.
-- Android tracks open connections from the libbox connection events detection
-  already listens to, and closes each match through a standalone libbox command
-  client. That stream only runs for a config with probe inbounds, so nothing is
-  closed without one. Not yet exercised on a device.
+- Android tracks open connections from libbox connection events, which
+  stream for any config with probe inbounds or a learned rule-set, and closes
+  each match through a standalone libbox command client. Not yet exercised on a
+  device.
 
-A close that fails is logged once and costs nothing else: the old connection
-keeps its route until it ends.
+A close that fails is logged once per outage and costs nothing else: the old
+connection keeps its route until it ends.
 
 ## Failing open
 

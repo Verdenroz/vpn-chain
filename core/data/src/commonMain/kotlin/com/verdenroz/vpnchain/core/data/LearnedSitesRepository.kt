@@ -13,8 +13,11 @@ import com.verdenroz.vpnchain.core.warp.probe.PublicSuffixList
 import com.verdenroz.vpnchain.core.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -68,6 +71,9 @@ internal class DefaultLearnedSitesRepository(
     private val syncLock = Mutex()
     private var syncFailing = false
     private var closeFailing = false
+    private val closeLock = Mutex()
+    private val pendingCloses = mutableSetOf<HostMatch>()
+    private var closeJob: Job? = null
 
     override val sites: Flow<List<LearnedSite>> = preferences.learnedSites
 
@@ -105,13 +111,19 @@ internal class DefaultLearnedSitesRepository(
      * are written, the ones a changed route covers are closed and redial under it.
      */
     private suspend fun syncAndReconnect(domain: String, before: LearnedRoute?, after: LearnedRoute?) {
-        if (!syncKeepingState() || before == after || (before !in ROUTED && after !in ROUTED)) return
-        val warpDomain = LearnedRoute.Warp in setOf(before, after) && PublicSuffixList.bundled.registrableDomain(domain) == domain
-        val match = HostMatch(domain, subdomains = warpDomain)
-        scope.launch {
+        if (!syncKeepingState()) return
+        val moved = before != after && (before in ROUTED || after in ROUTED)
+        val match = HostMatch(domain, subdomains = LearnedRoute.Warp in setOf(before, after) && isWarpSuffix(domain))
+        closeLock.withLock {
+            if (moved) pendingCloses += match
+            if (pendingCloses.isEmpty()) return
             // sing-box reloads a rule-set 100 ms after its file goes quiet; a redial before that keeps the old route.
-            delay(RELOAD_SETTLE_MILLIS)
-            closeKeepingState(match)
+            closeJob?.cancel()
+            closeJob = scope.launch {
+                delay(RELOAD_SETTLE_MILLIS)
+                val matches = closeLock.withLock { pendingCloses.toList().also { pendingCloses.clear() } }
+                withContext(NonCancellable) { matches.forEach { closeKeepingState(it) } }
+            }
         }
     }
 
@@ -128,12 +140,14 @@ internal class DefaultLearnedSitesRepository(
     override suspend fun syncRuleSets() = syncLock.withLock {
         val learned = preferences.learnedSites.first()
         fun hosts(route: LearnedRoute) = learned.filter { it.route == route }.map { it.domain }
-        val (suffixes, exact) = hosts(LearnedRoute.Warp).partition { PublicSuffixList.bundled.registrableDomain(it) == it }
+        val (suffixes, exact) = hosts(LearnedRoute.Warp).partition(::isWarpSuffix)
         store.write(RuleSetKind.Warp, LearnedRules(exact = exact, suffixes = suffixes))
         val direct = hosts(LearnedRoute.Direct)
         store.write(RuleSetKind.Open, LearnedRules(exact = hosts(LearnedRoute.FailOpen) + direct))
         store.write(RuleSetKind.Direct, LearnedRules(exact = direct))
     }
+
+    private fun isWarpSuffix(domain: String) = PublicSuffixList.bundled.registrableDomain(domain) == domain
 
     /**
      * The learned state is already stored, so a file that cannot be written only

@@ -3,7 +3,7 @@ package com.verdenroz.vpnchain.core.tunnel
 /** The names a learned route reaches: [host] alone, or with [subdomains] every name under it as well. */
 data class HostMatch(val host: String, val subdomains: Boolean) {
     fun covers(name: String): Boolean {
-        val lower = name.lowercase()
+        val lower = name.lowercase().trimEnd('.')
         return lower == host || (subdomains && lower.endsWith(".$host"))
     }
 }

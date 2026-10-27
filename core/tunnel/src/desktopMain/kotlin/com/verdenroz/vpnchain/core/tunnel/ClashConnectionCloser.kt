@@ -14,7 +14,10 @@ internal class ClashConnectionCloser(private val runningConfig: StateFlow<String
     override suspend fun close(match: HostMatch) = withContext(Dispatchers.IO) {
         val api = runningConfig.value?.let(ClashApi::fromConfig) ?: return@withContext
         val body = ClashStatsClient.fetchConnections(api) ?: throw IOException("clash API listed no connections")
-        parseUserConnections(body).filter { match.covers(it.host) }.forEach { delete(api, it.id) }
+        // An empty id would make the DELETE path `/connections/`, which closes every connection.
+        val ids = parseUserConnections(body).filter { it.id.isNotEmpty() && match.covers(it.host) }.map { it.id }
+        val failure = ids.map { runCatching { delete(api, it) } }.firstNotNullOfOrNull { it.exceptionOrNull() }
+        if (failure != null) throw failure
     }
 
     private fun delete(api: ClashApi, id: String) {

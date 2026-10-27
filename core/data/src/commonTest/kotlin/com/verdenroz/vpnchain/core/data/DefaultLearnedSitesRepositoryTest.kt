@@ -87,6 +87,25 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
+    fun `a burst of rule-set writes holds every close until a second after the last one`() = scope.runTest {
+        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+
+        repository.allowDirect("www.bank.example")
+        advanceTimeBy(800)
+        repository.learn("reddit.com", LearnedRoute.Warp, BlockReason.Forbidden)
+        advanceTimeBy(999)
+
+        assertTrue(closer.closed.isEmpty())
+
+        advanceTimeBy(2)
+
+        assertEquals(
+            setOf(HostMatch("www.bank.example", subdomains = false), HostMatch("reddit.com", subdomains = true)),
+            closer.closed.map { it.first }.toSet(),
+        )
+    }
+
+    @Test
     fun `undo closes the connections sent direct`() = scope.runTest {
         repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
         repository.allowDirect("www.bank.example")

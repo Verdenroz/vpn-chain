@@ -23,7 +23,9 @@ private val CONNECTIONS = """
       {"id":"e","metadata":{"type":"tun/tun-in","host":"reddit.com"}},
       {"id":"f","metadata":{"type":"tun/tun-in","host":"notreddit.com"}},
       {"id":"g","metadata":{"type":"mixed/probe-relay","host":"www.bank.example"}},
-      {"id":"h","metadata":{"type":"tun/tun-in","host":""}}
+      {"id":"h","metadata":{"type":"tun/tun-in","host":""}},
+      {"metadata":{"type":"tun/tun-in","host":"www.bank.example"}},
+      {"id":"i","metadata":{"type":"tun/tun-in","host":"www.bank.example."}}
     ]}
 """
 
@@ -57,7 +59,7 @@ class ClashConnectionCloserTest {
         FakeClashApi().use { api ->
             ClashConnectionCloser(MutableStateFlow(api.config)).close(HostMatch("www.bank.example", subdomains = false))
 
-            assertEquals(listOf("a", "b"), api.deleted)
+            assertEquals(listOf("a", "b", "i"), api.deleted)
         }
     }
 
@@ -80,11 +82,13 @@ class ClashConnectionCloserTest {
     }
 
     @Test
-    fun `a refused close is thrown to the caller`() = runTest {
+    fun `a refused close is thrown after every match was tried`() = runTest {
         FakeClashApi(deleteStatus = 500).use { api ->
             assertFailsWith<IOException> {
-                ClashConnectionCloser(MutableStateFlow(api.config)).close(HostMatch("bank.example", subdomains = false))
+                ClashConnectionCloser(MutableStateFlow(api.config)).close(HostMatch("reddit.com", subdomains = true))
             }
+
+            assertEquals(listOf("d", "e"), api.deleted)
         }
     }
 }

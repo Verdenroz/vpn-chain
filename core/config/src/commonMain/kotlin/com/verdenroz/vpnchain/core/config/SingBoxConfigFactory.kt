@@ -12,6 +12,10 @@ import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -278,6 +282,12 @@ object SingBoxConfigFactory {
             learnedOpenPath?.let { addLearnedRuleSet(LEARNED_OPEN_TAG, it) }
         }
     }
+
+    /** Whether a rendered config routes by a learned rule-set; false for one that cannot be read. */
+    fun routesLearnedSites(configJson: String): Boolean = runCatching {
+        Json.parseToJsonElement(configJson).jsonObject["route"]?.jsonObject?.get("rule_set")?.jsonArray.orEmpty()
+            .any { it.jsonObject["tag"]?.jsonPrimitive?.contentOrNull in setOf(LEARNED_WARP_TAG, LEARNED_OPEN_TAG) }
+    }.getOrDefault(false)
 
     private fun JsonArrayBuilder.addLearnedRuleSet(tag: String, path: String) = addJsonObject {
         put("type", "local")

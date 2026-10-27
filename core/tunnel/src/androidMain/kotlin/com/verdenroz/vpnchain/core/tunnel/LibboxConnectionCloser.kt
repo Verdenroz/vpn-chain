@@ -32,7 +32,11 @@ internal class LibboxConnectionCloser(
     private val closeConnection: (String) -> Unit = { Libbox.newStandaloneCommandClient().closeConnection(it) },
 ) : ConnectionCloser {
 
+    /** Each id is forgotten once tried, so one left by an engine that has since been replaced fails only once. */
     override suspend fun close(match: HostMatch) = withContext(Dispatchers.IO) {
-        live.matching(match).forEach(closeConnection)
+        val failure = live.matching(match)
+            .map { id -> runCatching { closeConnection(id) }.also { live.closed(id) } }
+            .firstNotNullOfOrNull { it.exceptionOrNull() }
+        if (failure != null) throw failure
     }
 }
