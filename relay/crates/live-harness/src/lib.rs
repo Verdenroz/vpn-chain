@@ -4,5 +4,5 @@
 mod lab;
 mod tunnel;
 
-pub use lab::{Lab, SING_BOX, SNI, free_port, short_id, wait_for_port};
-pub use tunnel::{Tunnel, echo_server, roundtrip};
+pub use lab::{ECHO_HOST, Lab, SING_BOX, SNI, free_port, short_id, wait_for_port};
+pub use tunnel::{Tunnel, echo_server, roundtrip, roundtrip_to};
