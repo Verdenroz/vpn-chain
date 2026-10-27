@@ -94,7 +94,7 @@ relay_up() {
     CONTAINERS+=("$name")
     docker run -d --name "$name" "${extra[@]}" --network "$NET" --ip "$ip" --dns "$(addr 60)" \
         --cap-add SYS_ADMIN --cap-add NET_ADMIN --cgroupns=private \
-        --tmpfs /run --tmpfs /run/lock --tmpfs /tmp:exec \
+        --tmpfs /run --tmpfs /run/lock --tmpfs /tmp \
         -v "$HERE:/opt/live:ro" -v "$BUILD:/opt/build:ro" -v "$ROOT:/repo:ro" \
         "$IMG" bash -c 'mount -o remount,rw /sys/fs/cgroup && exec /sbin/init' >/dev/null
     docker network connect "$PRIV" "$name"

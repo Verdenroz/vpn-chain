@@ -26,7 +26,8 @@ if [ -n "${missing:-}" ]; then
     apt-get install -y -qq --no-install-recommends ca-certificates curl coreutils </dev/null
 fi
 
-work="$(mktemp -d)"
+# /tmp is noexec on some hardened images, and relayd runs from here.
+work="$(mktemp -d /var/lib/vpn-chain-setup.XXXXXX)"
 trap 'rm -rf "$work"' EXIT
 asset="vpn-chain-relay-linux-$arch.tar.gz"
 curl -fsSL -o "$work/$asset" "$BASE_URL/$asset"
