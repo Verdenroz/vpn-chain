@@ -239,7 +239,7 @@ class DevicesViewModelTest {
     }
 }
 
-private class FakeDevices(private val log: MutableList<String>) : RelayDevices {
+internal class FakeDevices(private val log: MutableList<String>) : RelayDevices {
     var board = Result.success(DeviceBoard(listOf(LAPTOP, PHONE), self = "laptop", admin = true, poolEmpty = false))
     var addResult = Result.success(CODE)
     var refillResult = Result.success(Unit)
