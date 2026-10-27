@@ -19,6 +19,9 @@ interface RelayAgent {
 
     suspend fun revoke(name: String): Revoked
 
+    /** A one-time pairing code that enrolls [name] on another device, which is admin only. */
+    suspend fun pair(name: String): PairingCode
+
     /** A new UUID and short ID for [name], with no restart. */
     suspend fun rekey(name: String): AgentIdentity
 

@@ -45,6 +45,8 @@ internal class HttpRelayAgent(
 
     override suspend fun rekey(name: String) = send("POST", "/v1/devices/${segment(name)}/rekey").field<AgentIdentity>("identity")
 
+    override suspend fun pair(name: String) = send("POST", "/v1/devices/${segment(name)}/pair").decode<PairingCode>()
+
     override suspend fun startJob(request: JobRequest): String {
         val body = buildJsonObject {
             when (request) {
