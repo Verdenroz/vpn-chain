@@ -6,6 +6,7 @@ import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.relay.AgentException
 import com.verdenroz.vpnchain.core.relay.AgentUnreachable
+import com.verdenroz.vpnchain.core.relay.DeviceRole
 import com.verdenroz.vpnchain.core.relay.ManagementKey
 import com.verdenroz.vpnchain.core.relay.PairingException
 import com.verdenroz.vpnchain.core.relay.PairingLink
@@ -18,9 +19,18 @@ import kotlinx.coroutines.withContext
 enum class PairingStep { Connecting, Registering, Reconnecting }
 
 /** Why [PairRelayUseCase] stopped. [Reconnecting] failures leave the pairing saved. */
-class PairingFailed(val step: PairingStep, val reason: Reason, cause: Throwable? = null) : Exception(reason.name, cause) {
+class PairingFailed(
+    val step: PairingStep,
+    val reason: Reason,
+    cause: Throwable? = null,
+    /** The link's device name, for telling the user which code to ask for. */
+    val device: String = "",
+) : Exception(reason.name, cause) {
     enum class Reason { Expired, Used, Unreachable, Failed }
 }
+
+/** The relay a pairing joined, and whether this device is its admin. */
+data class PairedRelay(val host: String, val admin: Boolean)
 
 /** Pairs this device with a relay from the link it printed. */
 interface RelayPairing {
@@ -30,9 +40,9 @@ interface RelayPairing {
     /**
      * [onStep] hears each step with the host being paired, which is not a secret.
      *
-     * @return the relay's host.
+     * @return the relay joined.
      */
-    suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<String>
+    suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<PairedRelay>
 }
 
 private const val HTTP_UNAUTHORIZED = 401
@@ -52,9 +62,9 @@ class PairRelayUseCase(
 ) : RelayPairing {
     override fun accepts(text: String) = PairingLink.looksLikeLink(text)
 
-    override suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<String> = runCatching {
+    override suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<PairedRelay> = runCatching {
         val link = PairingLink.parse(text).getOrThrow()
-        if (link.isExpired(nowSeconds())) throw PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Expired)
+        if (link.isExpired(nowSeconds())) throw PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Expired, device = link.deviceName)
         val previous = profiles.activeProfileId.first()
         val wasUp = chain.status.first().state == TunnelState.Connected
         val relay = ChainProfile(
@@ -76,12 +86,12 @@ class PairRelayUseCase(
             throw e
         }
         profiles.save(
-            relay.copy(vlessUuid = enrolled.identity.uuid, shortId = enrolled.identity.shortId, managementKeyId = key.id),
+            relay.copy(vlessUuid = enrolled.identity.uuid, shortId = enrolled.identity.shortId, managementKeyId = key.id, managementAdmin = enrolled.role == DeviceRole.Admin),
             entryHop = null,
         )
         onStep(PairingStep.Reconnecting, link.host)
         chain.restart().getOrElse { throw PairingFailed(PairingStep.Reconnecting, PairingFailed.Reason.Failed, it) }
-        link.host
+        PairedRelay(link.host, enrolled.role == DeviceRole.Admin)
     }.recoverCatching { throw it as? PairingFailed ?: it as? PairingException ?: PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Failed, it) }
 
     private suspend fun moveTunnel(wasUp: Boolean) = if (wasUp) chain.restart() else chain.connect()
@@ -94,7 +104,7 @@ class PairRelayUseCase(
             HTTP_GONE -> PairingFailed.Reason.Expired
             else -> PairingFailed.Reason.Failed
         }
-        throw PairingFailed(PairingStep.Registering, reason, e)
+        throw PairingFailed(PairingStep.Registering, reason, e, link.deviceName)
     } catch (e: AgentUnreachable) {
         throw PairingFailed(PairingStep.Registering, PairingFailed.Reason.Unreachable, e)
     }
