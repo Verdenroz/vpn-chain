@@ -3,8 +3,14 @@ pub mod fakes;
 
 use std::path::{Path, PathBuf};
 
-use p256::ecdsa::SigningKey;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
+use p256::ecdsa::signature::Signer;
+use p256::ecdsa::{Signature, SigningKey};
 use p256::pkcs8::EncodePublicKey;
+use relayd::agent::message;
 use relayd::{Key, Relay, Role};
 
 /// Every credential in the fixtures, none of which may reach a `Debug` or error string.
@@ -74,4 +80,68 @@ pub fn key_for(device: &str, role: Role, signer: &SigningKey) -> Key {
         "2026-10-27T00:00:00Z".to_owned(),
     )
     .unwrap()
+}
+
+/// The four headers that sign a request made now; `nonce` must differ between requests.
+pub fn signed_headers(
+    signer: &SigningKey,
+    method: &str,
+    target: &str,
+    body: &str,
+    nonce: u64,
+) -> Vec<(String, String)> {
+    let key = key_for("x", Role::Member, signer).id;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        .to_string();
+    let nonce = format!("{nonce:032x}");
+    let text = message(method, target, body.as_bytes(), &timestamp, &nonce);
+    let signature: Signature = signer.sign(text.as_bytes());
+    vec![
+        ("X-Key-Id".to_owned(), key),
+        ("X-Timestamp".to_owned(), timestamp),
+        ("X-Nonce".to_owned(), nonce),
+        (
+            "X-Signature".to_owned(),
+            STANDARD.encode(signature.to_der().as_bytes()),
+        ),
+    ]
+}
+
+/// An HTTP/1.1 request that asks the server to close the connection after it.
+pub fn http_request(
+    host: &str,
+    method: &str,
+    target: &str,
+    body: &str,
+    headers: &[(String, String)],
+) -> String {
+    let mut request = format!(
+        "{method} {target} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nContent-Length: {}\r\n",
+        body.len()
+    );
+    for (name, value) in headers {
+        request.push_str(&format!("{name}: {value}\r\n"));
+    }
+    request.push_str("\r\n");
+    request.push_str(body);
+    request
+}
+
+/// The status and JSON body of a response read to the end, if it is one.
+pub fn parse_reply(raw: &[u8]) -> Option<(u16, serde_json::Value)> {
+    let raw = std::str::from_utf8(raw).ok()?;
+    let (head, body) = raw.split_once("\r\n\r\n")?;
+    let status = head
+        .strip_prefix("HTTP/1.1 ")?
+        .split(' ')
+        .next()?
+        .parse()
+        .ok()?;
+    Some((
+        status,
+        serde_json::from_str(body).unwrap_or(serde_json::Value::Null),
+    ))
 }

@@ -7,16 +7,14 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
 use common::fakes::{FakeLive, FakeRestart};
-use common::{assert_no_secret, fixture, key_for, read, signer};
-use p256::ecdsa::signature::Signer;
-use p256::ecdsa::{Signature, SigningKey};
+use common::{
+    assert_no_secret, fixture, http_request, key_for, parse_reply, read, signed_headers, signer,
+};
+use p256::ecdsa::SigningKey;
 use relay_jobs::{Jobs, Layout};
-use relayd::agent::{Audit, Service, Verifier, message, serve_on};
+use relayd::agent::{Audit, Service, Verifier, serve_on};
 use relayd::{Placement, Relay, Role, secrets_path, write_config};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
@@ -119,46 +117,19 @@ impl Rig {
         target: &str,
         body: &str,
     ) -> Vec<(String, String)> {
-        let key = common::key_for("x", Role::Member, signer).id;
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            .to_string();
-        let nonce = format!("{:032x}", self.counter.fetch_add(1, Ordering::SeqCst));
-        let text = message(method, target, body.as_bytes(), &timestamp, &nonce);
-        let signature: Signature = signer.sign(text.as_bytes());
-        vec![
-            ("X-Key-Id".to_owned(), key),
-            ("X-Timestamp".to_owned(), timestamp),
-            ("X-Nonce".to_owned(), nonce),
-            (
-                "X-Signature".to_owned(),
-                STANDARD.encode(signature.to_der().as_bytes()),
-            ),
-        ]
+        let nonce = self.counter.fetch_add(1, Ordering::SeqCst);
+        signed_headers(signer, method, target, body, nonce)
     }
 
     fn send(&self, method: &str, target: &str, body: &str, headers: &[(String, String)]) -> Reply {
         let mut stream = TcpStream::connect(("127.0.0.1", self.port)).unwrap();
-        let mut request = format!(
-            "{method} {target} HTTP/1.1\r\nHost: agent.vpn-chain.invalid\r\nConnection: close\r\nContent-Length: {}\r\n",
-            body.len()
-        );
-        for (name, value) in headers {
-            request.push_str(&format!("{name}: {value}\r\n"));
-        }
-        request.push_str("\r\n");
-        request.push_str(body);
-        stream.write_all(request.as_bytes()).unwrap();
-        let mut raw = String::new();
-        stream.read_to_string(&mut raw).unwrap();
-        let (head, body) = raw.split_once("\r\n\r\n").unwrap();
-        let status = head.split(' ').nth(1).unwrap().parse().unwrap();
-        Reply {
-            status,
-            body: serde_json::from_str(body).unwrap_or(Value::Null),
-        }
+        stream
+            .write_all(http_request("127.0.0.1", method, target, body, headers).as_bytes())
+            .unwrap();
+        let mut raw = Vec::new();
+        stream.read_to_end(&mut raw).unwrap();
+        let (status, body) = parse_reply(&raw).unwrap();
+        Reply { status, body }
     }
 
     fn as_key(&self, seed: u8, method: &str, target: &str, body: &str) -> Reply {

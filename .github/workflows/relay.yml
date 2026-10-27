@@ -1,7 +1,7 @@
 # Checks the Rust workspace under relay/ (relayd, the xray API client and the job
-# runner), which the Gradle build does not touch. The live job runs the xray API client
-# and relayd's device operations against a dockerised Xray and the sing-box clients the
-# apps ship. The jobs-live job runs the job runner under systemd in a container.
+# runner), which the Gradle build does not touch. The live job runs the xray API client,
+# relayd's device operations and relayd's agent against a dockerised Xray and the sing-box
+# clients the apps ship. The jobs-live job runs the job runner under systemd in a container.
 name: relay
 
 on:
