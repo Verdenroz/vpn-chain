@@ -110,10 +110,10 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`.
 1. Set `vpnchain.version` in `gradle.properties` to `MAJOR.MINOR.PATCH`. The
    Android version code is `major * 10000 + minor * 100 + patch`.
 2. Commit, then tag and push. The tag must match `vpnchain.version`, or the
-   publish job fails.
+   publish job fails. Sign it, so the release shows as verified.
 
    ```
-   git tag v0.2.1 && git push origin v0.2.1
+   git tag -s v0.2.1 -m v0.2.1 && git push origin v0.2.1
    ```
 
 3. Approve the `publish` job in the `release` environment. It publishes a
@@ -164,6 +164,8 @@ the app can carry the key on a separate channel.
 ## Commits and pull requests
 
 Conventional commits (`feat:`, `fix:`, `docs:`, `ci:`, ...), subject at most 50
-characters. Documentation lives in the README, this file, CLAUDE.md, or a comment
+characters. Commits are signed. Land a pull request by rebasing it onto `main` and
+fast-forwarding, `git push origin <branch>:main`, which closes it as merged. GitHub's
+rebase merge rewrites the commits unsigned. Documentation lives in the README, this file, CLAUDE.md, or a comment
 next to the code it explains. There is no docs directory, and CI fails on a link
 to one.
