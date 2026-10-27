@@ -122,23 +122,6 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `allowing a site the entry hop reaches sends it there and forgetting takes it back`() = scope.runTest {
-        repository.learn("www.bank.example", LearnedRoute.EntryAvailable, BlockReason.Forbidden)
-        assertEquals(null, store.writtenOpen)
-
-        repository.allowDirect("www.bank.example")
-
-        assertEquals(LearnedRoute.FailOpen, repository.sites.first().single().route)
-        assertEquals(listOf("www.bank.example"), store.writtenOpen)
-        assertEquals(emptyList(), store.writtenDirect)
-
-        repository.forget("www.bank.example")
-
-        assertEquals(LearnedRoute.EntryAvailable, repository.sites.first().single().route)
-        assertEquals(emptyList(), store.writtenOpen)
-    }
-
-    @Test
     fun `only a site offered for the bare link can be sent there`() = scope.runTest {
         repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
         repository.learn("b.com", LearnedRoute.RefusedEverywhere, BlockReason.Forbidden)

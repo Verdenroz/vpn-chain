@@ -59,7 +59,7 @@ class BlockedSiteTest {
     }
 
     @Test
-    fun `a chain with its entry hop dialled prompts for the site waiting on a tap`() {
+    fun `a chain with its entry hop dialled prompts for a site every exit refuses`() {
         assertEquals("www.shop.example", blockedSite(SITES, UserSettings(), CHAIN, dismissed = emptySet())?.domain)
     }
 

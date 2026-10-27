@@ -57,8 +57,8 @@ internal fun sitesUiState(
             else -> Section.Blocked
         }
         val action = when {
-            site.route == LearnedRoute.Direct || site.route == LearnedRoute.FailOpen -> SiteAction.Undo
-            section == Section.Blocked && site.route in OFFERED && outsideOffered -> SiteAction.UseMyConnection
+            site.route == LearnedRoute.Direct -> SiteAction.Undo
+            section == Section.Blocked && site.route == LearnedRoute.DirectAvailable && outsideOffered -> SiteAction.UseMyConnection
             else -> SiteAction.Remove
         }
         section to SiteRow(site.domain, bareHost(site.domain, domains), action)
@@ -70,8 +70,6 @@ internal fun sitesUiState(
         entry = sections[Section.Entry].orEmpty(),
     )
 }
-
-private val OFFERED = setOf(LearnedRoute.EntryAvailable, LearnedRoute.DirectAvailable)
 
 private enum class Section { Blocked, Direct, Warp, Entry }
 

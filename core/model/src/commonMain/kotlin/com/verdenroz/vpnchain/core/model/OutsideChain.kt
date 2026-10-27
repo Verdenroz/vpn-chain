@@ -23,7 +23,7 @@ fun SavedProfile?.outsideExitFor(settings: UserSettings): OutsideExit? {
     return if (entryDialled) OutsideExit.EntryHop else OutsideExit.Direct
 }
 
-/** Whether a site the relay and WARP refuse may leave outside the chain once the user allows it. */
+/** Whether a site the chain refuses may be sent over the bare link once the user allows it. */
 fun SavedProfile?.offersOutside(settings: UserSettings): Boolean =
     this != null && outsideExitFor(settings) != null
 

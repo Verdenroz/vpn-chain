@@ -75,7 +75,6 @@ class OutsideChainTest {
         listOf(
             LearnedRoute.Warp,
             LearnedRoute.RefusedByBoth,
-            LearnedRoute.EntryAvailable,
             LearnedRoute.DirectAvailable,
             LearnedRoute.RefusedEverywhere,
         ).forEach {

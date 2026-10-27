@@ -76,7 +76,7 @@ invisible in testing.
 - [ ] Probe inbounds listen on loopback only, with per-config random port and credentials.
 - [ ] The bare link is never probed, and a site goes there only on the user's
       "Send direct" tap, matched by exact host. The order is relay, WARP, entry hop
-      (on the user's tap), bare link (on the user's tap).
+      (automatic), then the bare link, which alone needs the user's tap.
 - [ ] WARP keys and probe credentials are never logged or exported.
 
 **Kill switch, desktop** (`cli/killswitch/vpn-chain-killswitch.c` header, `KillSwitchHelper.kt`)

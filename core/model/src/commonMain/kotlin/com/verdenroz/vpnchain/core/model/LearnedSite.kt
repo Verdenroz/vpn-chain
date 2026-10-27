@@ -10,14 +10,11 @@ enum class LearnedRoute {
     /** Both refuse it and no path outside the chain was available to try. */
     RefusedByBoth,
 
-    /** Both refuse it, and the entry hop alone reaches it. Waits for the user to allow it ([FailOpen]). */
-    EntryAvailable,
-
-    /** The user chose to send it by the entry hop alone. */
+    /** Both refuse it, and the entry hop alone reaches it. */
     FailOpen,
 
     /**
-     * Every exit up to the bare link refuses it, or there is no entry hop to try.
+     * The relay, WARP and any entry hop refuse it, or there is no entry hop to try.
      * Nothing is sent that way until the user allows it ([Direct]).
      */
     DirectAvailable,

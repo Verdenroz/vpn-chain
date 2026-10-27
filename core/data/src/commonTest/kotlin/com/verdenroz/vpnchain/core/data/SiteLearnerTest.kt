@@ -117,14 +117,14 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `a site both exits refuse but the entry hop reaches is offered for it`() = runTest {
+    fun `a site both exits refuse but the entry hop reaches is learned to fail open`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
         runCurrent()
 
         world.feed.hosts.emit("example.com")
         runCurrent()
 
-        assertEquals(LearnedRoute.EntryAvailable, world.learned.sites.first().single().route)
+        assertEquals(LearnedRoute.FailOpen, world.learned.sites.first().single().route)
     }
 
     @Test
@@ -145,7 +145,7 @@ class SiteLearnerTest {
         world.feed.hosts.emit("example.com")
         runCurrent()
 
-        assertEquals(LearnedRoute.EntryAvailable, world.learned.sites.first().single().route)
+        assertEquals(LearnedRoute.FailOpen, world.learned.sites.first().single().route)
     }
 
     @Test
@@ -238,7 +238,7 @@ class SiteLearnerTest {
     }
 
     @Test
-    fun `an entry hop that reaches a site is offered for the exact host`() = runTest {
+    fun `an entry hop that reaches a site is learned for the exact host`() = runTest {
         val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
         runCurrent()
 
@@ -247,7 +247,7 @@ class SiteLearnerTest {
 
         val site = world.learned.sites.first().single()
         assertEquals("login.bank.example", site.domain)
-        assertEquals(LearnedRoute.EntryAvailable, site.route)
+        assertEquals(LearnedRoute.FailOpen, site.route)
     }
 
     @Test
@@ -259,7 +259,7 @@ class SiteLearnerTest {
         world.feed.hosts.emit("www.bank.example")
         runCurrent()
 
-        assertEquals(LearnedRoute.EntryAvailable, world.learned.sites.first().single().route)
+        assertEquals(LearnedRoute.FailOpen, world.learned.sites.first().single().route)
     }
 
     @Test
@@ -274,19 +274,6 @@ class SiteLearnerTest {
         assertEquals("api.example.com", site.domain)
         assertEquals(LearnedRoute.DirectAvailable, site.route)
         assertEquals(listOf(1, 2, 3), world.fetcher.calls.map { it.second })
-    }
-
-    @Test
-    fun `a site the entry hop reaches waits for the tap, then leaves by the entry hop only`() = runTest {
-        val world = LearnerWorld(backgroundScope) { _, port -> if (port == 3) OPEN else REFUSED }
-        runCurrent()
-        world.feed.hosts.emit("login.bank.example")
-        runCurrent()
-
-        assertEquals(LearnedRoute.EntryAvailable, world.learned.sites.first().single().route)
-        world.learned.allowDirect("login.bank.example")
-
-        assertEquals(LearnedRoute.FailOpen, world.learned.sites.first().single().route)
     }
 
     @Test
