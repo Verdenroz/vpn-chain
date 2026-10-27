@@ -50,8 +50,8 @@ interface TunnelController {
      *
      * No-op by default, and deliberately so on desktop: a chain that stalled
      * leaves the kill switch engaged, because traffic staying blocked until
-     * something carries it again is the whole point of it (see
-     * `docs/kill-switch.md`). Disconnect is the documented way out of that.
+     * something carries it again is the whole point of it. Disconnect is the
+     * way out of that, as the README's Troubleshooting says.
      * Android overrides it, where holding on means holding a foreground service
      * that promises a reconnect nobody is going to make.
      */
