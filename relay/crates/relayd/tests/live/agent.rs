@@ -1,11 +1,14 @@
 //! The agent behind a real xray: reached by name through the tunnel, by nothing else.
 
+use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use live_harness::{ECHO_HOST, SING_BOX, Tunnel, roundtrip, wait_for_port};
+use live_harness::{
+    LOOPBACK_HOST, LOOPBACK6_HOST, PRIVATE_HOST, SING_BOX, Tunnel, roundtrip_to, wait_for_port,
+};
 use p256::ecdsa::SigningKey;
 use relayd::agent::{Audit, Service, Verifier, serve_on};
 use relayd::{AGENT_HOST, Role, XrayLive, add_key};
@@ -94,6 +97,37 @@ impl Agent {
     }
 }
 
+const H2_PREFACE: &[u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+
+fn echoes(site: &Site, proxy: u16, host: &str, port: u16) -> bool {
+    site.rt
+        .block_on(roundtrip_to(proxy, host, port, b"ping"))
+        .is_ok()
+}
+
+fn first_reply(site: &Site, proxy: u16, host: &str, port: u16, request: &[u8]) -> Vec<u8> {
+    site.rt
+        .block_on(async {
+            Tunnel::open_to(proxy, host, port)
+                .await?
+                .first_reply(request)
+                .await
+        })
+        .unwrap_or_default()
+}
+
+/// What `port` on this machine's loopback says first to an HTTP/2 preface.
+fn answers_locally(port: u16) -> Vec<u8> {
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    stream.write_all(H2_PREFACE).unwrap();
+    let mut reply = [0; 512];
+    let count = stream.read(&mut reply).unwrap_or(0);
+    reply[..count].to_vec()
+}
+
 /// What came back from one request through the tunnel, if anything did.
 fn through(site: &Site, proxy: u16, host: &str, port: u16, request: &str) -> Option<(u16, Value)> {
     let reply = site.rt.block_on(async {
@@ -139,35 +173,64 @@ fn the_agent_answers_a_signed_request_through_the_tunnel() {
 
 #[test]
 #[ignore = "needs docker"]
-fn no_other_loopback_port_answers_by_address_through_the_tunnel() {
+fn nothing_on_the_relay_answers_through_the_tunnel_by_address_or_by_name() {
     let site = Site::start("agent-blocked");
     let agent = Agent::start(&site);
+    assert!(
+        !answers_locally(site.lab.api_port).is_empty(),
+        "the API port answers an HTTP/2 preface from this machine"
+    );
 
     for version in SING_BOX {
         let proxy = site.client(&site.laptop, version);
+        let public = site.lab.public_ip.to_string();
+        let private = site.lab.private_ip.to_string();
         let headers = agent.headers(&agent.admin, "GET", "/v1/relay", "");
         let signed = http_request(AGENT_HOST, "GET", "/v1/relay", "", &headers);
         assert_eq!(to_agent(&site, proxy, &signed).unwrap().0, 200);
+        assert!(site.works(proxy), "a public name, sing-box {version}");
+        assert!(
+            echoes(&site, proxy, &public, site.echo),
+            "a public address, sing-box {version}"
+        );
 
+        let refused = [
+            ("a name for loopback", LOOPBACK_HOST, site.loopback_echo),
+            ("localhost", "localhost", site.loopback_echo),
+            ("a loopback address", "127.0.0.1", site.loopback_echo),
+            ("a name for ::1", LOOPBACK6_HOST, site.loopback6_echo),
+            ("::1", "[::1]", site.loopback6_echo),
+            (
+                "a name for a private address",
+                PRIVATE_HOST,
+                site.private_echo,
+            ),
+            ("a private address", private.as_str(), site.private_echo),
+        ];
+        for (what, host, port) in refused {
+            assert!(
+                !echoes(&site, proxy, host, port),
+                "{what} reached an echo server, sing-box {version}"
+            );
+        }
+
+        let api = site.lab.api_port;
+        for host in ["localhost", LOOPBACK_HOST, "127.0.0.1"] {
+            let reply = first_reply(&site, proxy, host, api, H2_PREFACE);
+            assert!(
+                reply.is_empty(),
+                "xray's API port by {host}, sing-box {version}"
+            );
+        }
         let headers = agent.headers(&agent.admin, "GET", "/v1/relay", "");
-        let signed = http_request("127.0.0.1", "GET", "/v1/relay", "", &headers);
-        let by_address = through(&site, proxy, "127.0.0.1", site.lab.agent_port, &signed);
-        let api = through(&site, proxy, "127.0.0.1", site.lab.api_port, &signed);
-        let echo = site.rt.block_on(roundtrip(proxy, site.echo, b"ping"));
-
-        assert_eq!(
-            by_address, None,
-            "the agent's own port by address, sing-box {version}"
-        );
-        assert_eq!(api, None, "xray's API port, sing-box {version}");
-        assert!(
-            echo.is_err(),
-            "the echo server's port by address, sing-box {version}"
-        );
-        assert!(
-            site.works(proxy),
-            "{ECHO_HOST} by name is how the lab reaches echo"
-        );
+        let wrong_host = http_request("127.0.0.1", "GET", "/v1/relay", "", &headers);
+        for host in ["localhost", LOOPBACK_HOST, "127.0.0.1"] {
+            let reached = through(&site, proxy, host, site.lab.agent_port, &wrong_host);
+            assert_eq!(
+                reached, None,
+                "the agent's port by {host} with another Host, sing-box {version}"
+            );
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-use std::net::TcpListener;
+use std::net::{IpAddr, TcpListener};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -11,9 +11,13 @@ use uuid::Uuid;
 
 /// libbox in the Android app, and the desktop's sing-box.
 pub const SING_BOX: [&str; 2] = ["1.13.14", "1.14.3"];
-/// A name the relay resolves to its own loopback, where the tests' echo server listens. Relayd
-/// blocks private addresses, but only by IP, so a name reaches it.
-pub const ECHO_HOST: &str = "echo.test";
+/// A name the relay's resolver maps to its own loopback.
+pub const LOOPBACK_HOST: &str = "loop.test";
+pub const LOOPBACK6_HOST: &str = "loop6.test";
+/// Names the relay's resolver maps to the lab's two docker networks: one of ordinary public
+/// addresses and one of private ones. The echo servers listen on their gateways.
+pub const PUBLIC_HOST: &str = "public.test";
+pub const PRIVATE_HOST: &str = "private.test";
 /// The server name the REALITY inbound borrows, served by the lab's own destination.
 pub const SNI: &str = "dest.test";
 
@@ -30,12 +34,15 @@ pub struct Lab {
     pub api_port: u16,
     pub agent_port: u16,
     pub dest_port: u16,
+    pub public_ip: IpAddr,
+    pub private_ip: IpAddr,
     pub public_key: String,
     pub private_key: String,
     prefix: String,
     dir: PathBuf,
     clients: AtomicUsize,
     containers: Mutex<Vec<String>>,
+    networks: Vec<String>,
 }
 
 impl Lab {
@@ -45,22 +52,35 @@ impl Lab {
         let dir = tmp.join(&prefix);
         std::fs::create_dir_all(&dir).unwrap();
         let (private_key, public_key) = keypair().await;
+        let pid = std::process::id();
+        let (public_net, public_ip) =
+            island(&prefix, "public", |n| format!("11.{}.{n}", 20 + pid % 200)).await;
+        let (private_net, private_ip) = island(&prefix, "private", |n| {
+            let at = pid + n;
+            format!("198.{}.{}", 18 + (at / 256) % 2, at % 256)
+        })
+        .await;
         let lab = Self {
             vless_port: free_port(),
             api_port: free_port(),
             agent_port: free_port(),
             dest_port: free_port(),
+            public_ip,
+            private_ip,
             public_key,
             private_key,
             prefix,
             dir,
             clients: AtomicUsize::new(0),
             containers: Mutex::default(),
+            networks: vec![public_net, private_net],
         };
         std::fs::write(lab.dir.join("Caddyfile"), caddyfile(lab.dest_port)).unwrap();
         std::fs::write(
             lab.dir.join("hosts"),
-            format!("127.0.0.1 localhost {ECHO_HOST}\n"),
+            format!(
+                "127.0.0.1 localhost {LOOPBACK_HOST}\n{public_ip} {PUBLIC_HOST}\n{private_ip} {PRIVATE_HOST}\n::1 {LOOPBACK6_HOST}\n"
+            ),
         )
         .unwrap();
         lab.run(
@@ -215,8 +235,37 @@ impl Drop for Lab {
             .args(["rm", "-f"])
             .args(containers.iter())
             .output();
+        for network in &self.networks {
+            let _ = std::process::Command::new("docker")
+                .args(["network", "rm", network])
+                .output();
+        }
         let _ = std::fs::remove_dir_all(&self.dir);
     }
+}
+
+/// A docker network whose gateway, the host's own address on it, is `<base>.1`. The subnet is
+/// tried at successive third octets until docker accepts one that overlaps nothing.
+async fn island(prefix: &str, kind: &str, base: impl Fn(u32) -> String) -> (String, IpAddr) {
+    let name = format!("{prefix}-{kind}");
+    for attempt in 0..50 {
+        let base = base(attempt);
+        let created = Command::new("docker")
+            .args([
+                "network",
+                "create",
+                "--subnet",
+                &format!("{base}.0/24"),
+                &name,
+            ])
+            .output()
+            .await
+            .unwrap();
+        if created.status.success() {
+            return (name, format!("{base}.1").parse().unwrap());
+        }
+    }
+    panic!("no free subnet for the {kind} docker network");
 }
 
 fn caddyfile(port: u16) -> String {
