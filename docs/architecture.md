@@ -23,7 +23,8 @@ on both platforms.
 | `core/domain` | Use cases (connect, switch profile, import) and `ChainSupervisor` |
 | `core/designsystem` | Theme, colors, type, the route map, status bar, shared components |
 | `core/ui` | Shared composables and theme resolution |
-| `feature/chain` | Chain screen: map, status, hop rows, connect |
+| `feature/chain` | Chain screen: map, status, hop rows, connect, blocked-site prompt |
+| `feature/sites` | Learned sites by the way they leave, with the action for each |
 | `feature/settings` | Profiles, import, routing, kill switch, DNS, appearance, About |
 | `feature/logs` | Live sing-box log viewer |
 | `app-common` | Themed shell (status bar, bottom tabs or nav rail, `NavHost`), update banner, Koin aggregation |

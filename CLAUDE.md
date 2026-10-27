@@ -36,7 +36,7 @@ anything that reads config.
 | `core/update` | In-app updater |
 | `core/data`, `core/domain` | Repositories, use cases, `ChainSupervisor` |
 | `core/designsystem`, `core/ui` | Theme, map, shared composables |
-| `feature/{chain,settings,logs}` | Compose screens and ViewModels |
+| `feature/{chain,sites,settings,logs}` | Compose screens and ViewModels |
 | `app-common` | Shell, nav, Koin aggregation |
 | `androidApp`, `desktopApp` | Platform entry points |
 
