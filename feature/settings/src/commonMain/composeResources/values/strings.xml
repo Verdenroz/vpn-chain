@@ -150,6 +150,17 @@
     <string name="devices_code_warning">Anyone who gets this code can join your relay until it is used or expires.</string>
     <string name="devices_code_expires">Expires in %1$s</string>
     <string name="devices_code_expired">This code has expired.</string>
+    <string name="exit_label">Exit</string>
+    <string name="exit_direct">Your VPS\'s own address</string>
+    <string name="exit_wireguard">WireGuard via %1$s</string>
+    <string name="exit_change">Use a WireGuard exit</string>
+    <string name="exit_use_direct">Use the VPS\'s address</string>
+    <string name="exit_paste_hint">Paste the WireGuard .conf your provider gave you. It goes to your relay and is stored only there.</string>
+    <string name="exit_conf_label">WireGuard .conf</string>
+    <string name="exit_review">Review</string>
+    <string name="exit_confirm_wireguard">Send your traffic out through WireGuard via %1$s? The relay restarts and everyone connected, including you, drops for a few seconds.</string>
+    <string name="exit_confirm_direct">Send your traffic out from your VPS\'s own address again? The relay restarts and everyone connected, including you, drops for a few seconds.</string>
+    <string name="exit_switch">Restart and switch</string>
     <string name="devices_copy_link">Copy link</string>
     <string name="devices_share_link">Share link</string>
     <string name="settings_imported_not_connected">Imported %1$s, but could not connect.</string>
