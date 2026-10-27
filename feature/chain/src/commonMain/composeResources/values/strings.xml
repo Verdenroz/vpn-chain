@@ -30,8 +30,8 @@
     <string name="chain_kill_switch_hint_no_exempt">No relay address in the profile.</string>
     <string name="chain_kill_switch_hint_not_engaged">Off this session. Reconnect to turn it on.</string>
     <string name="chain_kill_switch_hint_external_app">Provided by your system VPN app</string>
-    <string name="chain_empty_state_title">No profile yet</string>
-    <string name="chain_open_settings">Open Settings</string>
+    <string name="chain_empty_state_title">Scan or paste the code your server printed to connect.</string>
+    <string name="chain_open_settings">Add your relay</string>
     <string name="chain_change">Change</string>
     <string name="chain_connect">Connect</string>
     <string name="chain_disconnect">Disconnect</string>

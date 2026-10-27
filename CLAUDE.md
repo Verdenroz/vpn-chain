@@ -34,6 +34,7 @@ anything that reads config.
 | `core/tunnel` | `TunnelController`: Android `VpnChainService` (libbox), desktop `sing-box` process |
 | `core/warp` | WARP registration, site probing and classification |
 | `core/update` | In-app updater |
+| `core/relay` | Pairing link, `ManagementKey`, and the signed `RelayAgent` client that manages the relay through the tunnel |
 | `core/data`, `core/domain` | Repositories, use cases, `ChainSupervisor` |
 | `core/designsystem`, `core/ui` | Theme, map, shared composables |
 | `feature/{chain,sites,settings,logs}` | Compose screens and ViewModels |

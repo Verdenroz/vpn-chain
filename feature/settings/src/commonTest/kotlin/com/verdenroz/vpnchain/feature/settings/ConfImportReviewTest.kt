@@ -166,6 +166,7 @@ class ConfImportReviewTest {
             switchProfile = SwitchProfileUseCase(profiles, chain),
             chainRepository = chain,
             changeRouting = ChangeRoutingUseCase(settings, chain),
+            relayPairing = FakePairing(log),
         )
     }
 }

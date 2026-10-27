@@ -17,7 +17,7 @@ import com.verdenroz.vpnchain.core.relay.DeviceRole
 import com.verdenroz.vpnchain.core.relay.Enrolled
 import com.verdenroz.vpnchain.core.relay.JobRequest
 import com.verdenroz.vpnchain.core.relay.ManagementKey
-import com.verdenroz.vpnchain.core.relay.PairingLink
+import com.verdenroz.vpnchain.core.relay.PairingException
 import com.verdenroz.vpnchain.core.relay.RelayAgent
 import com.verdenroz.vpnchain.core.relay.id
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,10 +33,9 @@ private val KEY = object : ManagementKey {
     override suspend fun sign(message: ByteArray) = ByteArray(0)
 }
 
-private val LINK = PairingLink.parse(
+private const val LINK =
     "vpnchain://pair?v=1&h=203.0.113.10&p=443&sni=www.example.com&pbk=pubKeyPUBKEYpubKeyPUBKEYpubKeyPUBKEYpubKeyP" +
-        "&sid=ab12&id=11111111-1111-4111-8111-111111111111&n=laptop&t=tokenTOKENtokenTOKENtokenTOKENtokenTOKENtok&e=2000",
-).getOrThrow()
+        "&sid=ab12&id=11111111-1111-4111-8111-111111111111&n=laptop&t=tokenTOKENtokenTOKENtokenTOKENtokenTOKENtok&e=2000"
 
 private val ROTATED = AgentIdentity("laptop", "22222222-2222-4222-8222-222222222222", "cd34", 443, listOf("www.example.com"))
 
@@ -46,7 +45,7 @@ class PairRelayUseCaseTest {
     private val profiles = PairingProfiles(log)
     private val steps = mutableListOf<PairingStep>()
 
-    private fun pair(
+    private fun useCase(
         enroll: () -> Enrolled = { Enrolled(ROTATED, KEY.id) },
         state: TunnelState = TunnelState.Disconnected,
         connect: Result<Unit> = Result.success(Unit),
@@ -54,13 +53,13 @@ class PairRelayUseCaseTest {
         now: Long = 1_000,
     ) = PairRelayUseCase(profiles, PairingChain(state, log, connect, restart), PairingAgent(enroll), KEY) { now }
 
-    private fun failure(result: Result<Unit>) = assertIs<PairingFailed>(result.exceptionOrNull())
+    private fun failure(result: Result<String>) = assertIs<PairingFailed>(result.exceptionOrNull())
 
     @Test
     fun `a link connects, enrolls and reconnects with the rotated identity`() = runTest {
-        val result = pair()(LINK) { steps += it }
+        val result = useCase().pair(LINK) { step, _ -> steps += step }
 
-        assertTrue(result.isSuccess)
+        assertEquals("203.0.113.10", result.getOrNull())
         assertEquals(listOf(PairingStep.Connecting, PairingStep.Registering, PairingStep.Reconnecting), steps)
         assertEquals(listOf("add:203.0.113.10", "connect", "save", "restart"), log)
         val relay = profiles.profile.value?.relay
@@ -72,14 +71,14 @@ class PairRelayUseCaseTest {
 
     @Test
     fun `a live tunnel is moved onto the new connection instead of started`() = runTest {
-        pair(state = TunnelState.Connected)(LINK) {}
+        useCase(state = TunnelState.Connected).pair(LINK) { _, _ -> }
 
         assertEquals(listOf("add:203.0.113.10", "restart", "save", "restart"), log)
     }
 
     @Test
     fun `an expired link is refused before anything is saved or dialled`() = runTest {
-        val error = failure(pair(now = 2_000)(LINK) {})
+        val error = failure(useCase(now = 2_000).pair(LINK) { _, _ -> })
 
         assertEquals(PairingFailed.Reason.Expired, error.reason)
         assertEquals(emptyList(), log)
@@ -87,7 +86,7 @@ class PairRelayUseCaseTest {
 
     @Test
     fun `a relay that cannot be reached leaves nothing behind`() = runTest {
-        val error = failure(pair(connect = Result.failure(IllegalStateException("no")))(LINK) {})
+        val error = failure(useCase(connect = Result.failure(IllegalStateException("no"))).pair(LINK) { _, _ -> })
 
         assertEquals(PairingStep.Connecting, error.step)
         assertEquals(PairingFailed.Reason.Unreachable, error.reason)
@@ -97,8 +96,8 @@ class PairRelayUseCaseTest {
 
     @Test
     fun `a used token and an expired token read differently`() = runTest {
-        val used = failure(pair(enroll = { throw AgentException(401, "unauthorized") })(LINK) {})
-        val expired = failure(pair(enroll = { throw AgentException(410, "expired") })(LINK) {})
+        val used = failure(useCase(enroll = { throw AgentException(401, "unauthorized") }).pair(LINK) { _, _ -> })
+        val expired = failure(useCase(enroll = { throw AgentException(410, "expired") }).pair(LINK) { _, _ -> })
 
         assertEquals(PairingFailed.Reason.Used, used.reason)
         assertEquals(PairingFailed.Reason.Expired, expired.reason)
@@ -108,7 +107,7 @@ class PairRelayUseCaseTest {
     @Test
     fun `a failed enroll puts back the connection that was active and its tunnel`() = runTest {
         profiles.seed("home")
-        val error = failure(pair(state = TunnelState.Connected, enroll = { throw AgentUnreachable("down") })(LINK) {})
+        val error = failure(useCase(state = TunnelState.Connected, enroll = { throw AgentUnreachable("down") }).pair(LINK) { _, _ -> })
 
         assertEquals(PairingFailed.Reason.Unreachable, error.reason)
         assertEquals("home", profiles.activeProfileId.value)
@@ -117,15 +116,29 @@ class PairRelayUseCaseTest {
 
     @Test
     fun `a reconnect that fails keeps the enrolled connection`() = runTest {
-        val error = failure(pair(restart = Result.failure(IllegalStateException("no")))(LINK) {})
+        val error = failure(useCase(restart = Result.failure(IllegalStateException("no"))).pair(LINK) { _, _ -> })
 
         assertEquals(PairingStep.Reconnecting, error.step)
         assertEquals(KEY.id, profiles.profile.value?.relay?.managementKeyId)
     }
 
     @Test
+    fun `text that is not a link is refused without touching anything`() = runTest {
+        val result = useCase().pair("VPS_IP=203.0.113.10") { _, _ -> }
+
+        assertIs<PairingException>(result.exceptionOrNull())
+        assertEquals(emptyList(), log)
+    }
+
+    @Test
+    fun `only a pairing link is accepted`() {
+        assertTrue(useCase().accepts(LINK))
+        assertTrue(!useCase().accepts("VPS_IP=203.0.113.10"))
+    }
+
+    @Test
     fun `no failure message shows the link`() = runTest {
-        val error = failure(pair(enroll = { throw AgentException(401, "unauthorized") })(LINK) {})
+        val error = failure(useCase(enroll = { throw AgentException(401, "unauthorized") }).pair(LINK) { _, _ -> })
 
         val shown = error.toString() + error.message + error.cause
         for (secret in listOf("tokenTOKEN", "11111111-1111", "ab12", "pubKeyPUBKEY")) {

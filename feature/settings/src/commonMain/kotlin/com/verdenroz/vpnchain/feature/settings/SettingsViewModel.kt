@@ -10,6 +10,9 @@ import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.ChangeRoutingUseCase
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
 import com.verdenroz.vpnchain.core.domain.ImportWireGuardConfUseCase
+import com.verdenroz.vpnchain.core.domain.PairingFailed
+import com.verdenroz.vpnchain.core.domain.PairingStep
+import com.verdenroz.vpnchain.core.domain.RelayPairing
 import com.verdenroz.vpnchain.core.domain.SwitchProfileUseCase
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
@@ -27,6 +30,12 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_impo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_imported_not_connected
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_imported_profile
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_secrets_env_found
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_expired
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_failed
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_no_answer
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_reconnect_failed
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_unreachable
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_used
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_cleared
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_name_blank
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_renamed
@@ -71,6 +80,13 @@ sealed interface PendingImport {
     }
 }
 
+/** Where pairing with a relay has got to. The host is the relay's address; nothing from the link is kept. */
+sealed interface PairingStatus {
+    data class Working(val step: PairingStep, val host: String) : PairingStatus
+    data class Done(val host: String) : PairingStatus
+    data class Failed(val text: UiText) : PairingStatus
+}
+
 /** One-shot user feedback (import result), consumed by the UI. */
 sealed interface SettingsMessage {
     data class Info(val text: UiText) : SettingsMessage
@@ -85,6 +101,7 @@ class SettingsViewModel(
     private val switchProfile: SwitchProfileUseCase,
     private val chainRepository: ChainRepository,
     private val changeRouting: ChangeRoutingUseCase,
+    private val relayPairing: RelayPairing,
 ) : ViewModel() {
 
     val uiState: StateFlow<SettingsUiState> =
@@ -114,6 +131,9 @@ class SettingsViewModel(
 
     private val _pendingImport = MutableStateFlow<PendingImport?>(null)
     val pendingImport: StateFlow<PendingImport?> = _pendingImport.asStateFlow()
+
+    private val _pairing = MutableStateFlow<PairingStatus?>(null)
+    val pairing: StateFlow<PairingStatus?> = _pairing.asStateFlow()
 
     /** Bumped each time pasted text is taken, so the UI can clear the paste field. */
     private val _importsTaken = MutableStateFlow(0)
@@ -222,7 +242,9 @@ class SettingsViewModel(
 
     /** Pasted or scanned text, reviewed before anything is saved. */
     fun importSecretsEnv(text: String) {
-        if (WireGuardConfParser.looksLikeConf(text)) {
+        if (relayPairing.accepts(text)) {
+            pair(text)
+        } else if (WireGuardConfParser.looksLikeConf(text)) {
             reviewConf(text, intoActive = false)
         } else {
             review(SecretsEnvParser.parse(text).map { PendingImport.SecretsEnv(text, it.relay, it.entryHop) })
@@ -230,6 +252,36 @@ class SettingsViewModel(
     }
 
     fun importAsEntryHop(text: String) = reviewConf(text, intoActive = true)
+
+    /** A pairing link is the user's own act to scan or paste, and is single use, so it skips the review. */
+    private fun pair(text: String) {
+        if (_pairing.value is PairingStatus.Working) return
+        _importsTaken.value++
+        viewModelScope.launch {
+            relayPairing.pair(text) { step, host -> _pairing.value = PairingStatus.Working(step, host) }.fold(
+                onSuccess = { _pairing.value = PairingStatus.Done(it) },
+                onFailure = { _pairing.value = PairingStatus.Failed(it.toPairingText((_pairing.value as? PairingStatus.Working)?.host.orEmpty())) },
+            )
+        }
+    }
+
+    fun dismissPairing() {
+        _pairing.value = null
+    }
+
+    private fun Throwable.toPairingText(host: String): UiText {
+        val failed = this as? PairingFailed
+        val resource = when {
+            failed == null -> return message?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.settings_pairing_failed)
+            failed.reason == PairingFailed.Reason.Expired -> Res.string.settings_pairing_expired
+            failed.reason == PairingFailed.Reason.Used -> Res.string.settings_pairing_used
+            failed.reason == PairingFailed.Reason.Unreachable && failed.step == PairingStep.Connecting -> Res.string.settings_pairing_unreachable
+            failed.reason == PairingFailed.Reason.Unreachable -> Res.string.settings_pairing_no_answer
+            failed.step == PairingStep.Reconnecting -> Res.string.settings_pairing_reconnect_failed
+            else -> Res.string.settings_pairing_failed
+        }
+        return UiText.Resource(resource, listOf(host))
+    }
 
     private fun reviewConf(text: String, intoActive: Boolean) =
         review(WireGuardConfParser.parse(text).map { PendingImport.Conf(text, it, intoActive) })
