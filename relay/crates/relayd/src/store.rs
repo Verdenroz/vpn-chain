@@ -1,6 +1,6 @@
-use std::fs::{self, OpenOptions, Permissions};
-use std::io::{ErrorKind, Write};
-use std::os::unix::fs::PermissionsExt;
+use std::fs::{self, File, OpenOptions, Permissions};
+use std::io::{self, ErrorKind, Write};
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -84,17 +84,21 @@ fn stage(path: &Path, contents: &[u8], mode: u32) -> Result<PathBuf, Error> {
         Err(error) if error.kind() != ErrorKind::NotFound => return Err(at(error)),
         _ => {}
     }
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&pending)
-        .map_err(at)?;
-    // Set after opening, since the umask narrows the mode given at creation.
+    let mut file = open_new(&pending, mode).map_err(at)?;
+    // The umask can only narrow the mode given at creation, so it is set again exactly.
     file.set_permissions(Permissions::from_mode(mode))
         .map_err(at)?;
     file.write_all(contents).map_err(at)?;
     file.sync_all().map_err(at)?;
     Ok(pending)
+}
+
+fn open_new(path: &Path, mode: u32) -> io::Result<File> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(mode)
+        .open(path)
 }
 
 fn sync_parent(path: &Path) -> Result<(), Error> {
@@ -105,4 +109,19 @@ fn sync_parent(path: &Path) -> Result<(), Error> {
     fs::File::open(parent)
         .and_then(|dir| dir.sync_all())
         .map_err(|error| Error::at(parent, error))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_private_file_is_private_from_the_moment_it_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("keys");
+
+        let file = open_new(&path, 0o600).unwrap();
+
+        assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+    }
 }
