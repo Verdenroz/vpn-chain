@@ -153,6 +153,8 @@ fn valid_short_id(id: &str) -> bool {
         && id.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+/// A direct exit may still have a key in secrets: an exit change writes the secrets and the
+/// state separately, and either order leaves one of the two ahead of the other.
 /// xray's `x25519` prints the REALITY key unpadded base64url; WireGuard keys are padded base64.
 fn check_keys(relay: &Relay) -> Result<(), Error> {
     let secrets = &relay.secrets;
@@ -167,9 +169,6 @@ fn check_keys(relay: &Relay) -> Result<(), Error> {
         )),
         (Exit::WireGuard { .. }, Some(key)) if !decodes_to_key(&STANDARD, key) => Err(Error::new(
             "the WireGuard exit key is not 32 bytes of base64",
-        )),
-        (Exit::Direct, Some(_)) => Err(Error::new(
-            "secrets hold an exit key but the exit is direct",
         )),
         _ => Ok(()),
     }
