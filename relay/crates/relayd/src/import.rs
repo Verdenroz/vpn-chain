@@ -91,11 +91,8 @@ struct Peer {
 /// empty short ID list), and any config it could not render back the same, so nothing the relay
 /// serves today is dropped. Every device comes in as a member: none has a management key yet.
 pub fn import(config: &Path, devices: &Path) -> Result<Relay, Error> {
-    let tracked: BTreeMap<String, Tracked> = if devices.exists() {
-        store::read_json(devices)?
-    } else {
-        BTreeMap::new()
-    };
+    let tracked: BTreeMap<String, Tracked> =
+        store::read_json_if_present(devices)?.unwrap_or_default();
     let config_json: Value = store::read_json(config)?;
     adopt(&config_json, tracked).map_err(|error| Error::at(config, error))
 }
@@ -110,13 +107,16 @@ fn adopt(config: &Value, mut tracked: BTreeMap<String, Tracked>) -> Result<Relay
     }
     refuse_untracked(&clients, &tracked)?;
 
-    let devices: Vec<Device> = clients
+    let devices = clients
         .into_iter()
         .map(|client| {
-            let entry = tracked
-                .remove(&client.email)
-                .expect("every client is tracked");
-            Device {
+            let entry = tracked.remove(&client.email).ok_or_else(|| {
+                Error::new(format!(
+                    "client {} is listed twice in the config",
+                    client.email
+                ))
+            })?;
+            Ok(Device {
                 name: client.email,
                 uuid: client.id,
                 short_id: entry.short_id,
@@ -125,9 +125,9 @@ fn adopt(config: &Value, mut tracked: BTreeMap<String, Tracked>) -> Result<Relay
                 up: entry.up,
                 down: entry.down,
                 seen: entry.seen,
-            }
+            })
         })
-        .collect();
+        .collect::<Result<Vec<Device>, Error>>()?;
     if !tracked.is_empty() {
         let names: Vec<&str> = tracked.keys().map(String::as_str).collect();
         return Err(Error::new(format!(
@@ -243,7 +243,7 @@ fn section<T: DeserializeOwned>(config: &Value, list: &str, tag: &str) -> Result
     };
     T::deserialize(entry)
         .map(Some)
-        .map_err(|error| Error::new(format!("the {tag} entry: {error}")))
+        .map_err(|error| Error::new(format!("the {tag} entry: {}", store::redacted(&error))))
 }
 
 fn refuse_unmodelled(config: &Value, relay: &Relay) -> Result<(), Error> {

@@ -279,3 +279,31 @@ fn a_config_without_the_reality_inbound_is_refused() {
 
     assert!(error.contains("no vless-reality-443 inbound"), "{error}");
 }
+
+#[test]
+fn a_client_listed_twice_is_refused() {
+    let error = import_edited(
+        |config| {
+            let clients = config["inbounds"][0]["settings"]["clients"]
+                .as_array_mut()
+                .unwrap();
+            clients.push(clients[1].clone());
+        },
+        |_| {},
+    );
+
+    assert!(
+        error.contains("client laptop is listed twice in the config"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_mistyped_short_id_list_is_refused_without_quoting_it() {
+    let error = import_edited(
+        |config| *short_ids(config) = json!("a1b2c3d4e5f60718"),
+        |_| {},
+    );
+
+    assert!(error.contains("invalid type: string \"..\""), "{error}");
+}

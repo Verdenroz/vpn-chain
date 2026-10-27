@@ -126,6 +126,26 @@ fn a_short_id_held_twice_is_refused() {
 }
 
 #[test]
+fn a_mistyped_key_is_refused_without_quoting_it() {
+    let (_dir, path) = scratch();
+    write_state(&path, |state| {
+        state["devices"][0]["up"] = state["devices"][0]["uuid"].clone();
+    });
+
+    let error = load_error(&path);
+    assert!(error.contains("invalid type: string \"..\""), "{error}");
+    assert_no_secret(&error);
+}
+
+#[test]
+fn an_inbound_the_server_scripts_cannot_find_is_refused() {
+    let (_dir, path) = scratch();
+    write_state(&path, |state| state["inbound"]["tag"] = "vless".into());
+
+    assert!(load_error(&path).contains("the inbound tag must be vless-reality-443"));
+}
+
+#[test]
 fn an_empty_short_id_is_refused() {
     let (_dir, path) = scratch();
     write_state(&path, |state| state["devices"][1]["shortId"] = "".into());

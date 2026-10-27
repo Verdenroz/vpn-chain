@@ -1,7 +1,10 @@
 use std::collections::HashSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{Error, Secret, store};
 
@@ -129,16 +132,23 @@ impl Relay {
     }
 
     /// Writes both files, refusing to replace either. Secrets go first, so a state file never
-    /// exists without them.
+    /// exists without them, and are removed again if the state cannot be written.
     pub fn create(&self, state: &Path, secrets: &Path) -> Result<(), Error> {
         self.validate()?;
         store::absent(state)?;
         store::create(secrets, &to_json(&self.secrets), 0o600)?;
-        store::create(state, &to_json(&self.state), 0o600)
+        store::create(state, &to_json(&self.state), 0o600).inspect_err(|_| {
+            let _ = fs::remove_file(secrets);
+        })
     }
 
     pub fn validate(&self) -> Result<(), Error> {
         let state = &self.state;
+        if state.inbound.tag != INBOUND_TAG {
+            return Err(Error::new(format!(
+                "the inbound tag must be {INBOUND_TAG}, the name the server scripts look for"
+            )));
+        }
         if state.inbound.server_names.is_empty() {
             return Err(Error::new("the inbound has no server names"));
         }
@@ -156,14 +166,12 @@ impl Relay {
     }
 }
 
-fn read_versioned<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, Error> {
-    #[derive(Deserialize)]
-    struct Envelope {
-        v: Option<u32>,
-    }
-    let Envelope { v } = store::read_json(path)?;
-    match v {
-        Some(SCHEMA) => store::read_json(path),
+fn read_versioned<T: DeserializeOwned>(path: &Path) -> Result<T, Error> {
+    let json: Value = store::read_json(path)?;
+    match json.get("v").and_then(Value::as_u64) {
+        Some(v) if v == u64::from(SCHEMA) => {
+            T::deserialize(json).map_err(|error| Error::at(path, store::redacted(&error)))
+        }
         Some(other) => Err(Error::at(
             path,
             format!("written by schema v{other}; this relayd reads v{SCHEMA}"),

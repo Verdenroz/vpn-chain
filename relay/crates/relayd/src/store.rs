@@ -8,8 +8,31 @@ use serde::de::DeserializeOwned;
 use crate::Error;
 
 pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, Error> {
-    let text = fs::read_to_string(path).map_err(|error| Error::at(path, error))?;
-    serde_json::from_str(&text).map_err(|error| Error::at(path, error))
+    read_json_if_present(path)?.ok_or_else(|| Error::at(path, "no such file"))
+}
+
+/// Like [`read_json`], with a missing file as `None`. Any other read error still fails.
+pub fn read_json_if_present<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, Error> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(Error::at(path, error)),
+    };
+    serde_json::from_str(&text)
+        .map(Some)
+        .map_err(|error| Error::at(path, redacted(&error)))
+}
+
+/// serde's message with every quoted value blanked, since the value may be a key or UUID.
+/// Field and variant names are quoted with backticks and survive.
+pub fn redacted(error: &serde_json::Error) -> String {
+    error
+        .to_string()
+        .split('"')
+        .enumerate()
+        .map(|(index, part)| if index % 2 == 1 { ".." } else { part })
+        .collect::<Vec<_>>()
+        .join("\"")
 }
 
 /// Replaces `path` so that a crash leaves either the old file or the new one.
@@ -46,7 +69,8 @@ fn exists(path: &Path) -> Error {
 }
 
 fn stage(path: &Path, contents: &[u8], mode: u32) -> Result<std::path::PathBuf, Error> {
-    let pending = path.with_extension("tmp");
+    let name = path.file_name().expect("a file path has a name");
+    let pending = path.with_file_name(format!(".{}.tmp", name.to_string_lossy()));
     let at = |error| Error::at(&pending, error);
     match fs::remove_file(&pending) {
         Err(error) if error.kind() != ErrorKind::NotFound => return Err(at(error)),
