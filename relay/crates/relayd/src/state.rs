@@ -126,15 +126,14 @@ impl Relay {
         Ok(relay)
     }
 
-    /// Writes both files, refusing to replace either. Secrets go first, so a state file never
-    /// exists without them, and are removed again if the state cannot be written.
+    /// Writes both files, refusing to replace an existing state. Secrets go first, so a state
+    /// never exists without them. A secrets file with no state beside it is what a crash
+    /// between the two writes leaves, so it is replaced.
     pub fn create(&self, state: &Path, secrets: &Path) -> Result<(), Error> {
         self.validate()?;
         store::absent(state)?;
-        store::create(secrets, &store::to_json(&self.secrets), 0o600)?;
-        store::create(state, &store::to_json(&self.state), 0o600).inspect_err(|_| {
-            let _ = fs::remove_file(secrets);
-        })
+        store::replace(secrets, &store::to_json(&self.secrets), 0o600)?;
+        store::create(state, &store::to_json(&self.state), 0o600)
     }
 
     pub fn validate(&self) -> Result<(), Error> {

@@ -88,6 +88,17 @@ fn create_refuses_to_replace_an_existing_state() {
 }
 
 #[test]
+fn secrets_left_without_a_state_are_replaced() {
+    let (_dir, path) = scratch();
+    let relay = relay("relay-direct");
+    fs::write(secrets_path(&path), "left by a crash").unwrap();
+
+    relay.create(&path, &secrets_path(&path)).unwrap();
+
+    assert_eq!(Relay::load(&path, &secrets_path(&path)).unwrap(), relay);
+}
+
+#[test]
 fn an_unknown_schema_version_is_refused() {
     let (_dir, path) = scratch();
     write_state(&path, |state| state["v"] = 2.into());
