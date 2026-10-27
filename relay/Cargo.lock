@@ -899,6 +899,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "263a3f48f01e7309e857138bd47f785585b4a005e8e56c6d2824ce91195999c3"
 
 [[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -967,6 +973,7 @@ dependencies = [
  "getrandom",
  "live-harness",
  "p256",
+ "qrcode",
  "relay-jobs",
  "serde",
  "serde_json",

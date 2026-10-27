@@ -1,5 +1,6 @@
 mod args;
 mod device_cmd;
+mod pair_cmd;
 mod serve_cmd;
 mod target;
 
@@ -25,6 +26,7 @@ const USAGE: &str = "usage: relayd import --config <config.json> [--devices <dev
        relayd maintenance refill-pool <target>
        relayd keys add <device> --public-key <file> [--role member|admin] --state <state.json> [--secrets <secrets.json>] [--lock <file>]
        relayd serve [--audit <audit.jsonl>] [--jobs <state dir>] <target>
+       relayd pair [--device <name>] [--state <state.json>] [--secrets <secrets.json>] [--lock <file>]
 target: --state <state.json> --config <config.json> [--secrets <secrets.json>] [--lock <file>] [--xray <path>] [--group <name>] [--spares <n>]";
 
 const EX_USAGE: u8 = 64;
@@ -40,6 +42,7 @@ fn main() -> ExitCode {
         ["maintenance", rest @ ..] => device_cmd::maintenance(rest),
         ["keys", rest @ ..] => serve_cmd::keys(rest),
         ["serve", rest @ ..] => serve_cmd::serve(rest),
+        ["pair", rest @ ..] => pair_cmd::pair(rest),
         _ => None,
     };
     match result {
