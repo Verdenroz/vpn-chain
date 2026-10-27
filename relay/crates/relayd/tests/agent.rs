@@ -368,6 +368,17 @@ fn pairing_an_unknown_device_is_a_404_and_the_callers_own_is_a_409() {
 }
 
 #[test]
+fn an_admin_cannot_cut_off_its_own_device() {
+    let rig = Rig::start(false, SPARES);
+
+    let reply = rig.admin("DELETE", "/v1/devices/laptop", "");
+
+    assert_eq!(reply.status, 409);
+    assert_eq!(rig.relay().state.devices.len(), 2);
+    assert!(rig.live.calls().is_empty());
+}
+
+#[test]
 fn an_admin_renames_and_the_key_follows_the_device() {
     let rig = Rig::start(false, SPARES);
 

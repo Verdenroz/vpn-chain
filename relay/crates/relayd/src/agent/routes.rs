@@ -246,7 +246,12 @@ async fn revoke_device(
     let call = Call::new(service, who, "devices.revoke", known(name.clone()));
     let admin = call.is_admin();
     let (counters_lost, job) = call
-        .run(admin, move |service, _| {
+        .run(admin, move |service, who| {
+            if who.device == name {
+                return Err(Error::conflict(
+                    "this device cannot cut itself off: the relay could be left without an admin",
+                ));
+            }
             service.operate(|manager| manager.revoke(&name, false))
         })
         .await?;
