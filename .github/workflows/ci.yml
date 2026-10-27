@@ -19,6 +19,7 @@ jobs:
       server: ${{ steps.diff.outputs.server }}
       gradle: ${{ steps.diff.outputs.gradle }}
       deb: ${{ steps.diff.outputs.deb }}
+      arch: ${{ steps.diff.outputs.arch }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -36,6 +37,7 @@ jobs:
             echo "server=$(touched '^(server/|relay/crates/relayd/src/egress[^/]*\.rs$|\.github/workflows/(server-tests|ci)\.yml$)')"
             echo "gradle=$(touched '(\.kts?$|/src/.*/composeResources/|^gradle/|^gradle\.properties$|^build-logic/|^\.github/workflows/(test|ci)\.yml$)')"
             echo "deb=$(touched '^(desktopApp/|cli/(killswitch|polkit|systemd)/|server/lib/pins\.sh$|server/tests/fetch-singbox\.sh$|gradle/libs\.versions\.toml$|gradle\.properties$|\.github/workflows/(deb|ci)\.yml$)')"
+            echo "arch=$(touched '^(desktopApp/|cli/(killswitch|polkit|systemd)/|server/lib/pins\.sh$|server/tests/fetch-singbox\.sh$|gradle/libs\.versions\.toml$|gradle\.properties$|\.github/workflows/(arch|ci)\.yml$)')"
           } >>"$GITHUB_OUTPUT"
 
   relay:
@@ -58,8 +60,13 @@ jobs:
     if: needs.changes.outputs.deb == 'true'
     uses: ./.github/workflows/deb.yml
 
+  arch:
+    needs: changes
+    if: needs.changes.outputs.arch == 'true'
+    uses: ./.github/workflows/arch.yml
+
   ci-ok:
-    needs: [changes, relay, server, gradle, deb]
+    needs: [changes, relay, server, gradle, deb, arch]
     if: always()
     runs-on: ubuntu-latest
     steps:

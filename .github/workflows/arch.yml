@@ -1,0 +1,57 @@
+# Builds the Linux desktop app as an Arch package, lints it with namcap, and installs and
+# removes it in an Arch container. The release workflow calls this one, so a tag builds
+# exactly what a pull request proved.
+name: arch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "desktopApp/**"
+      - "cli/killswitch/**"
+      - "cli/polkit/**"
+      - "cli/systemd/**"
+      - "server/lib/pins.sh"
+      - "server/tests/fetch-singbox.sh"
+      - "gradle/libs.versions.toml"
+      - "gradle.properties"
+      - ".github/workflows/arch.yml"
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  arch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "21"
+      # The project's gradle.properties pins a local JDK path; the user-home
+      # file takes precedence, so point it at the runner's JDK instead.
+      - name: Use runner JDK
+        run: |
+          mkdir -p ~/.gradle
+          echo "org.gradle.java.home=$JAVA_HOME" >> ~/.gradle/gradle.properties
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Build the app image
+        run: ./gradlew :desktopApp:createReleaseDistributable
+      - name: Build the package
+        run: desktopApp/arch/build-in-container.sh desktopApp/build/compose/binaries/main-release/app/vpn-chain dist
+      - name: Lint
+        run: |
+          pkg="$(basename dist/*.pkg.tar.zst)"
+          docker run --rm -v "$PWD/desktopApp/arch:/arch:ro" -v "$PWD/dist:/dist:ro" \
+            "$(cat desktopApp/arch/image)" /arch/lint.sh "/dist/$pkg"
+      - name: Install and remove
+        run: desktopApp/arch/test-install.sh dist/*.pkg.tar.zst
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-linux-x64-arch
+          path: dist/*.pkg.tar.zst
