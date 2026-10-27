@@ -1,0 +1,17 @@
+# The app carries its own JRE and Compose libraries under /opt, and a Go binary.
+vpn-chain: dir-or-file-in-opt
+vpn-chain: embedded-library *
+vpn-chain: library-not-linked-against-libc *
+vpn-chain: unstripped-binary-or-object *
+vpn-chain: codeless-jar *
+vpn-chain: jar-not-in-usr-share *
+vpn-chain: extra-license-file *
+vpn-chain: package-contains-documentation-outside-usr-share-doc *
+vpn-chain: hardening-no-pie *
+vpn-chain: hardening-no-relro *
+vpn-chain: hardening-no-bindnow *
+# No debhelper: the unit is static and the scripts reload systemd themselves.
+vpn-chain: maintainer-script-calls-systemctl *
+vpn-chain: systemd-service-file-missing-install-key *
+# A helper the app runs, with usage text of its own.
+vpn-chain: no-manual-page *

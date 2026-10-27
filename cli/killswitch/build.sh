@@ -16,7 +16,7 @@ command -v setcap >/dev/null || echo "note: 'setcap' not found — install libca
 [ -f /usr/include/sys/capability.h ] || echo "note: libcap dev headers not found — install libcap-devel/libcap-dev if the compile below fails." >&2
 
 log "Compiling $SRC -> $OUT"
-gcc -O2 -Wall -o "$OUT" "$SRC" -lcap
+gcc -O2 -Wall -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now -o "$OUT" "$SRC" -lcap
 
 log "Built. One-time step to actually enable it:"
 printf '  %ssudo setcap cap_net_admin=eip %s%s\n' "$c_grn" "$OUT" "$c_off"
