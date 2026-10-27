@@ -30,8 +30,10 @@ stays open either way.
    ```
 
    It checks that the download is ours, sets up your relay, and prints a QR code
-   and a link. They work once, for 15 minutes. If they run out, `sudo relayd pair`
-   on the VPS prints new ones.
+   and a link. They work once, for 24 hours. If they run out, run the same command
+   again: it prints a new code until the first device is set up. If you ever lose
+   every device that manages the relay, `sudo relayd pair` on the VPS prints a code
+   for the first one again.
 
 2. Install the app.
    - **Linux (x64, Debian or Ubuntu):** download `vpn-chain_<version>_amd64.deb` from the
