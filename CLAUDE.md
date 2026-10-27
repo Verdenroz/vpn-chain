@@ -88,3 +88,8 @@ invisible in testing.
 **Docs**
 - [ ] Read the linked doc before changing WARP, the kill switch, or Android resilience.
 - [ ] Read [.impeccable.md](.impeccable.md) before touching `core/designsystem` or a feature's Compose UI.
+
+## Traps
+
+- Xray 26.10.21 rejects the sing-box 1.14.3 (and 1.13.14) REALITY client: the server forwards it to the decoy. The relay is pinned in `server/lib/pins.sh`; bump it only with `server/tests/matrix.sh` green.
+- SSH to the VPS rides the chain. Restarting xray kills a session that is mid-operation, so run restarts detached and reconnect to check.
