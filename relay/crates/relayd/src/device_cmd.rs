@@ -149,7 +149,14 @@ fn revoke(args: &[&str]) -> Option<Result<(), Error>> {
     let force = args.has("force");
     let target = Target::from(&mut args)?;
     let revoked = target.manage(|manager| manager.revoke(&name, force));
-    Some(revoked.map(|()| println!("revoked {name}; xray restarted, so open connections dropped")))
+    Some(revoked.map(|counters_lost| {
+        if counters_lost {
+            eprintln!(
+                "relayd: warning: xray's API did not answer, so the traffic counted since the last fold is lost"
+            );
+        }
+        println!("revoked {name}; xray restarted, so open connections dropped")
+    }))
 }
 
 fn print_devices(devices: &[Device]) {

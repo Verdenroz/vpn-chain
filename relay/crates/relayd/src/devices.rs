@@ -1,9 +1,10 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
 use uuid::Uuid;
-use xray_api::{UserId, VlessUser};
+use xray_api::{Traffic, UserId, VlessUser};
 
 use crate::identity::Identity;
 use crate::live::fold;
@@ -149,9 +150,12 @@ impl Manager<'_> {
 
     /// Removes the device, refills the pool and restarts xray, since an open connection
     /// survives the removal of its user until then. The last admin stays unless `force`.
-    pub fn revoke(&self, name: &str, force: bool) -> Result<(), Error> {
+    ///
+    /// A revocation goes ahead when xray's API cannot be read, because it must work when
+    /// xray is the problem. Returns whether the counters since the last fold were lost then.
+    pub fn revoke(&self, name: &str, force: bool) -> Result<bool, Error> {
         let _held = store::lock_within(self.lock, self.lock_wait)?;
-        let relay = self.begin()?;
+        let (relay, counters_lost) = self.begin_lenient()?;
         let device = find(&relay, name)?;
         let admins = relay
             .state
@@ -173,7 +177,8 @@ impl Manager<'_> {
             .collect();
         let spares = topped_up(relay.state.spare_short_ids.clone(), self.spares);
         self.write_out(&relay, &changed(&relay, devices, spares))?;
-        self.restart_xray()
+        self.restart_xray()?;
+        Ok(counters_lost)
     }
 
     /// Fills the pool back to its size and restarts xray to load the saved config, which also
@@ -195,7 +200,20 @@ impl Manager<'_> {
     fn begin(&self) -> Result<Relay, Error> {
         let relay = Relay::load(self.state, self.secrets)?;
         let traffic = self.live.drain_traffic().map_err(api_error)?;
-        let devices = fold(&relay.state.devices, &traffic, &(self.now)());
+        self.folded(relay, &traffic)
+    }
+
+    /// [`Manager::begin`] that carries on without the counters when xray's API fails.
+    fn begin_lenient(&self) -> Result<(Relay, bool), Error> {
+        let relay = Relay::load(self.state, self.secrets)?;
+        match self.live.drain_traffic() {
+            Ok(traffic) => Ok((self.folded(relay, &traffic)?, false)),
+            Err(_) => Ok((relay, true)),
+        }
+    }
+
+    fn folded(&self, relay: Relay, traffic: &BTreeMap<String, Traffic>) -> Result<Relay, Error> {
+        let devices = fold(&relay.state.devices, traffic, &(self.now)());
         let folded = changed(&relay, devices, relay.state.spare_short_ids.clone());
         folded.save_state(self.state)?;
         Ok(folded)
