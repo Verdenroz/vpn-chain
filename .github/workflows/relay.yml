@@ -7,9 +7,9 @@ name: relay
 on:
   push:
     branches: [main]
-    paths: ["relay/**", "server/lib/pins.sh", ".github/workflows/relay.yml"]
+    paths: ["relay/**", "server/lib/pins.sh", "server/tests/Dockerfile", ".github/workflows/relay.yml"]
   pull_request:
-    paths: ["relay/**", "server/lib/pins.sh", ".github/workflows/relay.yml"]
+    paths: ["relay/**", "server/lib/pins.sh", "server/tests/Dockerfile", ".github/workflows/relay.yml"]
 
 permissions:
   contents: read
@@ -55,3 +55,23 @@ jobs:
       - run: crates/relay-jobs/tests/live/run.sh
         env:
           RELAY_JOBS_DOCKER_EXTRA: --security-opt apparmor=unconfined
+
+  install-live:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [debian, ubuntu]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - run: rustup target add x86_64-unknown-linux-musl
+      - run: crates/relayd/tests/install/run.sh ${{ matrix.distro }}
+        env:
+          RELAY_JOBS_DOCKER_EXTRA: --security-opt apparmor=unconfined
+      - run: crates/relayd/tests/install/setup-test.sh
+        if: matrix.distro == 'debian'
