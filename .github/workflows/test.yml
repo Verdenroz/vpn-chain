@@ -1,0 +1,37 @@
+# Runs the Gradle unit tests (commonTest and desktopTest) when Kotlin or build files change.
+name: test
+
+on:
+  pull_request:
+    paths:
+      - "**/*.kt"
+      - "**/*.kts"
+      - "**/src/**/composeResources/**"
+      - "gradle/**"
+      - "gradle.properties"
+      - "build-logic/**"
+      - ".github/workflows/test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "21"
+      # The project's gradle.properties pins a local JDK path; the user-home
+      # file takes precedence, so point it at the runner's JDK instead.
+      - name: Use runner JDK
+        run: |
+          mkdir -p ~/.gradle
+          echo "org.gradle.java.home=$JAVA_HOME" >> ~/.gradle/gradle.properties
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      - name: Test
+        run: ./gradlew test
