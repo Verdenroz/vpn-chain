@@ -78,10 +78,11 @@ fn spki_der(public_key: &[u8]) -> Result<Vec<u8>, Error> {
 }
 
 fn id_of(der: &[u8]) -> String {
-    Sha256::digest(der)[..ID_BYTES]
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    hex(&Sha256::digest(der)[..ID_BYTES])
+}
+
+pub(crate) fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// Lets the key `public_key` (PEM or DER) manage the relay as `role`, from the device `device`.

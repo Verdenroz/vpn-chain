@@ -124,6 +124,22 @@ fn a_v1_state_migrates_with_the_default_agent_port_and_no_keys() {
 }
 
 #[test]
+fn a_v1_state_whose_port_is_the_default_agent_port_migrates_to_the_next_free_one() {
+    let (_dir, path) = scratch();
+    write_state(&path, |state| {
+        let state = state.as_object_mut().unwrap();
+        state.insert("v".to_owned(), 1.into());
+        state.remove("agent");
+        state.remove("keys");
+        state["api"]["port"] = AGENT_PORT.into();
+    });
+
+    let migrated = Relay::load(&path, &secrets_path(&path)).unwrap();
+
+    assert_eq!(migrated.state.agent.port, AGENT_PORT + 1);
+}
+
+#[test]
 fn a_saved_migrated_state_is_the_current_schema() {
     let (_dir, path) = scratch();
     write_state(&path, |state| {

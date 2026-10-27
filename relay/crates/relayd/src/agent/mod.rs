@@ -1,9 +1,10 @@
 //! The agent: the HTTP API the app reaches through its own tunnel to manage the relay.
 //!
 //! It listens on loopback only. xray routes the reserved name [`crate::AGENT_HOST`] to that port
-//! for any client that authenticated to REALITY, and every other loopback port stays blocked, so
-//! the API has no public address to scan. Each request must also carry a signature from a
-//! management key relayd holds, which is what tells an admin from a member.
+//! for any client that authenticated to REALITY, so the API has no public address to scan. The
+//! name is matched on what the client sends, including an HTTP Host header or TLS server name.
+//! Each request must also carry a signature from a management key relayd holds, which is what
+//! tells an admin from a member.
 //!
 //! Routes, all JSON under `/v1`; the signed message is described at [`message`]:
 //!

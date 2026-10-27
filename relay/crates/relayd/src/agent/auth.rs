@@ -9,6 +9,7 @@ use p256::ecdsa::Signature;
 use p256::ecdsa::signature::Verifier as _;
 use sha2::{Digest, Sha256};
 
+use crate::key::hex;
 use crate::{Key, Role};
 
 /// How far a request's timestamp may sit from the relay's clock, in seconds.
@@ -18,16 +19,13 @@ pub const WINDOW: u64 = 120;
 pub const CONTEXT: &str = "vpn-chain-relay-v1";
 
 const NONCE_LENGTH: RangeInclusive<usize> = 16..=64;
-const REMEMBERED: usize = 8192;
+const REMEMBERED: usize = 1024;
 
 /// The message a management key signs, as five lines after [`CONTEXT`]: the method, the request
 /// target exactly as sent (path and query), the lowercase hex SHA-256 of the body, the timestamp
 /// in unix seconds, and the nonce. The signature is ECDSA over P-256 and SHA-256, DER encoded.
 pub fn message(method: &str, target: &str, body: &[u8], timestamp: &str, nonce: &str) -> String {
-    let digest: String = Sha256::digest(body)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
+    let digest = hex(&Sha256::digest(body));
     format!("{CONTEXT}\n{method}\n{target}\n{digest}\n{timestamp}\n{nonce}")
 }
 
@@ -94,7 +92,8 @@ impl Default for Verifier {
 }
 
 impl Verifier {
-    /// A verifier that refuses new requests while it holds `capacity` unexpired nonces.
+    /// A verifier that refuses a key's new requests while it holds `capacity` of that key's
+    /// unexpired nonces, so one key cannot lock the others out.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             seen: Mutex::default(),
@@ -158,7 +157,7 @@ impl Verifier {
         if seen.contains_key(&(key.to_owned(), nonce.to_owned())) {
             return Err(Why::Replayed);
         }
-        if seen.len() >= self.capacity {
+        if seen.keys().filter(|(held, _)| held == key).count() >= self.capacity {
             return Err(Why::Overloaded);
         }
         seen.insert((key.to_owned(), nonce.to_owned()), now + 2 * WINDOW);
