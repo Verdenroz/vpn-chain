@@ -17,6 +17,7 @@ trap 'rm -f "$OUT"' EXIT
 rc=0
 for x in $XRAY_VERSIONS; do
     E2E_XRAY_VERSION="$x" "$HERE/e2e.sh" | tee -a "$OUT" || rc=1
+    REFUSE_XRAY_VERSION="$x" "$HERE/refuse.sh" || rc=1
 done
 
 if [ "${KNOWN_BAD:-0}" = 1 ]; then

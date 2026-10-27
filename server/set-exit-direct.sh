@@ -46,6 +46,11 @@ jq '
   | .routing.rules |= map(if (.network == "tcp,udp") then .outboundTag = "direct" else . end)
   # 3. drop any remaining rule that pointed at Proton (e.g. the Proton-DNS rule)
   | .routing.rules |= map(select((.outboundTag // "") != "exit-wg"))
+  # 4. a direct exit dials from this machine, so names must be resolved before the
+  #    private-address rule, as deploy-server.sh sets them up
+  | .routing.domainStrategy = "IPOnDemand"
+  | .dns = { servers: ["localhost"] }
+  | (.outbounds[] | select(.tag == "direct") | .settings) = { domainStrategy: "UseIP" }
 ' "$XRAY_CONFIG" > "$tmp" || die "jq transform failed (original left in place)"
 
 "$XRAY_BIN" -test -config "$tmp" >/dev/null \

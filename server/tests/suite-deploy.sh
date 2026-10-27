@@ -40,6 +40,10 @@ check "access log stays off" test "$(jq -r .log.access "$CFG")" = none
 check "stats API listens on loopback only" test "$(jq -r '.inbounds[] | select(.tag == "api") | .listen' "$CFG")" = 127.0.0.1
 check "per-user counters enabled" test "$(jq -r '.policy.levels["0"] | .statsUserUplink and .statsUserDownlink' "$CFG")" = true
 check "api rule routes before the catch-all" test "$(jq -r '.routing.rules[0].inboundTag[0]' "$CFG")" = api
+check "a direct exit resolves names before the private-address rule" test "$(jq -r .routing.domainStrategy "$CFG")" = IPOnDemand
+check "a direct exit dials the answer it resolved" test "$(jq -r '.outbounds[] | select(.tag == "direct") | .settings.domainStrategy' "$CFG")" = UseIP
+check "xray resolves names with the system resolver" test "$(jq -c .dns "$CFG")" = '{"servers":["localhost"]}'
+check "the private-address rule still precedes the catch-all" test "$(jq -r '.routing.rules[-2].ip[0]' "$CFG")" = geoip:private
 check "devices.sh list sees no drift" bash -c '! bash "$1/xray-clients.sh" list 2>&1 | grep -q WARN' _ "$SERVER"
 
 # ---- re-run keeps everything ---------------------------------------------
@@ -79,6 +83,22 @@ check "DEVICE_NAME names the client" test "$(clients)" = laptop
 check "Proton config passes xray -test" valid
 check "Proton chain is the catch-all exit" test "$(jq -r '.routing.rules[-1].outboundTag' "$CFG")" = exit-wg
 check "device file named after the device" test -f "$W/vpn-chain-laptop.env"
+check "a Proton exit leaves names to its tunnel" test "$(jq -r .routing.domainStrategy "$CFG")" = AsIs
+check "a Proton exit adds no dns section" bash -c '! jq -e "has(\"dns\")" "$1"' _ "$CFG"
+check "a Proton exit keeps the plain direct outbound" test "$(jq -c '.outbounds[] | select(.tag == "direct")' "$CFG")" = '{"tag":"direct","protocol":"freedom"}'
+
+# ---- set-exit-direct.sh --------------------------------------------------
+mkdir "$W/bin"
+ln -s "$XRAY" "$W/bin/xray"
+printf '#!/bin/sh\nexit 0\n' > "$W/bin/systemctl"
+chmod +x "$W/bin/systemctl"
+PATH="$W/bin:$PATH" bash "$SERVER/set-exit-direct.sh" >/dev/null 2>&1 && RC=0 || RC=$?
+check "set-exit-direct exits 0" test "$RC" -eq 0
+check "set-exit-direct leaves a valid config" valid
+check "set-exit-direct drops the Proton outbound" test "$(jq '[.outbounds[] | select(.tag == "exit-wg")] | length' "$CFG")" -eq 0
+check "set-exit-direct resolves names before the private-address rule" test "$(jq -r .routing.domainStrategy "$CFG")" = IPOnDemand
+check "set-exit-direct adds the system resolver" test "$(jq -c .dns "$CFG")" = '{"servers":["localhost"]}'
+check "set-exit-direct makes the direct outbound dial the resolved answer" test "$(jq -r '.outbounds[] | select(.tag == "direct") | .settings.domainStrategy' "$CFG")" = UseIP
 
 # ---- xray version pin ----------------------------------------------------
 setup
@@ -140,6 +160,7 @@ check "legacy client kept as client1" test "$(clients)" = client1
 check "legacy uuid kept" test "$(uuid_of client1)" = 11111111-1111-4111-8111-111111111111
 check "legacy short ID kept" test "$(sids)" = 0123456789abcdef
 check "legacy keypair kept" test "$(inb '.streamSettings.realitySettings.privateKey')" = mJZadK8WS3D6oFxqlXypqkrdiBeHBIYIvLY2GjDo0nA
+check "legacy re-run resolves names before the private-address rule" test "$(jq -r .routing.domainStrategy "$CFG")" = IPOnDemand
 check "legacy re-run gains the stats API" test "$(jq -r '.inbounds[] | select(.tag == "api") | .port' "$CFG")" = 10085
 check "legacy re-run invents no sidecar" test ! -e "$SIDECAR"
 check "legacy config can then be adopted" bash -c 'bash "$1/xray-clients.sh" adopt laptop >/dev/null 2>&1' _ "$SERVER"
