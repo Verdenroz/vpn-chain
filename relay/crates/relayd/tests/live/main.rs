@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use live_harness::{ECHO_HOST, SING_BOX, Tunnel};
+use live_harness::{PUBLIC_HOST, SING_BOX, Tunnel};
 use relayd::{Error, Exit, Placement, Restart, Role, Secret, write_config};
 use site::{LAPTOP, SPARES, Site};
 
@@ -97,7 +97,7 @@ fn revoking_cuts_an_open_connection_and_drops_the_short_id_from_the_config() {
         let proxy = site.client(&phone, version);
         let mut open = site
             .rt
-            .block_on(Tunnel::open_to(proxy, ECHO_HOST, site.echo))
+            .block_on(Tunnel::open_to(proxy, PUBLIC_HOST, site.echo))
             .unwrap();
         site.rt.block_on(open.echo(b"before")).unwrap();
         let before = site.process();

@@ -1,4 +1,5 @@
 use std::io;
+use std::net::IpAddr;
 use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -6,10 +7,16 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 
 const PATIENCE: Duration = Duration::from_secs(5);
+const SILENCE: Duration = Duration::from_secs(2);
 
 /// A TCP echo server on loopback: the internet the relay's users reach.
 pub async fn echo_server() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    echo_server_on(IpAddr::from([127, 0, 0, 1])).await
+}
+
+/// A TCP echo server on `address`, which must belong to this machine.
+pub async fn echo_server_on(address: IpAddr) -> u16 {
+    let listener = TcpListener::bind((address, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
         while let Ok((mut stream, _)) = listener.accept().await {
@@ -60,6 +67,18 @@ impl Tunnel {
         let mut reply = Vec::new();
         within(self.0.read_to_end(&mut reply)).await?;
         Ok(reply)
+    }
+
+    /// Sends `request` and returns the first bytes the far side answers with. A target the
+    /// relay blocks, or one that stays silent, gives back none.
+    pub async fn first_reply(mut self, request: &[u8]) -> io::Result<Vec<u8>> {
+        self.0.get_mut().write_all(request).await?;
+        let mut reply = [0; 512];
+        let read = timeout(SILENCE, self.0.read(&mut reply)).await;
+        Ok(match read {
+            Ok(Ok(count)) => reply[..count].to_vec(),
+            _ => Vec::new(),
+        })
     }
 
     pub async fn echo(&mut self, payload: &[u8]) -> io::Result<()> {

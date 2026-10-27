@@ -1,10 +1,12 @@
 use std::fs;
-use std::net::{SocketAddr, TcpStream};
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use live_harness::{ECHO_HOST, Lab, SNI, echo_server, roundtrip_to, short_id, wait_for_port};
+use live_harness::{
+    Lab, PUBLIC_HOST, SNI, echo_server, echo_server_on, roundtrip_to, short_id, wait_for_port,
+};
 use relayd::{
     Agent, Api, Device, Error, Exit, INBOUND_TAG, Inbound, Manager, Placement, Relay, Restart,
     Role, SCHEMA, SECRETS_SCHEMA, Secret, Secrets, State, XRAY_VERSION, Xray, XrayLive,
@@ -57,7 +59,12 @@ pub struct Site {
     pub config: PathBuf,
     pub lock: PathBuf,
     pub xray: PathBuf,
+    /// Echo servers on the lab's public-style network, its private network, and this machine's
+    /// two loopbacks. Only the first is a destination a client may reach.
     pub echo: u16,
+    pub private_echo: u16,
+    pub loopback_echo: u16,
+    pub loopback6_echo: u16,
     pub laptop: Credentials,
     live: XrayLive,
     pub restart: DockerRestart,
@@ -126,7 +133,10 @@ impl Site {
         rt.block_on(lab.start_xray());
         rt.block_on(wait_for_port(lab.api_port));
         rt.block_on(wait_for_port(lab.vless_port));
-        let echo = rt.block_on(echo_server());
+        let echo = rt.block_on(echo_server_on(lab.public_ip));
+        let private_echo = rt.block_on(echo_server_on(lab.private_ip));
+        let loopback_echo = rt.block_on(echo_server());
+        let loopback6_echo = rt.block_on(echo_server_on(IpAddr::from([0, 0, 0, 0, 0, 0, 0, 1])));
         Self {
             live: XrayLive::connect(lab.api_port).unwrap(),
             restart: DockerRestart {
@@ -139,6 +149,9 @@ impl Site {
             secrets,
             state,
             echo,
+            private_echo,
+            loopback_echo,
+            loopback6_echo,
             laptop,
             dir,
             lab,
@@ -206,14 +219,14 @@ impl Site {
 
     pub fn works(&self, proxy: u16) -> bool {
         self.rt
-            .block_on(roundtrip_to(proxy, ECHO_HOST, self.echo, b"ping"))
+            .block_on(roundtrip_to(proxy, PUBLIC_HOST, self.echo, b"ping"))
             .is_ok()
     }
 
     pub fn push(&self, proxy: u16, bytes: usize) {
         let payload = vec![7; bytes];
         self.rt
-            .block_on(roundtrip_to(proxy, ECHO_HOST, self.echo, &payload))
+            .block_on(roundtrip_to(proxy, PUBLIC_HOST, self.echo, &payload))
             .unwrap();
     }
 
