@@ -482,6 +482,27 @@ fn revoke_folds_the_counters_before_the_restart_discards_them() {
 }
 
 #[test]
+fn revoke_goes_ahead_when_xray_cannot_be_read_and_reports_the_lost_counters() {
+    let lab = Lab::new(SPARES);
+    *lab.live.drain_fails.lock().unwrap() = true;
+
+    let counters_lost = lab.manager().revoke("shared", false).unwrap();
+
+    assert!(counters_lost);
+    assert_eq!(lab.names(), ["laptop"]);
+    assert_eq!(lab.clients(), ["laptop"]);
+    assert_eq!(lab.restart.count(), 1);
+    assert_eq!(lab.relay().state.devices[0].up, 42);
+}
+
+#[test]
+fn revoke_with_a_readable_xray_loses_no_counters() {
+    let lab = Lab::new(SPARES);
+
+    assert!(!lab.manager().revoke("shared", false).unwrap());
+}
+
+#[test]
 fn revoke_keeps_the_last_admin_unless_forced() {
     let lab = Lab::new(SPARES);
 
@@ -578,7 +599,7 @@ fn every_operation_refuses_while_the_scripts_hold_the_lock() {
         manager.add("phone", Role::Member, &lab.out(), false),
         manager.rename("laptop", "desk"),
         manager.rekey("laptop", &lab.out()),
-        manager.revoke("shared", false),
+        manager.revoke("shared", false).map(drop),
         manager.refill_pool().map(drop),
     ];
 
