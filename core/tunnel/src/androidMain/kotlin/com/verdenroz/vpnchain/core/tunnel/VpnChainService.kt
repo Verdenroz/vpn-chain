@@ -237,6 +237,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
                 TunnelBridge.runningConfig.value = config
                 runCatching { connectionsClient?.disconnect() }
                 connectionsClient = null
+                TunnelBridge.liveConnections.clear()
                 startConnectionsClient(config)
             }
             // A stop that landed mid-reload left this engine for the reload to close, as in bootEngine.
@@ -446,6 +447,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
         statusClient = null
         runCatching { connectionsClient?.disconnect() }
         connectionsClient = null
+        TunnelBridge.liveConnections.clear()
         runCatching { commandServer?.closeService() }
         runCatching { commandServer?.close() }
         commandServer = null
@@ -642,16 +644,25 @@ class VpnChainService : VpnService(), CommandServerHandler {
         }
     }
 
-    /** Hands the names of newly dialled destinations to site detection. */
+    /**
+     * Hands the names of newly dialled destinations to site detection, and keeps
+     * the open ones so a route change can close them.
+     */
     private inner class ConnectionsHandler : NoOpClientHandler() {
         override fun writeConnectionEvents(message: ConnectionEvents) {
+            if (message.reset) TunnelBridge.liveConnections.clear()
             val events = message.iterator()
             while (events.hasNext()) {
                 val event = events.next()
-                if (event.type != Libbox.ConnectionEventNew.toInt()) continue
-                val connection = event.connection
-                if (ProbeProxy.isProbeInbound(connection.inbound)) continue
-                TunnelBridge.destinations.tryEmit(connection.domain)
+                when (event.type) {
+                    Libbox.ConnectionEventNew.toInt() -> {
+                        val connection = event.connection
+                        if (ProbeProxy.isProbeInbound(connection.inbound)) continue
+                        TunnelBridge.liveConnections.opened(connection.id, connection.domain)
+                        TunnelBridge.destinations.tryEmit(connection.domain)
+                    }
+                    Libbox.ConnectionEventClosed.toInt() -> TunnelBridge.liveConnections.closed(event.id)
+                }
             }
         }
     }
