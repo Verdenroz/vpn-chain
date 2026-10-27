@@ -65,11 +65,10 @@ again. Running it again keeps your keys and devices.
 ## Devices
 
 Give each phone or computer its own identity, so you can cut one off without
-touching the others. For now you do this from your computer over SSH; it moves
-into the app later.
+touching the others. For now you do this from your computer over SSH, with your
+usual keys (set `VPN_CHAIN_SSH_KEY` to pick one); it moves into the app later.
 
 ```
-export VPN_CHAIN_SSH_KEY=~/.ssh/id_ed25519   # the key you use to log in to the VPS
 server/devices.sh add phone      # writes ~/.config/vpn-chain/devices/phone.env
 server/devices.sh list           # each device, its traffic, when it was last seen
 server/devices.sh revoke phone   # cuts that device off

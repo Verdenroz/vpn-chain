@@ -5,7 +5,6 @@
 umask 077
 
 SECRETS_FILE="${VPN_CHAIN_SECRETS:-$HOME/.config/vpn-chain/secrets.env}"
-SSH_KEY="${VPN_CHAIN_SSH_KEY:-$HOME/.ssh/id_1984_relay}"
 LOG_TAG="${LOG_TAG:-vpn-chain}"
 log() { printf '\033[1;36m[%s]\033[0m %s\n' "$LOG_TAG" "$*" >&2; }
 die() { printf '\033[1;31m[%s]\033[0m %s\n' "$LOG_TAG" "$*" >&2; exit 1; }
@@ -33,5 +32,7 @@ resolve_remote() {
     fi
     target="${target:-root@${VPS_IP:-}}"
     [ -n "${target#root@}" ] || die "no VPS_IP in secrets and no target given"
-    REMOTE=(ssh -i "$SSH_KEY" -o ConnectTimeout=12 "$target")
+    REMOTE=(ssh -o ConnectTimeout=12)
+    [ -z "${VPN_CHAIN_SSH_KEY:-}" ] || REMOTE+=(-i "$VPN_CHAIN_SSH_KEY")
+    REMOTE+=("$target")
 }

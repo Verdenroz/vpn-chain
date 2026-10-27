@@ -20,7 +20,7 @@
 # After it finishes:  vpn-chain down && vpn-chain up
 #
 # Requires jq + xray + openssl on the VPS. VPN_CHAIN_REMOTE replaces
-# "ssh -i KEY TARGET".
+# "ssh TARGET". VPN_CHAIN_SSH_KEY picks the key; otherwise ssh uses its own config.
 set -euo pipefail
 
 ROTATE_REALITY=0

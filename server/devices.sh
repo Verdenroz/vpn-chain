@@ -12,7 +12,7 @@
 # add/rekey write ~/.config/vpn-chain/devices/NAME.env by default; --self updates
 # the local secrets.env in place; --out writes elsewhere. The device file carries
 # the shared relay keys, never the ENTRY_* hop keys.
-# VPN_CHAIN_REMOTE replaces "ssh -i KEY TARGET" (e.g. "docker exec -i NAME").
+# VPN_CHAIN_REMOTE replaces "ssh TARGET" (e.g. "docker exec -i NAME").
 #
 # Requires jq + xray + openssl + flock on the VPS.
 set -euo pipefail
