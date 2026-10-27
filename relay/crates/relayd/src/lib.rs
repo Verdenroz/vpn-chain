@@ -11,11 +11,13 @@
 //! stay in the state, which is 0600 too, because each belongs to one device entry.
 
 mod error;
+mod render;
 mod secret;
 mod state;
 mod store;
 
 pub use error::Error;
+pub use render::{render, write_config};
 pub use secret::Secret;
 pub use state::{
     Api, Device, Exit, INBOUND_TAG, Inbound, Relay, Role, SCHEMA, Secrets, State, XRAY_VERSION,

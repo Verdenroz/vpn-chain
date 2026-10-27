@@ -1,0 +1,115 @@
+{
+  "log": {
+    "access": "none",
+    "error": "/var/log/xray/error.log",
+    "loglevel": "warning",
+    "maskAddress": "half"
+  },
+  "stats": {},
+  "api": {
+    "tag": "api",
+    "services": [
+      "StatsService"
+    ]
+  },
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserUplink": true,
+        "statsUserDownlink": true
+      }
+    }
+  },
+  "inbounds": [
+    {
+      "tag": "vless-reality-443",
+      "listen": "0.0.0.0",
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "flow": "xtls-rprx-vision",
+            "email": "shared"
+          },
+          {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "flow": "xtls-rprx-vision",
+            "email": "laptop"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "www.samsung.com:443",
+          "xver": 0,
+          "serverNames": [
+            "www.samsung.com"
+          ],
+          "privateKey": "yHxKfB2n0Pq6Zr8sT3uV5wX7yA9bC1dE3fG5hI7jK0M",
+          "shortIds": [
+            "a1b2c3d4e5f60718",
+            "0f1e2d3c4b5a6978"
+          ]
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": true
+      }
+    },
+    {
+      "tag": "api",
+      "listen": "127.0.0.1",
+      "port": 10085,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "block",
+      "protocol": "blackhole"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": [
+          "api"
+        ],
+        "outboundTag": "api"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "geoip:private"
+        ],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "network": "tcp,udp",
+        "outboundTag": "direct"
+      }
+    ]
+  }
+}

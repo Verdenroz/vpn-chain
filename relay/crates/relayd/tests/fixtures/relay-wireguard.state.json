@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "xray": {
+    "version": "26.3.27"
+  },
+  "inbound": {
+    "tag": "vless-reality-443",
+    "port": 443,
+    "serverNames": [
+      "www.samsung.com"
+    ],
+    "dest": "www.samsung.com:443"
+  },
+  "devices": [
+    {
+      "name": "phone",
+      "uuid": "44444444-4444-4444-8444-444444444444",
+      "shortId": "5566778899aabbcc",
+      "role": "member",
+      "added": "2026-08-15T09:00:00Z",
+      "up": 5000,
+      "down": 70000,
+      "seen": "2026-10-20T21:00:00Z"
+    }
+  ],
+  "spareShortIds": [],
+  "exit": {
+    "kind": "wireguard",
+    "address": [
+      "10.2.0.2/32"
+    ],
+    "mtu": 1280,
+    "peerPublicKey": "pEeRpUbLiCkEyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "endpoint": "203.0.113.7:51820",
+    "dns": "10.2.0.1"
+  },
+  "api": {
+    "port": 10085
+  }
+}

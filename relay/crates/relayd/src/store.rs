@@ -12,6 +12,13 @@ pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, Error> {
     serde_json::from_str(&text).map_err(|error| Error::at(path, error))
 }
 
+/// Replaces `path` so that a crash leaves either the old file or the new one.
+pub fn replace(path: &Path, contents: &[u8], mode: u32) -> Result<(), Error> {
+    let pending = stage(path, contents, mode)?;
+    fs::rename(&pending, path).map_err(|error| Error::at(path, error))?;
+    sync_parent(path)
+}
+
 /// Writes `path` only if nothing is there yet.
 pub fn create(path: &Path, contents: &[u8], mode: u32) -> Result<(), Error> {
     let pending = stage(path, contents, mode)?;
