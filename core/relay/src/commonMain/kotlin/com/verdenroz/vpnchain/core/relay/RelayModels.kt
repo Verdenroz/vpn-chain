@@ -46,9 +46,9 @@ data class AgentIdentity(
 @Serializable
 data class Revoked(val countersLost: Boolean, val job: String? = null)
 
-/** What enrolling returns: the device's rotated identity and the id relayd now knows its key by. */
+/** What enrolling returns: the device's rotated identity, the id relayd now knows its key by, and its role. */
 @Serializable
-data class Enrolled(val identity: AgentIdentity, val keyId: String) {
+data class Enrolled(val identity: AgentIdentity, val keyId: String, val role: DeviceRole) {
     override fun toString() = "Enrolled(identity=$identity)"
 }
 

@@ -66,7 +66,7 @@ class PairingImportTest {
 
         viewModel.importSecretsEnv(LINK)
 
-        assertEquals(PairingStatus.Done("203.0.113.10"), viewModel.pairing.value)
+        assertEquals(PairingStatus.Done("203.0.113.10", admin = true), viewModel.pairing.value)
         assertNull(viewModel.pendingImport.value)
         assertEquals(listOf("pair"), log)
     }
@@ -115,8 +115,8 @@ class PairingImportTest {
     @Test
     fun `each failure says what to do about it`() {
         val cases = listOf(
-            PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Expired) to Res.string.settings_pairing_expired,
-            PairingFailed(PairingStep.Registering, PairingFailed.Reason.Used) to Res.string.settings_pairing_used,
+            PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Expired, device = "laptop") to Res.string.settings_pairing_expired,
+            PairingFailed(PairingStep.Registering, PairingFailed.Reason.Used, device = "laptop") to Res.string.settings_pairing_used,
             PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Unreachable) to Res.string.settings_pairing_unreachable,
             PairingFailed(PairingStep.Registering, PairingFailed.Reason.Unreachable) to Res.string.settings_pairing_no_answer,
             PairingFailed(PairingStep.Reconnecting, PairingFailed.Reason.Failed) to Res.string.settings_pairing_reconnect_failed,
@@ -125,7 +125,7 @@ class PairingImportTest {
         for ((failure, expected) in cases) {
             val viewModel = viewModel(FakePairing(log, listOf(failure.step), Result.failure(failure)))
             viewModel.importSecretsEnv(LINK)
-            assertEquals(UiText.Resource(expected, listOf("203.0.113.10")), failed(viewModel), failure.reason.name)
+            assertEquals(UiText.Resource(expected, listOf("203.0.113.10", failure.device)), failed(viewModel), failure.reason.name)
         }
     }
 
