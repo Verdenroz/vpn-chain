@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+remove | purge)
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+    fi
+    ;;
+esac
+
+if [ "$1" = purge ]; then
+    rm -f /etc/tmpfiles.d/vpn-chain.conf
+    rm -rf /run/vpn-chain
+    if [ -e /var/lib/vpn-chain/.created-sing-box-user ]; then
+        deluser --system --quiet sing-box || true
+    fi
+    rm -rf /var/lib/vpn-chain
+    delgroup --system --quiet vpn-chain || true
+fi
+
+exit 0

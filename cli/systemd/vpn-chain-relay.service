@@ -11,8 +11,8 @@
 # (/usr/lib/systemd/system/sing-box.service), including running as the
 # unprivileged `sing-box` user rather than root.
 #
-# Install: cli/setup-desktop.sh (which also rewrites ExecStart below to wherever
-# sing-box actually lives on this machine).
+# Install: the .deb rewrites ExecStart below to its bundled sing-box. A source
+# build runs cli/setup-desktop.sh, which points it at the sing-box on the PATH.
 #
 # There is deliberately no [Install] section: the config this reads is ephemeral
 # and written per-connect by the app, so the unit must never be enabled at boot.
