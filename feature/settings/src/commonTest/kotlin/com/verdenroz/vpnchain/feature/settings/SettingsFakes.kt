@@ -3,6 +3,8 @@ package com.verdenroz.vpnchain.feature.settings
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
+import com.verdenroz.vpnchain.core.domain.PairingStep
+import com.verdenroz.vpnchain.core.domain.RelayPairing
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.DnsFilter
@@ -13,6 +15,7 @@ import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 
 internal val RELAY = ChainProfile(vpsIp = "203.0.113.10", vlessUuid = "uuid", realityPublicKey = "pubkey", shortId = "ab12")
@@ -87,4 +90,20 @@ internal class FakeSettings : SettingsRepository {
         settings.value = settings.value.copy(connectionLog = enabled)
     }
     override suspend fun setCloseToTray(enabled: Boolean) = Unit
+}
+
+/** Walks the steps in [steps], waits for [gate] if given, then answers [result], as the real pairing would. */
+internal class FakePairing(
+    private val log: MutableList<String>,
+    private val steps: List<PairingStep> = emptyList(),
+    private val result: Result<String> = Result.success("203.0.113.10"),
+    private val gate: CompletableDeferred<Unit>? = null,
+) : RelayPairing {
+    override fun accepts(text: String) = text.startsWith("vpnchain://")
+    override suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<String> {
+        log += "pair"
+        steps.forEach { onStep(it, "203.0.113.10") }
+        gate?.await()
+        return result
+    }
 }

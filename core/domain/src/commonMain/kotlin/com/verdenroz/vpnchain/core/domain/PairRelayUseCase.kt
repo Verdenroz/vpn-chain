@@ -21,6 +21,19 @@ class PairingFailed(val step: PairingStep, val reason: Reason, cause: Throwable?
     enum class Reason { Expired, Used, Unreachable, Failed }
 }
 
+/** Pairs this device with a relay from the link it printed. */
+interface RelayPairing {
+    /** Whether [text] is a pairing link, as opposed to a secrets.env or a WireGuard conf. */
+    fun accepts(text: String): Boolean
+
+    /**
+     * [onStep] hears each step with the host being paired, which is not a secret.
+     *
+     * @return the relay's host.
+     */
+    suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<String>
+}
+
 private const val HTTP_UNAUTHORIZED = 401
 private const val HTTP_GONE = 410
 
@@ -35,8 +48,11 @@ class PairRelayUseCase(
     private val agent: RelayAgent,
     private val key: ManagementKey,
     private val nowSeconds: () -> Long,
-) {
-    suspend operator fun invoke(link: PairingLink, onStep: (PairingStep) -> Unit): Result<Unit> = runCatching {
+) : RelayPairing {
+    override fun accepts(text: String) = PairingLink.looksLikeLink(text)
+
+    override suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<String> = runCatching {
+        val link = PairingLink.parse(text).getOrThrow()
         if (link.isExpired(nowSeconds())) throw PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Expired)
         val previous = profiles.activeProfileId.first()
         val wasUp = chain.status.first().state == TunnelState.Connected
@@ -50,9 +66,9 @@ class PairRelayUseCase(
         )
         val id = profiles.add(name = link.host, relay = relay, wireGuard = null)
         try {
-            onStep(PairingStep.Connecting)
+            onStep(PairingStep.Connecting, link.host)
             moveTunnel(wasUp).getOrElse { throw PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Unreachable, it) }
-            onStep(PairingStep.Registering)
+            onStep(PairingStep.Registering, link.host)
             val enrolled = enroll(link)
             profiles.save(
                 relay.copy(vlessUuid = enrolled.identity.uuid, shortId = enrolled.identity.shortId, managementKeyId = key.id),
@@ -62,8 +78,9 @@ class PairRelayUseCase(
             withContext(NonCancellable) { undo(id, previous, wasUp) }
             throw e
         }
-        onStep(PairingStep.Reconnecting)
+        onStep(PairingStep.Reconnecting, link.host)
         chain.restart().getOrElse { throw PairingFailed(PairingStep.Reconnecting, PairingFailed.Reason.Failed, it) }
+        link.host
     }
 
     private suspend fun moveTunnel(wasUp: Boolean) = if (wasUp) chain.restart() else chain.connect()

@@ -56,6 +56,7 @@ import com.verdenroz.vpnchain.core.ui.SectionCard
 import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.settings.component.AboutSection
 import com.verdenroz.vpnchain.feature.settings.component.DnsFilterPicker
+import com.verdenroz.vpnchain.feature.settings.component.PairingStatusPanel
 import com.verdenroz.vpnchain.feature.settings.component.ProfileForm
 import com.verdenroz.vpnchain.feature.settings.component.ProfilePicker
 import com.verdenroz.vpnchain.feature.settings.component.ThemePicker
@@ -139,6 +140,7 @@ fun SettingsRoute(
     val message by viewModel.message.collectAsStateWithLifecycle()
     val pendingImport by viewModel.pendingImport.collectAsStateWithLifecycle()
     val importsTaken by viewModel.importsTaken.collectAsStateWithLifecycle()
+    val pairing by viewModel.pairing.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Hoisted above SettingsScreen so an external QrScanRequest (widget/deep
@@ -183,6 +185,8 @@ fun SettingsRoute(
         onUsePendingImport = viewModel::usePendingImport,
         onSavePendingImport = viewModel::savePendingImport,
         onCancelPendingImport = viewModel::cancelPendingImport,
+        pairing = pairing,
+        onDismissPairing = viewModel::dismissPairing,
         onToggleSystemWide = viewModel::setSystemWideTun,
         onToggleEntryHop = viewModel::setEntryHopEnabled,
         onToggleKillSwitch = viewModel::setKillSwitchEnabled,
@@ -220,6 +224,8 @@ fun SettingsScreen(
     onUsePendingImport: () -> Unit,
     onSavePendingImport: () -> Unit,
     onCancelPendingImport: () -> Unit,
+    pairing: PairingStatus?,
+    onDismissPairing: () -> Unit,
     onToggleSystemWide: (Boolean) -> Unit,
     onToggleEntryHop: (Boolean) -> Unit,
     onToggleKillSwitch: (Boolean) -> Unit,
@@ -337,6 +343,12 @@ fun SettingsScreen(
                     }
                 }
 
+                Reveal(visible = pairing != null) {
+                    pairing?.let {
+                        Spacer(Modifier.height(16.dp))
+                        PairingStatusPanel(it, onDismissPairing)
+                    }
+                }
                 Reveal(visible = pendingImport != null) {
                     pendingImport?.let {
                         Spacer(Modifier.height(16.dp))
