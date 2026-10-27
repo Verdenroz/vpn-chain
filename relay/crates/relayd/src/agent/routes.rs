@@ -16,7 +16,8 @@ use super::enroll::enroll;
 use super::guard::{BODY_LIMIT, authenticate};
 use super::reply::ApiError;
 use super::{Principal, Service};
-use crate::{Error, Role, valid_name};
+use crate::clock::seconds;
+use crate::{Error, Role, TOKEN_TTL, pairing, valid_name};
 
 type Outcome = Result<Response, ApiError>;
 
@@ -29,6 +30,7 @@ pub fn router(service: Arc<Service>) -> Router {
             patch(rename_device).delete(revoke_device),
         )
         .route("/v1/devices/{name}/rekey", post(rekey_device))
+        .route("/v1/devices/{name}/pair", post(pair_device))
         .route("/v1/pool/refill", post(refill_pool))
         .route("/v1/jobs", post(submit_job))
         .route("/v1/jobs/{id}", get(read_job))
@@ -264,6 +266,29 @@ async fn rekey_device(
         })
         .await?;
     Ok(Json(json!({ "identity": identity })).into_response())
+}
+
+async fn pair_device(
+    State(service): State<Arc<Service>>,
+    Extension(who): Extension<Principal>,
+    Path(name): Path<String>,
+) -> Outcome {
+    let call = Call::new(service, who, "devices.pair", known(name.clone()));
+    let admin = call.is_admin();
+    let (link, expires) = call
+        .run(admin, move |service, who| {
+            if who.device == name {
+                return Err(Error::conflict(
+                    "this device cannot pair itself: its key would be replaced mid-request",
+                ));
+            }
+            let expires = seconds() + TOKEN_TTL;
+            let link =
+                pairing::issue(&service.state, &service.secrets, &service.lock, Some(&name))?;
+            Ok((link.expose().to_owned(), expires))
+        })
+        .await?;
+    Ok(Json(json!({ "link": link, "expires": expires })).into_response())
 }
 
 async fn refill_pool(
