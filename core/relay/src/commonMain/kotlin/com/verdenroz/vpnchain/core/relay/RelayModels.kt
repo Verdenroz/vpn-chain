@@ -67,6 +67,25 @@ data class Enrolled(val identity: AgentIdentity, val keyId: String, val role: De
     override fun toString() = "Enrolled(identity=$identity)"
 }
 
+/** Where the relay's traffic leaves for the internet. */
+sealed interface AgentExit {
+    /** The relay's own address. */
+    data object Direct : AgentExit
+
+    /** A WireGuard provider, dialled from the relay. */
+    data class WireGuard(val endpoint: String) : AgentExit
+}
+
+/** The exit to switch to. */
+sealed interface ExitChange {
+    data object Direct : ExitChange
+
+    /** [conf] is the provider's `wg-quick` file with its private key, so [toString] hides it. */
+    data class WireGuard(val conf: String) : ExitChange {
+        override fun toString() = "WireGuard(..)"
+    }
+}
+
 @Serializable
 enum class JobState {
     @SerialName("queued") Queued,

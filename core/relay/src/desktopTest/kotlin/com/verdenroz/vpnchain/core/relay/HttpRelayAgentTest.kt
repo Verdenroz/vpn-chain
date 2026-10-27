@@ -197,6 +197,39 @@ class HttpRelayAgentTest {
     }
 
     @Test
+    fun `the exit reads as direct or as a WireGuard endpoint`() = runTest {
+        route = { _, _ -> Reply(200, """{"kind":"direct"}""") }
+        val (client, fake) = agent()
+
+        val direct = client.exit()
+        route = { _, _ -> Reply(200, """{"kind":"wireguard","endpoint":"203.0.113.9:51820"}""") }
+        val wireGuard = client.exit()
+
+        assertEquals(AgentExit.Direct, direct)
+        assertEquals(AgentExit.WireGuard("203.0.113.9:51820"), wireGuard)
+        assertEquals("GET /v1/exit", fake.seen.first().let { "${it.method} ${it.target}" })
+    }
+
+    @Test
+    fun `changing the exit sends the conf and reports the restart job without printing the conf`() = runTest {
+        route = { _, _ -> Reply(202, """{"job":"${"d".repeat(32)}"}""") }
+        val (client, fake) = agent()
+        val conf = "[Interface]\nPrivateKey = kPwG0r8sXv1zB3dF5hJ7lN9pR2tV4xZ6bD8fH0jL2nM=\n"
+
+        val job = client.setExit(ExitChange.WireGuard(conf))
+        route = { _, _ -> Reply(200, """{"job":null}""") }
+        val direct = client.setExit(ExitChange.Direct)
+
+        assertEquals("d".repeat(32), job)
+        assertNull(direct)
+        val sent = fake.seen.first()
+        assertEquals("PUT /v1/exit", "${sent.method} ${sent.target}")
+        assertEquals("""{"kind":"wireguard","conf":"[Interface]\nPrivateKey = kPwG0r8sXv1zB3dF5hJ7lN9pR2tV4xZ6bD8fH0jL2nM=\n"}""", sent.body)
+        assertEquals("""{"kind":"direct"}""", fake.seen.last().body)
+        assertFalse("kPwG0r8" in ExitChange.WireGuard(conf).toString())
+    }
+
+    @Test
     fun `no tunnel and a closed port both read as unreachable`() = runTest {
         val noTunnel = HttpRelayAgent(key, { null }, createAgentTransport(), { localClock })
         val closed = java.net.ServerSocket(0).use { it.localPort }

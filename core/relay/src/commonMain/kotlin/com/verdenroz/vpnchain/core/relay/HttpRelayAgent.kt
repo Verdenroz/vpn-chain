@@ -47,6 +47,28 @@ internal class HttpRelayAgent(
 
     override suspend fun pair(name: String) = send("POST", "/v1/devices/${segment(name)}/pair").decode<PairingCode>()
 
+    override suspend fun exit(): AgentExit {
+        val reply = json.parseToJsonElement(get("/v1/exit").body).jsonObject
+        return if (reply.getValue("kind").jsonPrimitive.content == "direct") {
+            AgentExit.Direct
+        } else {
+            AgentExit.WireGuard(reply.getValue("endpoint").jsonPrimitive.content)
+        }
+    }
+
+    override suspend fun setExit(change: ExitChange): String? {
+        val body = buildJsonObject {
+            when (change) {
+                ExitChange.Direct -> put("kind", "direct")
+                is ExitChange.WireGuard -> {
+                    put("kind", "wireguard")
+                    put("conf", change.conf)
+                }
+            }
+        }
+        return send("PUT", "/v1/exit", body.toString()).field("job")
+    }
+
     override suspend fun startJob(request: JobRequest): String {
         val body = buildJsonObject {
             when (request) {

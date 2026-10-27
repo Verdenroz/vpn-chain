@@ -10,11 +10,13 @@ import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.relay.AgentDevice
 import com.verdenroz.vpnchain.core.relay.AgentException
+import com.verdenroz.vpnchain.core.relay.AgentExit
 import com.verdenroz.vpnchain.core.relay.AgentIdentity
 import com.verdenroz.vpnchain.core.relay.AgentJob
 import com.verdenroz.vpnchain.core.relay.AgentUnreachable
 import com.verdenroz.vpnchain.core.relay.DeviceRole
 import com.verdenroz.vpnchain.core.relay.Enrolled
+import com.verdenroz.vpnchain.core.relay.ExitChange
 import com.verdenroz.vpnchain.core.relay.JobRequest
 import com.verdenroz.vpnchain.core.relay.JobState
 import com.verdenroz.vpnchain.core.relay.ManagementKey
@@ -142,6 +144,51 @@ class ManageDevicesUseCaseTest {
     }
 
     @Test
+    fun `an admin is told the exit and a member is not asked`() = runTest {
+        agent.exit = AgentExit.WireGuard("203.0.113.9:51820")
+
+        val admin = useCase().loadExit().getOrThrow()
+        profiles.set(admin = false, device = "phone")
+        log.clear()
+        val member = useCase().loadExit().getOrThrow()
+
+        assertEquals(ExitBoard(admin = true, exit = AgentExit.WireGuard("203.0.113.9:51820")), admin)
+        assertEquals(ExitBoard(admin = false, exit = null), member)
+        assertEquals(emptyList(), log)
+    }
+
+    @Test
+    fun `changing the exit follows the restart job through a reconnect to its confirmation`() = runTest {
+        agent.exitJob = JOB
+        agent.jobs = ArrayDeque(listOf(job(JobState.Running), job(JobState.Confirmed)))
+        agent.dropOnce = true
+
+        useCase().setExit(ExitChange.Direct).getOrThrow()
+
+        assertEquals(listOf("set-exit:Direct", "job", "restart", "job", "job"), log.filter { it != "confirm" })
+    }
+
+    @Test
+    fun `an exit change the runner rolls back is a failure`() = runTest {
+        agent.exitJob = JOB
+        agent.jobs = ArrayDeque(listOf(job(JobState.RolledBack, reason = "not confirmed within the window")))
+
+        val failed = assertIs<DevicesFailed>(useCase().setExit(ExitChange.WireGuard("conf")).exceptionOrNull())
+
+        assertEquals(DevicesFailed.Reason.Failed, failed.reason)
+    }
+
+    @Test
+    fun `an exit the relay refuses reads as refused in the relay's words`() = runTest {
+        agent.refuse = AgentException(400, "no endpoint in the WireGuard file")
+
+        val failed = assertIs<DevicesFailed>(useCase().loadExit().exceptionOrNull())
+
+        assertEquals(DevicesFailed.Reason.Refused, failed.reason)
+        assertEquals("no endpoint in the WireGuard file", failed.message)
+    }
+
+    @Test
     fun `a new code asks the agent to pair the device again`() = runTest {
         assertEquals(CODE, useCase().newCode("phone").getOrThrow())
         assertEquals(listOf("pair:phone"), log)
@@ -192,6 +239,8 @@ private class DevicesAgent(private val log: MutableList<String>) : RelayAgent {
     var refuse: Throwable? = null
     var revokeJob: String? = null
     var refillJob: String? = null
+    var exitJob: String? = null
+    var exit: AgentExit = AgentExit.Direct
     var jobs = ArrayDeque<AgentJob>()
     var dropOnce = false
 
@@ -236,6 +285,17 @@ private class DevicesAgent(private val log: MutableList<String>) : RelayAgent {
     override suspend fun refillPool(): Refilled {
         log += "refill"
         return Refilled(added = 3, job = refillJob)
+    }
+
+    override suspend fun exit(): AgentExit {
+        log += "exit"
+        gate()
+        return exit
+    }
+
+    override suspend fun setExit(change: ExitChange): String? {
+        log += "set-exit:${change::class.simpleName}"
+        return exitJob
     }
 
     override suspend fun job(id: String): AgentJob {
