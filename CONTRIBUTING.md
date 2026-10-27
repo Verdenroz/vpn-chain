@@ -167,5 +167,4 @@ Conventional commits (`feat:`, `fix:`, `docs:`, `ci:`, ...), subject at most 50
 characters. Commits are signed. Land a pull request by rebasing it onto `main` and
 fast-forwarding, `git push origin <branch>:main`, which closes it as merged. GitHub's
 rebase merge rewrites the commits unsigned. Documentation lives in the README, this file, CLAUDE.md, or a comment
-next to the code it explains. There is no docs directory, and CI fails on a link
-to one.
+next to the code it explains. There is no docs directory.
