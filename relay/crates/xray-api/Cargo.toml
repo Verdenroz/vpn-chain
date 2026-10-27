@@ -1,0 +1,25 @@
+[package]
+name = "xray-api"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Client for the Xray-core gRPC API: VLESS users and per-user traffic"
+publish = false
+
+[dependencies]
+prost = "0.14.4"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["time"] }
+tonic = { version = "0.14.6", default-features = false, features = ["channel", "codegen"] }
+tonic-prost = "0.14.6"
+uuid = "1.29.0"
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net", "io-util", "process"] }
+tokio-stream = { version = "0.1.19", features = ["net"] }
+tonic = { version = "0.14.6", default-features = false, features = ["server", "router"] }
+uuid = { version = "1.29.0", features = ["v4"] }
+
+[build-dependencies]
+protoc-bin-vendored = "3.3.0"
+tonic-prost-build = { version = "0.14.6", default-features = false, features = ["transport"] }
