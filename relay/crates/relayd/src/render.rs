@@ -25,9 +25,6 @@ pub fn render(relay: &Relay) -> Value {
             "levels": { "0": { "statsUserUplink": true, "statsUserDownlink": true } },
         });
     }
-    if resolves_names(relay) {
-        config["dns"] = json!({ "servers": ["localhost"] });
-    }
     config["inbounds"] = inbounds(relay);
     config["outbounds"] = outbounds(relay);
     config["routing"] = routing(relay);
@@ -37,6 +34,8 @@ pub fn render(relay: &Relay) -> Value {
 /// With a direct exit xray dials from this machine, so it resolves a name before the
 /// private-address rule runs and blocks one that points at loopback as it blocks the address.
 /// A WireGuard exit dials inside its tunnel, where this machine's loopback does not exist.
+/// The dial looks the name up again, so a resolver that answers differently the second time
+/// still gets through; closing that needs a newer xray or an egress filter.
 pub(crate) fn resolves_names(relay: &Relay) -> bool {
     relay.state.exit == Exit::Direct
 }
@@ -97,14 +96,8 @@ fn inbounds(relay: &Relay) -> Value {
 }
 
 fn outbounds(relay: &Relay) -> Value {
-    let direct = if resolves_names(relay) {
-        // The same lookup the rules saw, so a name cannot change its answer before the dial.
-        json!({ "tag": DIRECT_TAG, "protocol": "freedom", "settings": { "domainStrategy": "UseIP" } })
-    } else {
-        json!({ "tag": DIRECT_TAG, "protocol": "freedom" })
-    };
     let fixed = [
-        direct,
+        json!({ "tag": DIRECT_TAG, "protocol": "freedom" }),
         json!({ "tag": BLOCK_TAG, "protocol": "blackhole" }),
         json!({
             "tag": AGENT_TAG,
