@@ -28,6 +28,7 @@ mod devices;
 mod error;
 mod identity;
 mod import;
+mod key;
 mod live;
 mod render;
 mod secret;
@@ -40,13 +41,14 @@ pub use adopt::adopt;
 pub use clock::now;
 pub use config_file::{Placement, write_config};
 pub use devices::{Manager, SPARES};
-pub use error::Error;
+pub use error::{Error, Kind};
 pub use import::import;
+pub use key::Key;
 pub use live::{Live, Restart};
 pub use render::render;
 pub use secret::Secret;
 pub use state::{
-    Api, DEVICES_LOCK, Device, Exit, INBOUND_TAG, Inbound, Relay, Role, SCHEMA, Secrets, State,
-    XRAY_VERSION, Xray, secrets_path,
+    AGENT_HOST, AGENT_PORT, Agent, Api, DEVICES_LOCK, Device, Exit, INBOUND_TAG, Inbound, Relay,
+    Role, SCHEMA, SECRETS_SCHEMA, Secrets, State, XRAY_VERSION, Xray, secrets_path,
 };
 pub use validate::valid_name;

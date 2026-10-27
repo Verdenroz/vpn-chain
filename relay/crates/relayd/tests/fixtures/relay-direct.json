@@ -87,6 +87,13 @@
     {
       "tag": "block",
       "protocol": "blackhole"
+    },
+    {
+      "tag": "agent",
+      "protocol": "freedom",
+      "settings": {
+        "redirect": "127.0.0.1:10086"
+      }
     }
   ],
   "routing": {
@@ -98,6 +105,13 @@
           "api"
         ],
         "outboundTag": "api"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "full:agent.vpn-chain.invalid"
+        ],
+        "outboundTag": "agent"
       },
       {
         "type": "field",
