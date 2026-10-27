@@ -88,19 +88,58 @@ fn import_then_render_reproduces_each_config() {
 }
 
 #[test]
-fn a_relay_from_before_the_agent_imports_and_renders_with_its_route_added() {
+fn a_relay_from_before_the_agent_imports_and_renders_with_its_route_and_name_resolution_added() {
     let relay = import_fixture("today");
 
     let mut rendered = render(&relay);
 
     assert_eq!(relay.state.agent.port, AGENT_PORT);
     assert_eq!(rendered["routing"]["rules"][0]["outboundTag"], "agent");
+    assert_eq!(rendered["routing"]["domainStrategy"], "IPOnDemand");
+    assert_eq!(rendered["dns"], json!({ "servers": ["localhost"] }));
+    assert_eq!(
+        rendered["outbounds"][0]["settings"],
+        json!({ "domainStrategy": "UseIP" })
+    );
     rendered["outbounds"].as_array_mut().unwrap().pop();
     rendered["routing"]["rules"]
         .as_array_mut()
         .unwrap()
         .remove(0);
+    rendered["routing"]["domainStrategy"] = "AsIs".into();
+    rendered.as_object_mut().unwrap().remove("dns");
+    rendered["outbounds"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("settings");
     assert_eq!(rendered, json_fixture("today.json"));
+}
+
+#[test]
+fn a_config_that_resolves_names_but_lacks_the_dns_section_is_refused() {
+    let error = import_edited(
+        |config| {
+            config.as_object_mut().unwrap().remove("dns");
+        },
+        |_| {},
+    );
+
+    assert!(error.contains("/dns"), "{error}");
+}
+
+#[test]
+fn a_config_that_resolves_names_without_the_direct_lookup_is_refused() {
+    let error = import_edited(
+        |config| {
+            config["outbounds"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove("settings");
+        },
+        |_| {},
+    );
+
+    assert!(error.contains("/outbounds/0"), "{error}");
 }
 
 #[test]

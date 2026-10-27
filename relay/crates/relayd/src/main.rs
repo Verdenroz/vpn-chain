@@ -136,12 +136,12 @@ fn run_adopt(args: &[&str]) -> Option<Result<(), Error>> {
                 (false, _) => Ok(()),
                 (true, true) => {
                     Systemctl.restart()?;
-                    println!("restarted xray; it now serves HandlerService");
+                    println!("restarted xray; it now runs the rendered config");
                     Ok(())
                 }
                 (true, false) => {
                     println!(
-                        "xray serves only StatsService until it restarts: run `systemctl restart xray` before changing devices (open connections drop)"
+                        "xray runs the old config until it restarts: run `systemctl restart xray` before changing devices (open connections drop)"
                     );
                     Ok(())
                 }
