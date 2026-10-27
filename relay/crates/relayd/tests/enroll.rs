@@ -242,6 +242,7 @@ fn enrolling_registers_the_key_burns_the_token_and_rekeys_the_device() {
     assert_ne!(identity["shortId"], before.short_id.expose());
     let key_id = reply.body["keyId"].as_str().unwrap();
     assert_eq!(key_id.len(), 16);
+    assert_eq!(reply.body["role"], "admin");
     let relay = rig.relay();
     let key = relay
         .state
@@ -260,7 +261,9 @@ fn enrolling_registers_the_key_burns_the_token_and_rekeys_the_device() {
 fn the_new_key_signs_requests_and_the_token_works_no_more() {
     let rig = Rig::start();
     let token = rig.token_for("laptop", Role::Member);
-    assert_eq!(rig.enroll(&token, 7).status, 200);
+    let enrolled = rig.enroll(&token, 7);
+    assert_eq!(enrolled.status, 200);
+    assert_eq!(enrolled.body["role"], "member");
 
     let signed = rig.signed_get(7, "/v1/relay");
     let reused = rig.enroll(&token, 8);
