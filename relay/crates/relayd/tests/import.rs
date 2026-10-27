@@ -88,6 +88,22 @@ fn import_then_render_reproduces_each_config() {
 }
 
 #[test]
+fn a_relay_serving_only_stats_imports_and_renders_with_the_handler_service() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = json_fixture("relay-direct.json");
+    config["api"]["services"] = json!(["StatsService"]);
+    let path = dir.path().join("config.json");
+    fs::write(&path, config.to_string()).unwrap();
+
+    let relay = import(&path, &fixture("relay-direct.devices.json")).unwrap();
+
+    assert_eq!(
+        render(&relay)["api"]["services"],
+        json!(["HandlerService", "StatsService"])
+    );
+}
+
+#[test]
 fn a_relay_from_before_the_stats_api_imports_without_one() {
     let relay = import_fixture("today");
 

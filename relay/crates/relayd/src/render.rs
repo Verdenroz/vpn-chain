@@ -19,7 +19,7 @@ pub fn render(relay: &Relay) -> Value {
     });
     if relay.state.api.is_some() {
         config["stats"] = json!({});
-        config["api"] = json!({ "tag": API_TAG, "services": ["StatsService"] });
+        config["api"] = json!({ "tag": API_TAG, "services": ["HandlerService", "StatsService"] });
         config["policy"] = json!({
             "levels": { "0": { "statsUserUplink": true, "statsUserDownlink": true } },
         });
