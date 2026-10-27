@@ -20,7 +20,7 @@ PASS=0 FAIL=0
 IMG=vpn-chain-test
 
 drop() {
-    docker rm -f refuse-srv refuse-dest refuse-pub refuse-priv refuse-sb >/dev/null 2>&1 || true
+    docker rm -f refuse-srv refuse-dest refuse-dns refuse-pub refuse-priv refuse-sb >/dev/null 2>&1 || true
     docker network rm "$PUB" "$PRIV" >/dev/null 2>&1 || true
 }
 trap 'drop; rm -rf "$W"' EXIT
@@ -50,13 +50,17 @@ printf ':80 {\n\trespond "%s"\n}\n' private > "$W/priv.caddy"
 docker run -d --name refuse-pub --network "$PUB" --ip "$PUB_NET.50" -v "$W/pub.caddy":/etc/caddy/Caddyfile:ro caddy:2.10-alpine >/dev/null
 docker run -d --name refuse-priv --network "$PRIV" --ip "$PRIV_NET.50" -v "$W/priv.caddy":/etc/caddy/Caddyfile:ro caddy:2.10-alpine >/dev/null
 
-# The relay: names resolve as a hostile client would want them to, and a web server listens on its loopback.
+# A resolver that answers a public address once per name and 127.0.0.1 after, to catch a relay that checks one lookup and dials another.
+docker run -d --name refuse-dns --network "$PUB" --ip "$PUB_NET.60" -v "$HERE/rebind-dns.py":/rebind-dns.py:ro "$IMG" \
+    python3 /rebind-dns.py "$PUB_NET.50" >/dev/null
+
+# The relay: names resolve as a hostile client would want them to, and web servers listen on its loopback.
 RELOAD='pkill -x xray; sleep 0.3; setsid nohup /opt/xray/xray run -config /usr/local/etc/xray/config.json </dev/null >/var/log/xray/out.log 2>&1 &'
-docker run -d --name refuse-srv --network "$PUB" --ip "$PUB_NET.10" --init \
+docker run -d --name refuse-srv --network "$PUB" --ip "$PUB_NET.10" --dns "$PUB_NET.60" --init \
     --add-host "loop.test:127.0.0.1" --add-host "public.test:$PUB_NET.50" --add-host "private.test:$PRIV_NET.50" \
     -v "$ROOT":/repo:ro -v "$XRAY_DIR":/opt/xray:ro "$IMG" sleep infinity >/dev/null
 docker network connect "$PRIV" refuse-srv
-docker exec -d refuse-srv sh -c 'mkdir /srv/loop && echo loopback > /srv/loop/index.html && cd /srv/loop && exec python3 -m http.server 8081 --bind 127.0.0.1'
+docker exec -d refuse-srv sh -c 'mkdir /srv/loop && echo loopback > /srv/loop/index.html && cd /srv/loop && (python3 -m http.server 80 --bind 127.0.0.1 &) && exec python3 -m http.server 8081 --bind 127.0.0.1'
 docker exec refuse-srv env DEPLOY_SKIP_INSTALL=1 XRAY_BIN=/opt/xray/xray VPS_IP=srv SNI=dest.test DEST=dest:443 \
     SETTLE=1 RELOAD_CMD="$RELOAD" ACTIVE_CMD='pgrep -x xray' DEVICE_FILE_DIR=/root \
     bash /repo/server/deploy-server.sh >/dev/null 2>&1 || { echo "deploy-server.sh failed in the container" >&2; exit 1; }
@@ -93,6 +97,10 @@ for sb in $SINGBOX_VERSIONS; do
     sleep 2
     check "sing-box $sb reaches a public name through the relay" test "$(fetch public.test)" = public
     check "sing-box $sb reaches a public address through the relay" test "$(fetch "$PUB_NET.50")" = public
+    if [ "$(fetch public.test)" != public ]; then
+        printf 'FAIL: sing-box %s cannot reach the relay, so the refusals below prove nothing\n' "$sb"
+        FAIL=$((FAIL + 1)); docker rm -f refuse-sb >/dev/null; continue
+    fi
     check "sing-box $sb is refused a private name" refused private.test
     check "sing-box $sb is refused a private address" refused "$PRIV_NET.50"
     check "sing-box $sb is refused a loopback address" refused 127.0.0.1:8081
@@ -100,6 +108,11 @@ for sb in $SINGBOX_VERSIONS; do
     check "sing-box $sb is refused a name for loopback" refused loop.test:8081
     check "sing-box $sb is refused xray's API port by address" api_refused 127.0.0.1
     check "sing-box $sb is refused xray's API port by name" api_refused localhost
+    if [ "$(fetch "rb-${sb//./-}.test:80")" = loopback ]; then
+        printf 'KNOWN GAP: sing-box %s reached loopback through a name that changes its answer\n' "$sb"
+    else
+        printf 'FAIL: the rebinding gap is closed; turn this probe into a check\n'; FAIL=$((FAIL + 1))
+    fi
     docker rm -f refuse-sb >/dev/null
 done
 
