@@ -152,7 +152,13 @@ class LibboxConnectionCloserTest {
             probe = ProbeProxy(relayPort = 41001, warpPort = 41002, fallbackPort = 0, username = "u", password = "p"),
         )
 
+        val relayOnly = SingBoxConfigFactory.androidChainConfig(
+            PROFILE,
+            probe = ProbeProxy(relayPort = 41001, warpPort = 0, fallbackPort = 0, username = "u", password = "p"),
+        )
+
         assertTrue(wantsConnectionEvents(probed, closesWanted = false))
+        assertFalse(wantsConnectionEvents(relayOnly, closesWanted = false))
         assertTrue(wantsConnectionEvents(learned, closesWanted = true))
         assertFalse(wantsConnectionEvents(learned, closesWanted = false))
     }
