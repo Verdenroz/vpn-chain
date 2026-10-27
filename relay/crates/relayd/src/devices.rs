@@ -6,11 +6,10 @@ use std::time::Duration;
 use uuid::Uuid;
 use xray_api::{Traffic, UserId, VlessUser};
 
-use crate::identity::Identity;
 use crate::live::fold;
 use crate::{
-    Device, Error, Live, Placement, Relay, Restart, Role, Secret, State, store, valid_name,
-    write_config,
+    Device, Error, Identity, Key, Live, Placement, Relay, Restart, Role, Secret, State, store,
+    valid_name, write_config,
 };
 
 /// Short IDs kept unissued in the config, so a new device never needs a restart.
@@ -37,8 +36,7 @@ pub struct Manager<'a> {
 }
 
 impl Manager<'_> {
-    /// Issues a device from the spare pool and writes its identity to `out`. With an empty
-    /// pool it refuses, or with `allow_restart` refills the pool and restarts xray.
+    /// [`Manager::issue`], writing the identity to `out` and keeping it from anywhere else.
     pub fn add(
         &self,
         name: &str,
@@ -46,17 +44,30 @@ impl Manager<'_> {
         out: &Path,
         allow_restart: bool,
     ) -> Result<(), Error> {
+        self.issue(name, role, allow_restart, Some(out)).map(drop)
+    }
+
+    /// Issues a device from the spare pool and returns its identity, also writing it to `out`
+    /// first when given one. With an empty pool it refuses, or with `allow_restart` refills the
+    /// pool and restarts xray.
+    pub fn issue(
+        &self,
+        name: &str,
+        role: Role,
+        allow_restart: bool,
+        out: Option<&Path>,
+    ) -> Result<Identity, Error> {
         if !valid_name(name) {
-            return Err(Error::new(format!("invalid device name: {name}")));
+            return Err(Error::invalid(format!("invalid device name: {name}")));
         }
         let _held = store::lock_within(self.lock, self.lock_wait)?;
         let relay = self.begin()?;
         if relay.state.devices.iter().any(|device| device.name == name) {
-            return Err(Error::new(format!("device {name} already exists")));
+            return Err(Error::conflict(format!("device {name} already exists")));
         }
         let drained = relay.state.spare_short_ids.is_empty();
         if drained && !allow_restart {
-            return Err(Error::new(
+            return Err(Error::conflict(
                 "no spare short IDs left; run again with --allow-restart to refill the pool and restart xray",
             ));
         }
@@ -80,53 +91,78 @@ impl Manager<'_> {
             spares
         };
         let next = changed(&relay, with(&relay.state.devices, device.clone()), spares);
-        Identity::of(&relay, &device).create(out)?;
+        let identity = Identity::of(&relay, &device);
+        if let Some(out) = out {
+            identity.create(out)?;
+        }
         let written = if drained {
             self.write_out(&relay, &next)
         } else {
             self.apply_live(&relay, &next, || self.add_user(vless_user(&device)))
         };
-        if written.is_err() {
+        if let (Err(_), Some(out)) = (&written, out) {
             let _ = fs::remove_file(out);
         }
         written?;
         if drained {
             self.restart_xray()?;
         }
-        Ok(())
+        Ok(identity)
     }
 
-    /// Gives the device `old` the name `new`, keeping its UUID and short ID.
+    /// Gives the device `old` the name `new`, keeping its UUID, short ID and management keys.
     pub fn rename(&self, old: &str, new: &str) -> Result<(), Error> {
         if !valid_name(new) {
-            return Err(Error::new(format!("invalid device name: {new}")));
+            return Err(Error::invalid(format!("invalid device name: {new}")));
         }
         let _held = store::lock_within(self.lock, self.lock_wait)?;
         let relay = self.begin()?;
         let device = find(&relay, old)?;
         if relay.state.devices.iter().any(|device| device.name == new) {
-            return Err(Error::new(format!("device {new} already exists")));
+            return Err(Error::conflict(format!("device {new} already exists")));
         }
         let renamed = Device {
             name: new.to_owned(),
             ..device.clone()
         };
-        let next = changed(
-            &relay,
-            replacing(&relay.state.devices, old, renamed.clone()),
-            relay.state.spare_short_ids.clone(),
+        let keys = relay
+            .state
+            .keys
+            .iter()
+            .map(|key| Key {
+                device: if key.device == old {
+                    new.to_owned()
+                } else {
+                    key.device.clone()
+                },
+                ..key.clone()
+            })
+            .collect();
+        let next = with_keys(
+            changed(
+                &relay,
+                replacing(&relay.state.devices, old, renamed.clone()),
+                relay.state.spare_short_ids.clone(),
+            ),
+            keys,
         );
         self.apply_live(&relay, &next, || self.replace_user(device, &renamed))
     }
 
-    /// Gives the device a new UUID and a short ID from the pool, and writes them to `out`.
-    /// The old pair stops working at once.
+    /// [`Manager::reissue`], writing the identity to `out` and keeping it from anywhere else.
     pub fn rekey(&self, name: &str, out: &Path) -> Result<(), Error> {
+        self.reissue(name, Some(out)).map(drop)
+    }
+
+    /// Gives the device a new UUID and a short ID from the pool, and returns them as its
+    /// identity, also writing it to `out` first when given one. The old pair stops working at
+    /// once.
+    pub fn reissue(&self, name: &str, out: Option<&Path>) -> Result<Identity, Error> {
         let _held = store::lock_within(self.lock, self.lock_wait)?;
         let relay = self.begin()?;
         let device = find(&relay, name)?;
         let Some((short_id, spares)) = relay.state.spare_short_ids.split_first() else {
-            return Err(Error::new(
+            return Err(Error::conflict(
                 "no spare short IDs left; run: relayd maintenance refill-pool",
             ));
         };
@@ -140,16 +176,21 @@ impl Manager<'_> {
             replacing(&relay.state.devices, name, rekeyed.clone()),
             spares.to_vec(),
         );
-        Identity::of(&relay, &rekeyed).create(out)?;
+        let identity = Identity::of(&relay, &rekeyed);
+        if let Some(out) = out {
+            identity.create(out)?;
+        }
         let applied = self.apply_live(&relay, &next, || self.replace_user(device, &rekeyed));
-        if applied.is_err() {
+        if let (Err(_), Some(out)) = (&applied, out) {
             let _ = fs::remove_file(out);
         }
-        applied
+        applied?;
+        Ok(identity)
     }
 
-    /// Removes the device, refills the pool and restarts xray, since an open connection
-    /// survives the removal of its user until then. The last admin stays unless `force`.
+    /// Removes the device and its management keys, refills the pool and restarts xray, since an
+    /// open connection survives the removal of its user until then. The last admin stays unless
+    /// `force`.
     ///
     /// A revocation goes ahead when xray's API cannot be read, because it must work when
     /// xray is the problem. Returns whether the counters since the last fold were lost then.
@@ -164,7 +205,7 @@ impl Manager<'_> {
             .filter(|device| device.role == Role::Admin)
             .count();
         if device.role == Role::Admin && admins == 1 && !force {
-            return Err(Error::new(format!(
+            return Err(Error::conflict(format!(
                 "{name} is the last admin; revoking it leaves no one to manage the relay (--force to revoke it anyway)"
             )));
         }
@@ -176,7 +217,14 @@ impl Manager<'_> {
             .cloned()
             .collect();
         let spares = topped_up(relay.state.spare_short_ids.clone(), self.spares);
-        self.write_out(&relay, &changed(&relay, devices, spares))?;
+        let keys = relay
+            .state
+            .keys
+            .iter()
+            .filter(|key| key.device != name)
+            .cloned()
+            .collect();
+        self.write_out(&relay, &with_keys(changed(&relay, devices, spares), keys))?;
         self.restart_xray()?;
         Ok(counters_lost)
     }
@@ -293,7 +341,17 @@ fn find<'a>(relay: &'a Relay, name: &str) -> Result<&'a Device, Error> {
         .devices
         .iter()
         .find(|device| device.name == name)
-        .ok_or_else(|| Error::new(format!("no device named {name}")))
+        .ok_or_else(|| Error::missing(format!("no device named {name}")))
+}
+
+fn with_keys(relay: Relay, keys: Vec<Key>) -> Relay {
+    Relay {
+        state: State {
+            keys,
+            ..relay.state
+        },
+        secrets: relay.secrets,
+    }
 }
 
 fn changed(relay: &Relay, devices: Vec<Device>, spare_short_ids: Vec<Secret>) -> Relay {

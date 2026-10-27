@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use common::fakes::{FakeLive, FakeRestart};
-use common::{fixture, read};
-use relayd::{Manager, Placement, Relay, Role, secrets_path, write_config};
+use common::{fixture, key_for, read, signer};
+use relay_jobs::{Jobs, Layout};
+use relayd::{JobsRestart, Kind, Manager, Placement, Relay, Role, secrets_path, write_config};
 use serde_json::Value;
 use xray_api::Traffic;
 
@@ -111,6 +112,15 @@ impl Lab {
             .iter()
             .map(|device| device.name.clone())
             .collect()
+    }
+
+    fn add_key(&self, device: &str, seed: u8) {
+        let mut relay = self.relay();
+        relay
+            .state
+            .keys
+            .push(key_for(device, Role::Admin, &signer(seed)));
+        relay.save_state(&self.state).unwrap();
     }
 
     fn identity(&self) -> Value {
@@ -613,4 +623,108 @@ fn every_operation_refuses_while_the_scripts_hold_the_lock() {
     }
     assert!(lab.live.calls().is_empty());
     assert_eq!(lab.names(), ["shared", "laptop"]);
+}
+
+#[test]
+fn issue_returns_the_identity_and_writes_no_file() {
+    let lab = Lab::new(SPARES);
+
+    let identity = lab
+        .manager()
+        .issue("phone", Role::Member, false, None)
+        .unwrap();
+
+    let relay = lab.relay();
+    let phone = relay.state.devices.last().unwrap();
+    let json = serde_json::to_value(&identity).unwrap();
+    assert_eq!(json["uuid"], phone.uuid.expose());
+    assert_eq!(json["shortId"], phone.short_id.expose());
+    assert_eq!(json["name"], "phone");
+    assert!(!lab.out().exists());
+}
+
+#[test]
+fn reissue_returns_the_new_pair_and_writes_no_file() {
+    let lab = Lab::new(SPARES);
+    let old = lab.relay().state.devices[1].uuid.clone();
+
+    let identity = lab.manager().reissue("laptop", None).unwrap();
+
+    let json = serde_json::to_value(&identity).unwrap();
+    assert_ne!(json["uuid"], old.expose());
+    assert_eq!(json["uuid"], lab.relay().state.devices[1].uuid.expose());
+    assert!(!lab.out().exists());
+}
+
+#[test]
+fn a_refusal_says_which_kind_it_is() {
+    let lab = Lab::new(SPARES);
+    let manager = lab.manager();
+
+    let kinds = [
+        manager
+            .issue("Phone", Role::Member, false, None)
+            .unwrap_err(),
+        manager
+            .issue("laptop", Role::Member, false, None)
+            .unwrap_err(),
+        manager.rename("ghost", "spirit").unwrap_err(),
+        manager.reissue("ghost", None).unwrap_err(),
+    ]
+    .map(|error| error.kind());
+
+    assert_eq!(
+        kinds,
+        [Kind::Invalid, Kind::Conflict, Kind::Missing, Kind::Missing]
+    );
+}
+
+#[test]
+fn rename_moves_the_devices_management_keys() {
+    let lab = Lab::new(SPARES);
+    lab.add_key("laptop", 7);
+
+    lab.manager().rename("laptop", "desk").unwrap();
+
+    let relay = lab.relay();
+    assert_eq!(relay.state.keys[0].device, "desk");
+    relay.validate().unwrap();
+}
+
+#[test]
+fn revoke_removes_the_devices_management_keys_and_keeps_the_rest() {
+    let lab = Lab::new(SPARES);
+    lab.add_key("shared", 7);
+    lab.add_key("laptop", 8);
+
+    lab.manager().revoke("shared", false).unwrap();
+
+    let keys = lab.relay().state.keys;
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0].device, "laptop");
+}
+
+#[test]
+fn a_restart_handed_to_the_runner_queues_a_job_instead_of_restarting() {
+    let lab = Lab::new(SPARES);
+    let jobs_dir = tempfile::tempdir().unwrap();
+    for name in ["jobs", "requests", "confirm"] {
+        fs::create_dir(jobs_dir.path().join(name)).unwrap();
+    }
+    let jobs = Jobs::new(Layout::new(jobs_dir.path()));
+    let restart = JobsRestart::new(&jobs);
+    let manager = Manager {
+        restart: &restart,
+        ..lab.manager()
+    };
+
+    manager.revoke("shared", false).unwrap();
+
+    let id = restart.submitted().unwrap();
+    assert_eq!(
+        fs::read_to_string(jobs_dir.path().join(format!("requests/{id}.req"))).unwrap(),
+        format!("restart-xray {id}\n")
+    );
+    assert_eq!(lab.restart.count(), 0);
+    assert_eq!(lab.names(), ["laptop"]);
 }
