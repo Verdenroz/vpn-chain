@@ -46,6 +46,8 @@ data class ChainProfile(
     val managementKeyId: String? = null,
     /** Whether that key is the relay's admin; false for a member and before enrolling. */
     val managementAdmin: Boolean = false,
+    /** The name the relay gives this device; null until the device has enrolled. */
+    val managementDevice: String? = null,
 ) {
     override fun toString() = "ChainProfile(server=$vpsIp:$serverPort)"
 

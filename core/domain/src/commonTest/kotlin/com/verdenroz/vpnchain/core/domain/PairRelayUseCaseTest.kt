@@ -102,6 +102,7 @@ class PairRelayUseCaseTest {
 
         assertEquals(PairedRelay("203.0.113.10", admin = false), result.getOrNull())
         assertEquals(false, profiles.profile.value?.relay?.managementAdmin)
+        assertEquals("laptop", profiles.profile.value?.relay?.managementDevice)
     }
 
     @Test
@@ -176,6 +177,7 @@ private class PairingAgent(private val enroll: () -> Enrolled) : RelayAgent {
     override suspend fun revoke(name: String) = error("unused")
     override suspend fun rekey(name: String) = error("unused")
     override suspend fun pair(name: String) = error("unused")
+    override suspend fun refillPool() = error("unused")
     override suspend fun startJob(request: JobRequest) = error("unused")
     override suspend fun job(id: String): AgentJob = error("unused")
     override suspend fun confirm(id: String) = error("unused")
