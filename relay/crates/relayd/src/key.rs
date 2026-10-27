@@ -45,6 +45,13 @@ impl Key {
         Ok(())
     }
 
+    pub(crate) fn verifying_key(&self) -> VerifyingKey {
+        let der = STANDARD
+            .decode(&self.public_key)
+            .expect("a valid relay holds base64 keys");
+        VerifyingKey::from_public_key_der(&der).expect("a valid relay holds P-256 keys")
+    }
+
     fn bad(&self) -> Error {
         Error::new(format!(
             "management key {} is not a P-256 public key matching its id",

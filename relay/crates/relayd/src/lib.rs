@@ -22,6 +22,7 @@
 
 mod adapters;
 mod adopt;
+pub mod agent;
 mod clock;
 mod config_file;
 mod devices;
