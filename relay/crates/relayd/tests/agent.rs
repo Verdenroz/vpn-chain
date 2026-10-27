@@ -15,6 +15,7 @@ use common::{
 use p256::ecdsa::SigningKey;
 use relay_jobs::{Jobs, Layout};
 use relayd::agent::{Audit, Enroll, Service, Verifier, serve_on};
+use relayd::pairing::Public;
 use relayd::{Placement, Relay, Role, secrets_path, write_config};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
@@ -54,6 +55,9 @@ impl Rig {
             key_for("shared", Role::Member, &signer(MEMBER)),
         ];
         relay.save_state(&state).unwrap();
+        Public::new("203.0.113.7", "mJZadK8WS3D6oFxqlXypqkrdiBeHBIYIvLY2GjDo0nA")
+            .create(&Public::beside(&state))
+            .unwrap();
         let config = dir.path().join("config.json");
         let placement = Placement {
             group: "relayd-test-no-such-group",
@@ -302,6 +306,7 @@ fn the_role_matrix_holds_for_a_member_on_every_admin_route() {
         ),
         ("DELETE", "/v1/devices/laptop".to_owned(), ""),
         ("POST", "/v1/devices/laptop/rekey".to_owned(), ""),
+        ("POST", "/v1/devices/laptop/pair".to_owned(), ""),
         ("POST", "/v1/pool/refill".to_owned(), ""),
         ("POST", "/v1/jobs".to_owned(), r#"{"kind":"restart-xray"}"#),
         ("GET", format!("/v1/jobs/{id}"), ""),
@@ -330,6 +335,36 @@ fn a_member_rekeys_its_own_device_and_no_other() {
     let after = rig.relay().state.devices[0].uuid.clone();
     assert_ne!(after, before);
     assert_eq!(own.body["identity"]["uuid"], after.expose());
+}
+
+#[test]
+fn an_admin_gets_a_pairing_link_for_another_device_and_the_audit_omits_it() {
+    let rig = Rig::start(false, SPARES);
+
+    let reply = rig.admin("POST", "/v1/devices/shared/pair", "");
+
+    assert_eq!(reply.status, 200);
+    let link = reply.body["link"].as_str().unwrap();
+    assert!(
+        link.starts_with("vpnchain://pair?v=1&h=203.0.113.7&"),
+        "{link}"
+    );
+    assert!(link.contains("&n=shared&"), "{link}");
+    assert!(reply.body["expires"].as_u64().unwrap() > 0);
+    let token = link.split("&t=").nth(1).unwrap().split('&').next().unwrap();
+    let audit = rig.audit_text();
+    assert!(audit.contains(r#""action":"devices.pair","target":"shared","result":"ok""#));
+    assert!(!audit.contains(token), "{audit}");
+}
+
+#[test]
+fn pairing_an_unknown_device_is_a_404_and_the_callers_own_is_a_409() {
+    let rig = Rig::start(false, SPARES);
+
+    let unknown = rig.admin("POST", "/v1/devices/ghost/pair", "");
+    let own = rig.admin("POST", "/v1/devices/laptop/pair", "");
+
+    assert_eq!((unknown.status, own.status), (404, 409));
 }
 
 #[test]

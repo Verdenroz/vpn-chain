@@ -15,6 +15,7 @@
 //! | `POST /devices` | admin |
 //! | `PATCH /devices/{name}`, `DELETE /devices/{name}`, `POST /pool/refill` | admin |
 //! | `POST /devices/{name}/rekey` | admin, or the member whose device it is |
+//! | `POST /devices/{name}/pair` | admin, for a device other than its own |
 //! | `POST /jobs`, `GET /jobs/{id}`, `POST /jobs/{id}/confirm`, `GET /audit` | admin |
 //! | `POST /enroll` | a pairing token |
 //!
