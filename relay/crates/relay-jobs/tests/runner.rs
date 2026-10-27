@@ -296,7 +296,7 @@ fn requests_that_are_not_fixed_verbs_are_refused_and_removed() {
     assert_eq!(fixture.drain(), 7);
 
     assert_eq!(fs::read_dir(&requests).unwrap().count(), 0);
-    assert_eq!(fixture.state(&id), JobState::Queued);
+    assert_eq!(fixture.state(&id), JobState::Failed);
     assert_eq!(fixture.restarts(), 0);
 }
 
@@ -326,5 +326,62 @@ fn a_job_the_runner_died_in_is_rolled_back_by_the_next_run() {
     assert_eq!(fixture.config(), OLD);
     assert_eq!(fixture.current(), Path::new("1.0.0"));
     assert_eq!(fixture.restarts(), 1);
+    assert_eq!(fixture.snapshots(), 0);
+}
+
+#[test]
+fn a_request_that_misnames_its_job_fails_that_job() {
+    let fixture = Fixture::new();
+    let id = fixture.jobs().submit(JobKind::RestartXray).unwrap();
+    fs::write(
+        fixture.layout.requests().join(format!("{id}.req")),
+        format!("apply-config {id}\n"),
+    )
+    .unwrap();
+
+    assert_eq!(fixture.drain(), 1);
+
+    assert_eq!(fixture.state(&id), JobState::Failed);
+    assert_eq!(fixture.restarts(), 0);
+}
+
+#[test]
+fn a_swap_cannot_start_when_current_is_not_a_version_link() {
+    let fixture = Fixture::new();
+    fs::remove_file(fixture.layout.current()).unwrap();
+    symlink(
+        fixture.dir.path().join("xray/1.0.0"),
+        fixture.layout.current(),
+    )
+    .unwrap();
+    let (id, _) = fixture.run(swap(), |_, _| {});
+
+    assert_eq!(fixture.state(&id), JobState::Failed);
+    assert_eq!(fixture.restarts(), 0);
+}
+
+#[test]
+fn a_restart_that_fails_says_so() {
+    let fixture = Fixture::new();
+    *fixture.host.restarts_before_failing.lock().unwrap() = Some(0);
+    let (id, _) = fixture.run(JobKind::RestartXray, |_, _| {});
+
+    let job = fixture.jobs().status(&id).unwrap();
+    assert_eq!(job.state, JobState::Failed);
+    assert_eq!(job.reason.as_deref(), Some("the restart failed"));
+}
+
+#[test]
+fn a_failed_rollback_keeps_its_snapshot_for_the_next_run() {
+    let fixture = Fixture::new();
+    *fixture.host.restarts_before_failing.lock().unwrap() = Some(0);
+    let (id, _) = fixture.run(swap(), |_, _| {});
+    assert_eq!(fixture.state(&id), JobState::Failed);
+    assert_eq!(fixture.snapshots(), 1);
+
+    *fixture.host.restarts_before_failing.lock().unwrap() = None;
+    assert_eq!(fixture.drain(), 0);
+
+    assert_eq!(fixture.state(&id), JobState::RolledBack);
     assert_eq!(fixture.snapshots(), 0);
 }
