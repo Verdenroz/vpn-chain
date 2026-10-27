@@ -26,6 +26,7 @@ pub mod agent;
 mod clock;
 mod config_file;
 mod devices;
+pub mod egress;
 mod enroll;
 mod error;
 mod identity;
