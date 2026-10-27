@@ -49,7 +49,6 @@ impl Tunnel {
         Ok(Self(stream))
     }
 
-    /// Sends `payload` and waits for the relay to carry it back.
     pub async fn echo(&mut self, payload: &[u8]) -> io::Result<()> {
         self.0.get_mut().write_all(payload).await?;
         let mut back = vec![0; payload.len()];
@@ -62,7 +61,6 @@ impl Tunnel {
     }
 }
 
-/// Opens a fresh tunnel and echoes `payload` through it.
 pub async fn roundtrip(proxy: u16, target: u16, payload: &[u8]) -> io::Result<()> {
     Tunnel::open(proxy, target).await?.echo(payload).await
 }

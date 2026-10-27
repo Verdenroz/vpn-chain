@@ -37,7 +37,6 @@ struct Seen {
     stats: Vec<Stat>,
 }
 
-/// An in-process stand-in for xray's API inbound.
 #[derive(Clone)]
 pub(crate) struct FakeXray {
     addr: SocketAddr,
