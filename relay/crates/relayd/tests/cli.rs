@@ -1,7 +1,7 @@
 mod common;
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::{assert_no_secret, fixture, read};
@@ -383,4 +383,164 @@ fn a_malformed_device_command_prints_usage() {
         assert_eq!(output.status.code(), Some(64), "{args:?}");
         assert!(stderr(&output).starts_with("usage: relayd"));
     }
+}
+
+fn keyed_relay() -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let state = dir.path().join("relay.json");
+    fs::copy(fixture("relay-direct.state.json"), &state).unwrap();
+    fs::copy(
+        fixture("relay-direct.secrets.json"),
+        dir.path().join("relay.secrets.json"),
+    )
+    .unwrap();
+    (dir, state)
+}
+
+fn keys_add(dir: &Path, state: &Path, device: &str, public_key: &Path) -> Output {
+    relayd(&[
+        "keys".as_ref(),
+        "add".as_ref(),
+        device.as_ref(),
+        "--role".as_ref(),
+        "admin".as_ref(),
+        "--public-key".as_ref(),
+        public_key,
+        "--state".as_ref(),
+        state,
+        "--lock".as_ref(),
+        &dir.join("devices.lock"),
+    ])
+}
+
+fn public_key_file(dir: &Path, seed: u8) -> PathBuf {
+    let path = dir.join("key.der");
+    fs::write(&path, common::public_der(&common::signer(seed))).unwrap();
+    path
+}
+
+fn state_json(state: &Path) -> serde_json::Value {
+    serde_json::from_str(&fs::read_to_string(state).unwrap()).unwrap()
+}
+
+#[test]
+fn keys_add_stores_the_key_and_prints_only_its_id() {
+    let (dir, state) = keyed_relay();
+
+    let added = keys_add(
+        dir.path(),
+        &state,
+        "laptop",
+        &public_key_file(dir.path(), 7),
+    );
+
+    assert!(added.status.success(), "{}", stderr(&added));
+    let relay = relayd::Relay::load(&state, &dir.path().join("relay.secrets.json")).unwrap();
+    let key = &relay.state.keys[0];
+    assert_eq!(
+        (key.device.as_str(), key.role),
+        ("laptop", relayd::Role::Admin)
+    );
+    let printed = String::from_utf8(added.stdout).unwrap();
+    assert_eq!(printed, format!("added key {} for laptop\n", key.id));
+}
+
+#[test]
+fn keys_add_refuses_a_stranger_a_repeat_and_junk_and_changes_nothing() {
+    let (dir, state) = keyed_relay();
+    let key = public_key_file(dir.path(), 7);
+    let junk = dir.path().join("junk");
+    fs::write(&junk, "not a key").unwrap();
+    assert!(
+        keys_add(dir.path(), &state, "laptop", &key)
+            .status
+            .success()
+    );
+    let before = fs::read_to_string(&state).unwrap();
+
+    let refusals = [
+        keys_add(dir.path(), &state, "ghost", &key),
+        keys_add(dir.path(), &state, "laptop", &key),
+        keys_add(dir.path(), &state, "shared", &junk),
+    ];
+
+    for refused in refusals {
+        assert_eq!(refused.status.code(), Some(1));
+        assert!(stderr(&refused).starts_with("relayd: "));
+    }
+    assert_eq!(fs::read_to_string(&state).unwrap(), before);
+}
+
+#[test]
+fn a_malformed_keys_or_serve_command_prints_usage() {
+    for args in [
+        vec!["keys".as_ref()],
+        vec!["keys".as_ref(), "add".as_ref(), "laptop".as_ref()],
+        vec!["keys".as_ref(), "remove".as_ref()],
+        vec!["serve".as_ref()],
+        vec!["serve".as_ref(), "extra".as_ref()],
+    ] {
+        let output = relayd(&args);
+        assert_eq!(output.status.code(), Some(64), "{args:?}");
+    }
+}
+
+#[test]
+fn serve_refuses_a_relay_with_no_stats_api() {
+    let (dir, state) = keyed_relay();
+    let mut json = state_json(&state);
+    json["api"] = serde_json::Value::Null;
+    fs::write(&state, json.to_string()).unwrap();
+
+    let refused = relayd(&[
+        "serve".as_ref(),
+        "--state".as_ref(),
+        &state,
+        "--config".as_ref(),
+        &dir.path().join("config.json"),
+    ]);
+
+    assert_eq!(refused.status.code(), Some(1));
+    assert!(stderr(&refused).contains("no stats API"));
+}
+
+#[test]
+fn serve_listens_on_loopback_and_nowhere_else() {
+    let (dir, state) = keyed_relay();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let mut json = state_json(&state);
+    json["agent"]["port"] = port.into();
+    fs::write(&state, json.to_string()).unwrap();
+    let mut server = Command::new(env!("CARGO_BIN_EXE_relayd"))
+        .args(["serve", "--state"])
+        .arg(&state)
+        .arg("--config")
+        .arg(dir.path().join("config.json"))
+        .arg("--lock")
+        .arg(dir.path().join("devices.lock"))
+        .spawn()
+        .unwrap();
+
+    let listening = (0..100).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
+    });
+    let table = fs::read_to_string("/proc/net/tcp").unwrap();
+    server.kill().unwrap();
+    server.wait().unwrap();
+
+    assert!(listening, "the agent never listened on {port}");
+    let bound: Vec<&str> = table
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace().skip(1);
+            let (address, _remote, state) = (fields.next()?, fields.next()?, fields.next()?);
+            (state == "0A" && address.ends_with(&format!(":{port:04X}"))).then_some(address)
+        })
+        .collect();
+    assert_eq!(bound, [format!("0100007F:{port:04X}")]);
 }
