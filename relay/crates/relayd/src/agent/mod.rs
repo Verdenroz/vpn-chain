@@ -16,11 +16,15 @@
 //! | `PATCH /devices/{name}`, `DELETE /devices/{name}`, `POST /pool/refill` | admin |
 //! | `POST /devices/{name}/rekey` | admin, or the member whose device it is |
 //! | `POST /jobs`, `GET /jobs/{id}`, `POST /jobs/{id}/confirm`, `GET /audit` | admin |
+//! | `POST /enroll` | a pairing token |
+//!
+//! `POST /enroll` is the one route that takes no signature: its pairing token authenticates it.
 //!
 //! `/devices/{name}/claim` and `/invites` are left unrouted for claim-and-invite.
 
 mod audit;
 mod auth;
+mod enroll;
 mod guard;
 mod reply;
 mod routes;
@@ -38,6 +42,7 @@ use crate::{Error, JobsRestart, Live, Manager, Placement, Restart, now};
 
 pub use audit::{Audit, Entry};
 pub use auth::{CONTEXT, Principal, Reject, Signed, Verifier, WINDOW, Why, message};
+pub use enroll::Enroll;
 pub use routes::router;
 
 const LOCK_WAIT: Duration = Duration::from_secs(10);
@@ -59,6 +64,7 @@ pub struct Service {
     pub jobs: Option<Jobs>,
     pub audit: Audit,
     pub verifier: Verifier,
+    pub enroll: Enroll,
 }
 
 impl Service {
