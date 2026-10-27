@@ -111,6 +111,7 @@
     <string name="settings_pairing_reconnecting">Reconnecting. The code you scanned stops working now.</string>
     <string name="settings_pairing_done">Connected to %1$s. This device is its admin.</string>
     <string name="settings_pairing_done_member">Connected to %1$s.</string>
+    <string name="settings_pairing_entry_failed">The WireGuard entry hop could not be added. Paste its .conf in Import.</string>
     <string name="settings_pairing_dismiss">Done</string>
     <string name="settings_pairing_expired">This code has expired. Ask a device that manages this relay for a new code (Settings → Devices).</string>
     <string name="settings_pairing_expired_first">This code has expired. Run the setup command on your server again for a new code.</string>

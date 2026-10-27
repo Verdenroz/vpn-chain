@@ -29,8 +29,8 @@ class PairingFailed(
     enum class Reason { Expired, Used, Unreachable, Failed }
 }
 
-/** The relay a pairing joined, and whether this device is its admin. */
-data class PairedRelay(val host: String, val admin: Boolean)
+/** The relay a pairing joined, whether this device is its admin, and whether an entry hop it was sent could not be added. */
+data class PairedRelay(val host: String, val admin: Boolean, val entryHopFailed: Boolean = false)
 
 /** Pairs this device with a relay from the link it printed. */
 interface RelayPairing {
@@ -90,9 +90,11 @@ class PairRelayUseCase(
             relay.copy(vlessUuid = enrolled.identity.uuid, shortId = enrolled.identity.shortId, managementKeyId = key.id, managementAdmin = enrolled.role == DeviceRole.Admin, managementDevice = enrolled.identity.name),
             entryHop = null,
         )
+        val entryHop = enrolled.entryHop
+        val entryHopFailed = entryHop != null && profiles.importWireGuardConf(entryHop, intoActive = true).isFailure
         onStep(PairingStep.Reconnecting, link.host)
         chain.restart().getOrElse { throw PairingFailed(PairingStep.Reconnecting, PairingFailed.Reason.Failed, it) }
-        PairedRelay(link.host, enrolled.role == DeviceRole.Admin)
+        PairedRelay(link.host, enrolled.role == DeviceRole.Admin, entryHopFailed)
     }.recoverCatching { throw it as? PairingFailed ?: it as? PairingException ?: PairingFailed(PairingStep.Connecting, PairingFailed.Reason.Failed, it) }
 
     private suspend fun awaitConnected() {

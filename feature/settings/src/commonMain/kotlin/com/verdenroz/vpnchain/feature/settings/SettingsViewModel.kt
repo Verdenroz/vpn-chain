@@ -85,7 +85,7 @@ sealed interface PendingImport {
 /** Where pairing with a relay has got to. The host is the relay's address; nothing from the link is kept. */
 sealed interface PairingStatus {
     data class Working(val step: PairingStep, val host: String) : PairingStatus
-    data class Done(val host: String, val admin: Boolean) : PairingStatus
+    data class Done(val host: String, val admin: Boolean, val entryHopFailed: Boolean = false) : PairingStatus
     data class Failed(val text: UiText) : PairingStatus
 }
 
@@ -263,7 +263,7 @@ class SettingsViewModel(
         _importsTaken.value++
         viewModelScope.launch {
             relayPairing.pair(text) { step, host -> _pairing.value = PairingStatus.Working(step, host) }.fold(
-                onSuccess = { _pairing.value = PairingStatus.Done(it.host, it.admin) },
+                onSuccess = { _pairing.value = PairingStatus.Done(it.host, it.admin, it.entryHopFailed) },
                 onFailure = { _pairing.value = PairingStatus.Failed(it.toPairingText((_pairing.value as? PairingStatus.Working)?.host.orEmpty())) },
             )
             pairingInFlight = false
