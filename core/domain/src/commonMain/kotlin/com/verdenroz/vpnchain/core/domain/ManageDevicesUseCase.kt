@@ -49,7 +49,7 @@ interface RelayDevices {
 
     suspend fun rename(name: String, to: String): Result<Unit>
 
-    /** Removes [name]; its app stops working at once. */
+    /** Removes [name] and waits out the xray restart, which drops every device briefly. */
     suspend fun cutOff(name: String): Result<Unit>
 
     /** A new code for [name], which signs out the app it is already on. */

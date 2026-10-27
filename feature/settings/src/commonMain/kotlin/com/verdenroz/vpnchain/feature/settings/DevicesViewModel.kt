@@ -11,13 +11,20 @@ import com.verdenroz.vpnchain.core.relay.PairingCode
 import com.verdenroz.vpnchain.core.relay.isDeviceName
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_action_failed
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_cut_off_done
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_name_invalid
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_name_taken
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_renamed
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.seconds
+
+private val NOTICE_SHOWN = 6.seconds
 
 data class DeviceRow(
     val name: String,
@@ -49,11 +56,19 @@ sealed interface DevicesStep {
     data class ShowCode(val name: String, val code: PairingCode) : DevicesStep
 }
 
+/** A change the relay has not confirmed yet; the row shows it in place of its actions. */
+data class DevicePending(val name: String, val action: Action) {
+    enum class Action { CuttingOff, Renaming, NewCode }
+}
+
 data class DevicesUiState(
     val board: DevicesBoard = DevicesBoard.Loading,
     val step: DevicesStep? = null,
+    val pending: DevicePending? = null,
     val busy: Boolean = false,
     val error: UiText? = null,
+    /** A confirmed change, shown for a few seconds or until dismissed. */
+    val notice: UiText? = null,
 )
 
 /**
@@ -64,6 +79,7 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
 
     private val _state = MutableStateFlow(DevicesUiState())
     val state: StateFlow<DevicesUiState> = _state.asStateFlow()
+    private var noticeTimer: Job? = null
 
     init {
         viewModelScope.launch {
@@ -84,6 +100,11 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
         viewModelScope.launch { refresh() }
     }
 
+    fun dismissNotice() {
+        noticeTimer?.cancel()
+        _state.update { it.copy(notice = null) }
+    }
+
     fun add(name: String) {
         if (!isDeviceName(name)) return rejectName(UiText.Resource(Res.string.devices_name_invalid))
         val board = _state.value.board
@@ -101,12 +122,14 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
 
     fun rename(name: String, to: String) {
         if (!isDeviceName(to)) return rejectName(UiText.Resource(Res.string.devices_name_invalid))
-        act {
+        act(DevicePending(name, DevicePending.Action.Renaming)) {
             devices.rename(name, to).fold(
-                onSuccess = { closeStep() },
+                onSuccess = { showNotice(UiText.Resource(Res.string.devices_renamed, listOf(name, to))) },
                 onFailure = {
                     if ((it as? DevicesFailed)?.reason == DevicesFailed.Reason.NameTaken) {
-                        rejectName(UiText.Resource(Res.string.devices_name_taken))
+                        _state.update { state ->
+                            state.copy(step = DevicesStep.Renaming(name, UiText.Resource(Res.string.devices_name_taken)))
+                        }
                     } else {
                         fail(it)
                     }
@@ -117,7 +140,12 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
 
     fun cutOff() {
         val name = (_state.value.step as? DevicesStep.ConfirmCutOff)?.name ?: return
-        act { devices.cutOff(name).fold(onSuccess = { closeStep() }, onFailure = ::fail) }
+        act(DevicePending(name, DevicePending.Action.CuttingOff)) {
+            devices.cutOff(name).fold(
+                onSuccess = { showNotice(UiText.Resource(Res.string.devices_cut_off_done, listOf(name))) },
+                onFailure = ::fail,
+            )
+        }
     }
 
     /** Issues the code for the device the open step names, whether it was confirmed or has expired. */
@@ -127,7 +155,9 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
             is DevicesStep.ShowCode -> step.name
             else -> return
         }
-        act { devices.newCode(name).fold(onSuccess = { showCode(name, it) }, onFailure = ::fail) }
+        act(DevicePending(name, DevicePending.Action.NewCode)) {
+            devices.newCode(name).fold(onSuccess = { showCode(name, it) }, onFailure = ::fail)
+        }
     }
 
     private suspend fun addNow(name: String) {
@@ -156,20 +186,28 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
     private fun showCode(name: String, code: PairingCode) =
         _state.update { it.copy(step = DevicesStep.ShowCode(name, code), error = null) }
 
-    private fun closeStep() = _state.update { it.copy(step = null) }
+    private fun showNotice(text: UiText) {
+        noticeTimer?.cancel()
+        _state.update { it.copy(notice = text) }
+        noticeTimer = viewModelScope.launch {
+            delay(NOTICE_SHOWN)
+            _state.update { it.copy(notice = null) }
+        }
+    }
 
     private fun fail(failure: Throwable) {
         val text = (failure as? DevicesFailed)?.takeIf { it.reason == DevicesFailed.Reason.Refused }?.message
         _state.update { it.copy(step = null, error = text?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.devices_action_failed)) }
     }
 
-    private fun act(work: suspend () -> Unit) {
+    private fun act(pending: DevicePending? = null, work: suspend () -> Unit) {
         if (_state.value.busy) return
-        _state.update { it.copy(busy = true) }
+        noticeTimer?.cancel()
+        _state.update { it.copy(busy = true, pending = pending, step = if (pending == null) it.step else null, notice = null, error = null) }
         viewModelScope.launch {
             work()
             refresh()
-            _state.update { it.copy(busy = false) }
+            _state.update { it.copy(busy = false, pending = null) }
         }
     }
 
