@@ -18,7 +18,7 @@ connection has no tail.
 
 ## Choose a mode
 
-**Settings → Routing → Cloudflare WARP exit.** Credentials register themselves on
+**Settings → Routing → Cloudflare WARP.** Credentials register themselves on
 first use: no `wgcf`, no account, nothing to paste.
 
 | Mode | What goes through WARP |
@@ -35,10 +35,10 @@ With Automatic, two more switches appear:
 | Switch | Default | Effect |
 |---|---|---|
 | Learn blocked sites | On | Probe new destinations and route refused ones through WARP |
-| Bypass the relay when WARP is also refused | On | [Fail open](#failing-open) for sites both refuse |
+| Find another route when WARP is blocked too | On | [Fail open](#failing-open) for sites both refuse |
 
-The **Learned** list under them shows each site, why it was refused, and which way
-it leaves. **Remove** forgets a site and stops it being learned for seven days.
+The **Sites** tab lists each learned site under the way it leaves. **Remove**
+forgets a site and stops it being learned for seven days.
 
 ## What it costs
 
@@ -187,9 +187,9 @@ connection keeps its route until it ends.
 
 ## Failing open
 
-Some sites refuse the relay and WARP both. With **Bypass the relay when WARP is
-also refused** on, the chain can send such a site past the relay. That is a
-deliberate step out of the chain, so the Learned list shows which way each such
+Some sites refuse the relay and WARP both. With **Find another route when WARP
+is blocked too** on, the chain can send such a site past the relay. That is a
+deliberate step out of the chain, so the Sites tab shows which way each such
 site leaves.
 
 | Chain | Path | Who decides |
@@ -204,8 +204,8 @@ stays on the relay. The site then sees the entry provider's address.
 
 **Without an entry hop.** Nothing goes to the bare link on its own. The site is
 recorded as refused with the bare link available, is in no rule-set, and is never
-probed through `direct`. Only **Send direct** on that site (on the Chain card or in
-Settings; `LearnedSitesRepository.allowDirect`) adds it to the bare link's
+probed through `direct`. Only **Use my connection** on that site (the prompt on the
+Chain screen, or the Sites tab; `LearnedSitesRepository.allowDirect`) adds it to the bare link's
 rule-set, and no probe follows: the next page load is the test. **Undo**
 (`forget`) takes it back. The site sees this network's own address. Desktop proxy
 mode never dials an entry hop, so it always works this way. A later probe never

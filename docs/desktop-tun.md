@@ -28,11 +28,11 @@ shape, so the GUI and CLI are functionally equivalent.
    ln -s "$PWD/cli/killswitch/vpn-chain-killswitch" ~/.local/bin/
    ```
 
-4. Import a connection (**Settings → Chain identity → Import**) and connect.
+4. Import a connection (**Settings → Connection → Import**) and connect.
 
 To switch to a local SOCKS proxy instead (only apps set to `127.0.0.1:1080` are
 tunneled, and any entry hop is yours to run), turn off **Settings → Routing →
-Route entire system**. The proxy listens on loopback only and has no login, so on
+Route all apps**. The proxy listens on loopback only and has no login, so on
 a shared machine any local user can send traffic through the chain. Use TUN mode
 on multi-user machines.
 
@@ -89,10 +89,10 @@ sees your address.
    ```
 
    This writes the `ENTRY_*` keys into `~/.config/vpn-chain/secrets.env`.
-3. In the app, **Settings → Chain identity → Import → Import from disk**, or paste
+3. In the app, **Settings → Connection → Import → Import from disk**, or paste
    the `.conf` and tap **Use as entry hop**.
 
-**Settings → Routing → Wireguard entry hop** turns it off without editing the
+**Settings → Routing → WireGuard entry hop** turns it off without editing the
 profile.
 
 ## Using an external VPN app as the entry hop

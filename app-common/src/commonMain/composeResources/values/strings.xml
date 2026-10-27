@@ -18,7 +18,7 @@
     <string name="update_no_build">No build for this device</string>
     <string name="update_failed_install">Install failed</string>
     <string name="update_install">Install</string>
-    <string name="update_open_settings">Settings</string>
+    <string name="update_open_settings">Open Settings</string>
     <string name="update_retry">Retry</string>
     <string name="update_dismiss">Later</string>
 </resources>

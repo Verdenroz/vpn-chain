@@ -16,7 +16,7 @@ phone → sing-box VpnService (this app)
    [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest)
    (`arm64-v8a` for phones, `x86_64` for emulators), or build one with
    `./gradlew :androidApp:assembleDebug`.
-2. Import a connection: **Settings → Chain identity → Import**. Scan the desktop
+2. Import a connection: **Settings → Connection → Import**. Scan the desktop
    app's QR, or paste a `secrets.env` or a WireGuard `.conf`. Review the server
    shown, then **Use it**.
 3. For the entry hop, use a WireGuard config made for this phone alone, so it
@@ -37,7 +37,7 @@ stop the chain.
 | Relay only | Straight to the relay | Simpler; the VPS sees your real mobile IP |
 
 Switch the entry hop off without editing the profile at **Settings → Routing →
-Wireguard entry hop**.
+WireGuard entry hop**.
 
 | Placeholder | Source |
 |---|---|

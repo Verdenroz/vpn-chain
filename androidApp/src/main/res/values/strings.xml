@@ -10,24 +10,24 @@
     <string name="tile_subtitle_no_profile">No profile</string>
 
     <string name="widget_toggle_label">Chain toggle</string>
-    <string name="widget_toggle_description">Connect or disconnect the chain with one tap</string>
+    <string name="widget_toggle_description">Turn the chain on or off</string>
     <string name="widget_controls_label">Chain controls</string>
-    <string name="widget_controls_description">Toggle the chain and scan a profile QR; resize taller for live metrics</string>
+    <string name="widget_controls_description">Connect, scan a QR code, and see live stats when resized taller</string>
     <string name="widget_scan_qr">Scan QR</string>
     <string name="widget_label_exit">EXIT</string>
-    <string name="widget_label_rtt">RTT</string>
-    <string name="widget_label_rate">RATE</string>
+    <string name="widget_label_rtt">PING</string>
+    <string name="widget_label_rate">SPEED</string>
     <string name="widget_label_session">SESSION</string>
     <string name="widget_uptime_minutes">up %1$d min</string>
     <string name="widget_uptime_hours">up %1$d h %2$d min</string>
     <string name="widget_uptime_now">up &lt;1 min</string>
 
     <string name="notification_disconnect">Disconnect</string>
-    <string name="notification_exit_resolving">Resolving exit…</string>
-    <string name="notification_rtt">RTT %1$d ms</string>
+    <string name="notification_exit_resolving">Finding exit…</string>
+    <string name="notification_rtt">Ping %1$d ms</string>
     <string name="notification_measuring">Measuring…</string>
     <string name="notification_evidence_configured">configured</string>
-    <string name="notification_evidence_recalled">recalled</string>
+    <string name="notification_evidence_recalled">last seen</string>
     <string name="notification_uptime_format">Up %s</string>
     <string name="notification_traffic">↓ %1$s · ↑ %2$s · %3$s total</string>
 </resources>

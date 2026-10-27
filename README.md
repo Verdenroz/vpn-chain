@@ -75,12 +75,12 @@ vpn-chain down           # stop the relay (add --disconnect-entry to drop the en
 3. Optional entry hop: generate a WireGuard config from your provider, a
    different one for each device, and import it without printing the key:
    `cli/import-entry-conf.sh ~/Downloads/entry.conf`.
-4. In the app, open **Settings → Chain identity → Import**. Paste or import
+4. In the app, open **Settings → Connection → Import**. Paste or import
    `secrets.env`, or paste a WireGuard `.conf`. The app shows a review (the
    server and entry it would use) before anything is saved. **Use it** switches
    to the connection; **Save** keeps it for later.
 5. On Android you can scan a QR code from the desktop app instead
-   (**Chain identity → Show QR**).
+   (**Connection → Show QR**).
 
 A pasted WireGuard `.conf` becomes a WireGuard-only connection: a plain tunnel
 to that peer, with no relay. **Use as entry hop** attaches it to the active
@@ -104,8 +104,8 @@ others, create it on the server with `server/devices.sh add`. See
 |---|---|---|
 | Saved connections: relay, WireGuard-only, or both chained | Settings → Profiles | [architecture](docs/architecture.md) |
 | Optional entry hop, switchable off without editing the profile | Settings → Routing | [android](docs/android.md), [desktop-tun](docs/desktop-tun.md) |
-| Cloudflare WARP exit, automatic for sites that refuse the VPS | Settings → Routing | [warp-exit](docs/warp-exit.md) |
-| Send direct: a tap lets a refused site leave on your own address | Chain card, Settings → Routing | [warp-exit](docs/warp-exit.md#failing-open) |
+| Cloudflare WARP exit, automatic for sites that refuse the VPS | Settings → Routing, Sites | [warp-exit](docs/warp-exit.md) |
+| Use my connection: a tap lets a refused site leave on your own address | Chain prompt, Sites | [warp-exit](docs/warp-exit.md#failing-open) |
 | DNS filtering (threats, or threats + ads) | Settings → DNS | [dns-filtering](docs/dns-filtering.md) |
 | Kill switch: nftables on desktop, Always-on VPN on Android | Settings → Kill switch | [kill-switch](docs/kill-switch.md) |
 | In-app updates | Update banner, Settings → About | [Updating](#updating) |

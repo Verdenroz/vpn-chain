@@ -393,7 +393,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
             lastVerifiedAt = SystemClock.elapsedRealtime()
             if (carries) return
             if (!owns(gen) || TunnelBridge.status.value.state != TunnelState.Connected) return
-            TunnelBridge.log("chain stopped carrying traffic — tearing it down so it can be rebuilt")
+            TunnelBridge.log("chain stopped carrying traffic, rebuilding it")
             dropEngine(gen, UiText.Resource(Res.string.tunnel_error_stopped_carrying))
         }
     }

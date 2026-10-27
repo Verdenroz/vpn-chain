@@ -66,11 +66,9 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_allo
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_always_on_active
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_always_on_not_armed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_appearance_title
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_connect_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_connect_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_reconnect_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_reconnect_title
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_detail_android
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_start_title_android
@@ -379,7 +377,7 @@ fun SettingsScreen(
             SectionCard(title = stringResource(Res.string.settings_automation_title)) {
                 SettingRow(
                     title = stringResource(Res.string.settings_auto_connect_title),
-                    detail = stringResource(Res.string.settings_auto_connect_detail),
+                    detail = null,
                     checked = uiState.settings.autoConnectOnLaunch,
                     onCheckedChange = onToggleAutoConnect,
                 )
@@ -403,13 +401,7 @@ fun SettingsScreen(
                                 Res.string.settings_auto_start_title
                             },
                         ),
-                        detail = stringResource(
-                            if (onAndroid) {
-                                Res.string.settings_auto_start_detail_android
-                            } else {
-                                Res.string.settings_auto_start_detail
-                            },
-                        ),
+                        detail = if (onAndroid) stringResource(Res.string.settings_auto_start_detail_android) else null,
                         checked = uiState.settings.autoStartOnLogin,
                         onCheckedChange = onToggleAutoStart,
                     )

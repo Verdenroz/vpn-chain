@@ -29,9 +29,9 @@ class CliOutputTest {
             entry hop   up
             kill switch active
             exit ip     198.51.100.7
-            detail      system-wide (TUN)
+            detail      All apps
             """.trimIndent(),
-            statusText(connected, "system-wide (TUN)"),
+            statusText(connected, "All apps"),
         )
     }
 

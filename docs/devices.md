@@ -60,7 +60,7 @@ server/devices.sh add phone
 ```
 
 Move `~/.config/vpn-chain/devices/phone.env` to the phone and paste it into
-**Settings → Chain identity → Import**, or use `--out` to write it somewhere you
+**Settings → Connection → Import**, or use `--out` to write it somewhere you
 control. Then delete the local copy.
 
 To switch the machine you are on to its own identity:

@@ -6,7 +6,7 @@ resolves through the relay, so the filtering has to happen client-side.
 
 ## Turn it on or change the level
 
-**Settings → DNS → Block unwanted domains**, on both platforms:
+**Settings → DNS → Block harmful sites**, on both platforms:
 
 | Level | Blocks |
 |---|---|
@@ -14,7 +14,7 @@ resolves through the relay, so the filtering has to happen client-side.
 | Threats | Malware, phishing and scam domains |
 | Threats + ads | Threats, plus advertising, tracking and telemetry (default) |
 
-It applies to every TUN chain. Desktop proxy mode (**Route entire system** off)
+It applies to every TUN chain. Desktop proxy mode (**Route all apps** off)
 renders no resolver of its own, since the VLESS outbound forwards hostnames to
 the VPS, so the card is hidden there. If a site misbehaves, turn the filter off
 and reconnect.

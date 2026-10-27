@@ -8,7 +8,7 @@ system Always-on VPN instead: [android.md](android.md#kill-switch).
 | WireGuard entry hop (sing-box dials it) | The app's nftables table | The helper below |
 | Single hop (no entry, no external VPN app) | The app's nftables table, exempting only the VPS | The helper below |
 | No entry fields, external VPN app carries the hop | The VPN app's own | Enable it in that app |
-| Proxy mode (**Route entire system** off) | None: nothing is captured system-wide, so there is no leak to catch | none |
+| Proxy mode (**Route all apps** off) | None: nothing is captured system-wide, so there is no leak to catch | none |
 
 The Chain card's **Kill switch** row reports what actually holds, not the mode
 you configured: **On**, or **Off** with a hint naming the cause: set up in
@@ -36,7 +36,7 @@ app's kill switch for you.
 3. Check it: `vpn-chain status` prints `kill switch: helper ready`, `helper not
    installed` or `helper not privileged`.
 
-On by default. **Settings → Kill switch → Fail closed** turns it off.
+On by default. **Settings → Kill switch → Block traffic if the chain drops** turns it off.
 **Allow local networks** (on by default) keeps LAN and Docker reachable; turning
 it off is strictly fail-closed.
 
