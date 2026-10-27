@@ -22,7 +22,6 @@ SECRETS_FILE="${VPN_CHAIN_SECRETS:-$HOME/.config/vpn-chain/secrets.env}"
 # shellcheck source=/dev/null
 [ -f "$SECRETS_FILE" ] && . "$SECRETS_FILE"
 SSH_TARGET="${2:-root@${VPS_IP:-}}"
-SSH_KEY="${VPN_CHAIN_SSH_KEY:-$HOME/.ssh/id_1984_relay}"
 XRAY_CONFIG="${XRAY_CONFIG:-/usr/local/etc/xray/config.json}"
 
 die() { printf '\033[1;31m[rotate]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -41,7 +40,13 @@ ENDPOINT="$(ini_get Endpoint)"
 EP_HOST="${ENDPOINT%%:*}"; EP_PORT="${ENDPOINT##*:}"
 log "Parsed new Proton config (endpoint $EP_HOST:$EP_PORT, address $ADDR). Key stays hidden."
 
-if [ -n "${VPN_CHAIN_REMOTE:-}" ]; then read -ra SSH <<<"$VPN_CHAIN_REMOTE"; else SSH=(ssh -i "$SSH_KEY" -o ConnectTimeout=12 "$SSH_TARGET"); fi
+if [ -n "${VPN_CHAIN_REMOTE:-}" ]; then
+    read -ra SSH <<<"$VPN_CHAIN_REMOTE"
+else
+    SSH=(ssh -o ConnectTimeout=12)
+    [ -z "${VPN_CHAIN_SSH_KEY:-}" ] || SSH+=(-i "$VPN_CHAIN_SSH_KEY")
+    SSH+=("$SSH_TARGET")
+fi
 
 # Patch the proton outbound on the server. The values are streamed ahead of the
 # script on stdin, so the private key never appears in any argv, local or remote.
