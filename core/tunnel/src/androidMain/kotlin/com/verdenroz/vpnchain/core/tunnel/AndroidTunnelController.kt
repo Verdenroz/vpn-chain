@@ -51,11 +51,11 @@ class AndroidTunnelController(
         // killSwitchEnabled is desktop-only (see TunnelController) - Android's
         // kill switch is the system Always-on VPN setting, unrelated to this.
         val current = TunnelBridge.status.value.state
-        if (current == TunnelState.Connecting || current == TunnelState.Connected) return
-        TunnelBridge.setState(TunnelState.Connecting)
+        if (engineRunning(current)) return TunnelBridge.status.awaitConnected()
+        TunnelBridge.beginAttempt()
         if (!VpnPermissionCoordinator.ensure(context)) {
             TunnelBridge.setState(TunnelState.Error, UiText.Resource(Res.string.tunnel_error_vpn_permission_denied))
-            return
+            return TunnelBridge.status.awaitConnected()
         }
         TunnelBridge.pendingConfig = configJson
         val intent = Intent(context, VpnChainService::class.java).apply {
@@ -69,6 +69,7 @@ class AndroidTunnelController(
                     UiText.Resource(Res.string.tunnel_error_background_start_refused),
                 )
             }
+        TunnelBridge.status.awaitConnected()
     }
 
     /**
@@ -80,6 +81,7 @@ class AndroidTunnelController(
         if (!engineRunning(TunnelBridge.status.value.state)) {
             return start(configJson, killSwitchEnabled, allowLocalNetworks)
         }
+        TunnelBridge.beginAttempt()
         TunnelBridge.pendingConfig = configJson
         val intent = Intent(context, VpnChainService::class.java).apply {
             action = VpnChainService.ACTION_RELOAD
@@ -91,6 +93,7 @@ class AndroidTunnelController(
                     UiText.Resource(Res.string.tunnel_error_background_start_refused),
                 )
             }
+        TunnelBridge.status.awaitConnected()
     }
 
     /**

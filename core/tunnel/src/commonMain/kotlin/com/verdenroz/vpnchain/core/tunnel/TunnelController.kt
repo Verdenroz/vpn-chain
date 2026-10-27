@@ -21,6 +21,12 @@ interface TunnelController {
     val logs: SharedFlow<String>
 
     /**
+     * Returns once the chain is [TunnelState.Connected], which means a real request
+     * crossed it.
+     *
+     * @throws TunnelConnectException when the tunnel reaches Error, when the user's
+     * Disconnect lands first, or after [CONNECT_TIMEOUT]. The VPN consent prompt
+     * is not counted against the timeout.
      * @param killSwitchEnabled Desktop-only, WG-entry-hop-mode-only: whether to
      * install the nftables kill switch. Ignored everywhere else.
      * @param allowLocalNetworks Desktop-only: whether that kill switch leaves
@@ -38,6 +44,7 @@ interface TunnelController {
      * then [start] leaves: desktop keeps the kill switch armed and swaps in the
      * new exemptions in one load, and Android reloads the engine inside the
      * VpnService it already holds. The default is only for platforms with neither.
+     * Returns and throws as [start] does, and never reports the engine it replaced.
      */
     suspend fun restart(configJson: String, killSwitchEnabled: Boolean = true, allowLocalNetworks: Boolean = true) {
         stop()

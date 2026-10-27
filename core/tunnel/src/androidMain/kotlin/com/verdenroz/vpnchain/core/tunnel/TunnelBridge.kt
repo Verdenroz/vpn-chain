@@ -13,6 +13,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Process-wide channel between [AndroidTunnelController] (in the UI) and
@@ -82,6 +83,19 @@ internal object TunnelBridge {
 
     fun signalUserStop() {
         userStops.tryEmit(Unit)
+    }
+
+    /**
+     * Which start attempt owns the status. The controller takes a new one before the
+     * service hears of it, so an engine still confirming from the last attempt cannot
+     * report Connected into the wait that follows.
+     */
+    val generation = AtomicInteger(0)
+
+    /** Marks the status Connecting for a new attempt before the service has heard of it. */
+    fun beginAttempt() {
+        generation.incrementAndGet()
+        setState(TunnelState.Connecting)
     }
 
     // replacement here would silently reset kill-switch status on every state change.

@@ -225,6 +225,7 @@ class DesktopTunnelController(
             _status.value = ChainStatus(state = TunnelState.Connecting)
             launchRelay(configJson)
         }
+        _status.awaitConnected()
     }
 
     override suspend fun restart(
@@ -256,6 +257,7 @@ class DesktopTunnelController(
             tearDown(restoreNetworking = false, settled = TunnelState.Connecting)
             launchRelay(configJson)
         }
+        _status.awaitConnected()
     }
 
     /** Launches [configJson], then once more on a fresh render if sing-box lost a port race. */

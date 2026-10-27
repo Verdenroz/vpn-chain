@@ -42,7 +42,6 @@ import io.nekohasekai.libbox.SetupOptions
 import io.nekohasekai.libbox.StatusMessage
 import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.SystemProxyStatus
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -96,7 +95,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
      * Which start attempt owns the status. A boot that is still unwinding when
      * the next one begins must not report the state of an engine that is gone.
      */
-    private val generation = AtomicInteger(0)
+    private val generation = TunnelBridge.generation
 
     private val networkMonitor by lazy { AndroidNetworkMonitor(applicationContext) }
     private val wakeGuard by lazy { AndroidWakeGuard(applicationContext) }
