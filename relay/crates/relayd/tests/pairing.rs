@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use common::{fixture, read};
-use relayd::pairing::{self, Public};
-use relayd::{Enrollments, Kind, Role, Verdict, secrets_path};
+use relayd::pairing::{self, Public, Purpose};
+use relayd::{Enrollments, FIRST_ADMIN_TTL, Kind, Role, TOKEN_TTL, Verdict, secrets_path};
 use serde_json::Value;
 
 const PBK: &str = "mJZadK8WS3D6oFxqlXypqkrdiBeHBIYIvLY2GjDo0nA";
@@ -41,8 +41,12 @@ impl Site {
     }
 
     fn link(&self, device: Option<&str>) -> String {
+        self.link_for(device, Purpose::Device)
+    }
+
+    fn link_for(&self, device: Option<&str>, purpose: Purpose) -> String {
         let state = self.state();
-        pairing::issue(&state, &secrets_path(&state), &self.lock(), device)
+        pairing::issue(&state, &secrets_path(&state), &self.lock(), device, purpose)
             .unwrap()
             .expose()
             .to_owned()
@@ -133,6 +137,41 @@ fn without_a_device_the_first_admin_is_paired() {
 }
 
 #[test]
+fn a_device_link_lasts_fifteen_minutes_and_a_first_admin_link_a_day() {
+    let site = Site::new("203.0.113.7");
+
+    let device = params(&site.link(None));
+    let first = params(&site.link_for(None, Purpose::FirstAdmin));
+
+    let lifetime =
+        |params: &HashMap<String, String>| params["e"].parse::<u64>().unwrap() - pairing_now();
+    assert!(lifetime(&device).abs_diff(TOKEN_TTL) <= 2);
+    assert!(lifetime(&first).abs_diff(FIRST_ADMIN_TTL) <= 2);
+}
+
+#[test]
+fn only_a_first_admin_link_carries_f() {
+    let site = Site::new("203.0.113.7");
+
+    assert!(!params(&site.link(None)).contains_key("f"));
+    assert_eq!(params(&site.link_for(None, Purpose::FirstAdmin))["f"], "1");
+}
+
+#[test]
+fn the_display_states_the_lifetime_of_the_link() {
+    let site = Site::new("203.0.113.7");
+    let state = site.state();
+    let issue = |purpose| {
+        let link =
+            pairing::issue(&state, &secrets_path(&state), &site.lock(), None, purpose).unwrap();
+        pairing::show(&link, purpose)
+    };
+
+    assert!(issue(Purpose::Device).contains("once and for 15 minutes."));
+    assert!(issue(Purpose::FirstAdmin).contains("once and for 24 hours."));
+}
+
+#[test]
 fn an_ipv6_host_is_bracketed_and_a_name_is_kept() {
     assert_eq!(
         params(&Site::new("2001:db8::7").link(None))["h"],
@@ -156,8 +195,14 @@ fn an_unknown_device_is_refused() {
     let site = Site::new("203.0.113.7");
     let state = site.state();
 
-    let error =
-        pairing::issue(&state, &secrets_path(&state), &site.lock(), Some("ghost")).unwrap_err();
+    let error = pairing::issue(
+        &state,
+        &secrets_path(&state),
+        &site.lock(),
+        Some("ghost"),
+        Purpose::Device,
+    )
+    .unwrap_err();
 
     assert_eq!(error.kind(), Kind::Missing);
 }
@@ -166,9 +211,16 @@ fn an_unknown_device_is_refused() {
 fn the_display_shows_the_link_once_and_a_qr_code() {
     let site = Site::new("203.0.113.7");
     let state = site.state();
-    let link = pairing::issue(&state, &secrets_path(&state), &site.lock(), None).unwrap();
+    let link = pairing::issue(
+        &state,
+        &secrets_path(&state),
+        &site.lock(),
+        None,
+        Purpose::Device,
+    )
+    .unwrap();
 
-    let shown = pairing::show(&link);
+    let shown = pairing::show(&link, Purpose::Device);
 
     assert_eq!(shown.matches("vpnchain://").count(), 1);
     assert!(shown.contains('█') && shown.contains('▀'));
