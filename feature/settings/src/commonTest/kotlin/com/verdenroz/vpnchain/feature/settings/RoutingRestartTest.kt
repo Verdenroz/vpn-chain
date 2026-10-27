@@ -51,6 +51,14 @@ class RoutingRestartTest {
     }
 
     @Test
+    fun `turning the connection log on moves a live tunnel without stopping it`() {
+        viewModel(TunnelState.Connected).setConnectionLog(true)
+
+        assertEquals(listOf("restart"), log)
+        assertEquals(true, settings.settings.value.connectionLog)
+    }
+
+    @Test
     fun `a stopped tunnel stays stopped`() {
         viewModel(TunnelState.Disconnected).setFailOpen(false)
 

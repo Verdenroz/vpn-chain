@@ -82,6 +82,9 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_chai
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_close_to_tray_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_close_to_tray_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_configured_for
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_connection_log_detail
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_connection_log_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_diagnostics_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_filter_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_title
@@ -196,6 +199,7 @@ fun SettingsRoute(
         onRemoveLearned = viewModel::removeLearned,
         onSendDirect = viewModel::sendDirect,
         onUndoDirect = viewModel::undoDirect,
+        onToggleConnectionLog = viewModel::setConnectionLog,
         onToggleAutoConnect = viewModel::setAutoConnectOnLaunch,
         onToggleAutoReconnect = viewModel::setAutoReconnect,
         onToggleAutoStart = viewModel::setAutoStartOnLogin,
@@ -235,6 +239,7 @@ fun SettingsScreen(
     onRemoveLearned: (String) -> Unit,
     onSendDirect: (String) -> Unit,
     onUndoDirect: (String) -> Unit,
+    onToggleConnectionLog: (Boolean) -> Unit,
     onToggleAutoConnect: (Boolean) -> Unit,
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleAutoStart: (Boolean) -> Unit,
@@ -527,6 +532,15 @@ fun SettingsScreen(
                         onSelect = onSetDnsFilter,
                     )
                 }
+            }
+
+            SectionCard(title = stringResource(Res.string.settings_diagnostics_title)) {
+                SettingRow(
+                    title = stringResource(Res.string.settings_connection_log_title),
+                    detail = stringResource(Res.string.settings_connection_log_detail),
+                    checked = uiState.settings.connectionLog,
+                    onCheckedChange = onToggleConnectionLog,
+                )
             }
 
             SectionCard(title = stringResource(Res.string.settings_appearance_title)) {

@@ -19,6 +19,7 @@ interface SettingsRepository {
     suspend fun setWarpMode(mode: WarpMode)
     suspend fun setLearnBlockedSites(enabled: Boolean)
     suspend fun setFailOpen(enabled: Boolean)
+    suspend fun setConnectionLog(enabled: Boolean)
     suspend fun setAutoConnectOnLaunch(enabled: Boolean)
     suspend fun setAutoReconnect(enabled: Boolean)
     suspend fun setCloseToTray(enabled: Boolean)
@@ -64,6 +65,9 @@ internal class DefaultSettingsRepository(
         preferences.setFailOpen(enabled)
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) =
         preferences.setAutoConnectOnLaunch(enabled)
+    override suspend fun setConnectionLog(enabled: Boolean) =
+        preferences.setConnectionLog(enabled)
+
     override suspend fun setAutoReconnect(enabled: Boolean) =
         preferences.setAutoReconnect(enabled)
     override suspend fun setCloseToTray(enabled: Boolean) =

@@ -175,6 +175,10 @@ class SettingsViewModel(
         changeRouting.setFailOpen(enabled).reportReconnect()
     }
 
+    fun setConnectionLog(enabled: Boolean) = viewModelScope.launch {
+        changeRouting.setConnectionLog(enabled).reportReconnect()
+    }
+
     private fun Result<Unit>.reportReconnect() {
         onFailure { _message.value = it.toError(Res.string.settings_switch_failed) }
     }

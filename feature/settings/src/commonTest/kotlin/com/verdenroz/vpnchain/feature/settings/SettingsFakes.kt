@@ -86,6 +86,10 @@ internal class FakeSettings : SettingsRepository {
     }
     override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
+
+    override suspend fun setConnectionLog(enabled: Boolean) {
+        settings.value = settings.value.copy(connectionLog = enabled)
+    }
     override suspend fun setCloseToTray(enabled: Boolean) = Unit
 }
 
