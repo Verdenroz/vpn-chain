@@ -13,13 +13,18 @@ import com.verdenroz.vpnchain.core.tunnel.NetworkMonitor
 import com.verdenroz.vpnchain.core.tunnel.OpenProbeGate
 import com.verdenroz.vpnchain.core.tunnel.ProbeGate
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
+import com.verdenroz.vpnchain.core.tunnel.bundledTool
 import kotlinx.coroutines.CoroutineScope
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
 actual val tunnelModule: Module = module {
     single<TunnelController> {
-        DesktopTunnelController(scope = get<CoroutineScope>(applicationScopeQualifier))
+        DesktopTunnelController(
+            scope = get<CoroutineScope>(applicationScopeQualifier),
+            singBoxBin = bundledTool("sing-box"),
+            killSwitchBin = bundledTool("vpn-chain-killswitch"),
+        )
     }
     single<NetworkMonitor> { DesktopNetworkMonitor() }
     single<ProbeGate> { OpenProbeGate() }
