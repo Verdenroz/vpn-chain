@@ -1,5 +1,4 @@
-# The one workflow every pull request runs. It calls the suites the change touches, and
-# `ci-ok` is the single required check, so a pull request that skips a suite can still merge.
+# Runs the suites a pull request touches. ci-ok is the required check.
 name: ci
 
 on:

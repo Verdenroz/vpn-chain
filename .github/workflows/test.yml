@@ -1,4 +1,4 @@
-# Runs the Gradle unit tests (commonTest and desktopTest). ci.yml calls it when Kotlin or build files change.
+# Gradle unit tests, called from ci.yml.
 name: test
 
 on:
