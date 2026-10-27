@@ -728,3 +728,16 @@ fn a_restart_handed_to_the_runner_queues_a_job_instead_of_restarting() {
     assert_eq!(lab.restart.count(), 0);
     assert_eq!(lab.names(), ["laptop"]);
 }
+
+#[test]
+fn revoke_keeps_the_device_that_holds_the_last_admin_key_unless_forced() {
+    let lab = Lab::new(SPARES);
+    lab.add_key("shared", 7);
+
+    let error = lab.manager().revoke("shared", false).unwrap_err();
+
+    assert_eq!(error.kind(), Kind::Conflict);
+    assert_eq!(lab.names(), ["shared", "laptop"]);
+    lab.manager().revoke("shared", true).unwrap();
+    assert!(lab.relay().state.keys.is_empty());
+}

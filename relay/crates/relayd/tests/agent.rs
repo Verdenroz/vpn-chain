@@ -180,6 +180,21 @@ fn a_replayed_request_is_refused_the_second_time() {
 }
 
 #[test]
+fn the_audit_log_survives_a_torn_line() {
+    let rig = Rig::start(false, SPARES);
+    rig.admin("DELETE", "/v1/devices/shared", "");
+    let path = rig.dir.path().join("audit.jsonl");
+    let mut log = fs::read_to_string(&path).unwrap();
+    log.push_str("{\"time\":\"2026");
+    fs::write(&path, log).unwrap();
+
+    let reply = rig.admin("GET", "/v1/audit", "");
+
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.body["entries"].as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn a_signature_made_for_one_path_does_not_open_another() {
     let rig = Rig::start(false, SPARES);
     let headers = rig.sign(&signer(ADMIN), "GET", "/v1/relay", "");

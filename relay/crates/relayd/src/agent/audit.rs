@@ -65,14 +65,15 @@ impl Audit {
 
     /// The last entries, oldest first.
     pub fn recent(&self) -> Result<Vec<Entry>, Error> {
+        let _writing = self
+            .file
+            .lock()
+            .expect("no holder of the audit file panics");
         let text = fs::read_to_string(&self.path).map_err(|error| Error::at(&self.path, error))?;
         let lines: Vec<&str> = text.lines().collect();
-        lines[lines.len().saturating_sub(RECENT)..]
+        Ok(lines[lines.len().saturating_sub(RECENT)..]
             .iter()
-            .map(|line| {
-                serde_json::from_str(line)
-                    .map_err(|_| Error::at(&self.path, "a line that is not an audit entry"))
-            })
-            .collect()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect())
     }
 }

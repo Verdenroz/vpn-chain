@@ -331,3 +331,19 @@ fn the_nonce_cache_refuses_new_requests_when_full_and_frees_room_as_nonces_expir
             .is_ok()
     );
 }
+
+#[test]
+fn one_key_filling_its_quota_does_not_lock_another_out() {
+    let keys = keys();
+    let verifier = Verifier::with_capacity(1);
+    let admin = Request::signed_by(&signer(7), &keys[0]);
+    verifier.verify(&keys, &admin.view(), NOW).unwrap();
+    let mut second = Request::signed_by(&signer(7), &keys[0]);
+    second.nonce = "bbbbbbbbbbbbbbbb".to_owned();
+    second.sign(&signer(7));
+    assert_eq!(why(&verifier, &second, NOW), Why::Overloaded);
+
+    let member = Request::signed_by(&signer(8), &keys[1]);
+
+    assert!(verifier.verify(&keys, &member.view(), NOW).is_ok());
+}
