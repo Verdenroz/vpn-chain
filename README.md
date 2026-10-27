@@ -39,13 +39,16 @@ You need a Debian or Ubuntu VPS you can SSH into as root, with TCP port 443 open
    ```
 
 3. Install the app.
-   - **Linux (x64):** install `sing-box` from your package manager, then:
+   - **Linux (x64, Debian or Ubuntu):** download `vpn-chain_<version>_amd64.deb` from the
+     [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest) and install it:
 
      ```
-     cli/install-desktop.sh    # the app, kept up to date, with a menu entry
-     cli/setup-desktop.sh      # once: system-wide tunnel, kill switch, no password prompts
-     ln -s "$PWD/cli/killswitch/vpn-chain-killswitch" ~/.local/bin/
+     sudo apt install ./vpn-chain_<version>_amd64.deb
      ```
+
+     Open **VPN Chain** from your app menu. The package includes the tunnel and the
+     kill switch, so there is nothing else to install. New releases install from
+     inside the app and ask for your password once.
 
    - **Android:** download `vpn-chain-<version>-android-arm64-v8a.apk` from the
      [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest)
@@ -100,7 +103,8 @@ Your connection details stay on your devices: in `~/.config/vpn-chain`
 - **No internet on Linux after the app stopped:** the kill switch stays up until
   you connect again or press **Disconnect**. `vpn-chain-killswitch down` removes it.
 - **Kill switch shows Off on Linux:** the row says why. Usually the helper lost its
-  permission after a rebuild: run `cli/setup-desktop.sh` again.
+  permission: install the package again with
+  `sudo apt install --reinstall ./vpn-chain_<version>_amd64.deb`.
 - **Android leaks traffic when the VPN drops:** Android settings → Network &
   internet → VPN → the gear next to vpn-chain → turn on **Always-on VPN** and
   **Block connections without VPN**.
@@ -110,8 +114,10 @@ Your connection details stay on your devices: in `~/.config/vpn-chain`
 - **SSH to the VPS drops during a change:** while you are connected, SSH runs
   through the VPS, and the change restarts it. Reconnect; `server/devices.sh list`
   shows whether it applied.
-- **`TUNSETIFF: operation not permitted` on Linux:** a `sing-box` upgrade removed
-  its permission. Run `cli/setup-desktop.sh` again.
+- **`TUNSETIFF: operation not permitted` on Linux:** the app could not start its
+  background service. Install the package again with
+  `sudo apt install --reinstall ./vpn-chain_<version>_amd64.deb`, from your own
+  account in a terminal on the desktop.
 
 ## Build from source and contributing
 
