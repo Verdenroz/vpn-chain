@@ -3,12 +3,11 @@
 //! networking: `cargo test --test live -- --ignored`.
 
 mod relay;
-mod tunnel;
 
+use live_harness::{Tunnel, echo_server, roundtrip};
 use xray_api::{Error, Traffic};
 
 use relay::{Device, INBOUND, Relay, SING_BOX};
-use tunnel::{Tunnel, echo_server, roundtrip};
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs docker"]
