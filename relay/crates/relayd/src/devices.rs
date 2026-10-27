@@ -16,12 +16,12 @@ use crate::{
 pub const SPARES: usize = 8;
 
 /// Device operations on one relay. Every operation takes the devices lock first, so it never
-/// interleaves with the server scripts or another relayd, and fails rather than waits when the
-/// lock is held.
+/// interleaves with the server scripts or another relayd, and fails if the lock stays held for
+/// `lock_wait`.
 ///
 /// Each change is saved to the state, rendered to the config through the checked swap, and
-/// applied to the running xray through its API; only [`Manager::revoke`] and
-/// [`Manager::refill_pool`] restart it.
+/// applied to the running xray through its API; only [`Manager::revoke`], [`Manager::refill_pool`]
+/// and an [`Manager::add`] that refills an empty pool restart it.
 pub struct Manager<'a> {
     pub state: &'a Path,
     pub secrets: &'a Path,
@@ -80,15 +80,19 @@ impl Manager<'_> {
         };
         let next = changed(&relay, with(&relay.state.devices, device.clone()), spares);
         Identity::of(&relay, &device).create(out)?;
-        let applied = if drained {
-            self.restart_into(&relay, &next)
+        let written = if drained {
+            self.write_out(&relay, &next)
         } else {
             self.apply_live(&relay, &next, || self.add_user(vless_user(&device)))
         };
-        if applied.is_err() {
+        if written.is_err() {
             let _ = fs::remove_file(out);
         }
-        applied
+        written?;
+        if drained {
+            self.restart_xray()?;
+        }
+        Ok(())
     }
 
     /// Gives the device `old` the name `new`, keeping its UUID and short ID.
@@ -168,20 +172,20 @@ impl Manager<'_> {
             .cloned()
             .collect();
         let spares = topped_up(relay.state.spare_short_ids.clone(), self.spares);
-        self.restart_into(&relay, &changed(&relay, devices, spares))
+        self.write_out(&relay, &changed(&relay, devices, spares))?;
+        self.restart_xray()
     }
 
-    /// Fills the pool back to its size and restarts xray to load the new short IDs. Returns how
-    /// many it added; a full pool changes and restarts nothing.
+    /// Fills the pool back to its size and restarts xray to load the saved config, which also
+    /// finishes a revocation or refill whose restart failed. Returns how many short IDs it added.
     pub fn refill_pool(&self) -> Result<usize, Error> {
         let _held = store::lock_within(self.lock, self.lock_wait)?;
         let relay = self.begin()?;
         let spares = topped_up(relay.state.spare_short_ids.clone(), self.spares);
         let added = spares.len() - relay.state.spare_short_ids.len();
-        if added > 0 {
-            let next = changed(&relay, relay.state.devices.clone(), spares);
-            self.restart_into(&relay, &next)?;
-        }
+        let next = changed(&relay, relay.state.devices.clone(), spares);
+        self.write_out(&relay, &next)?;
+        self.restart_xray()?;
         Ok(added)
     }
 
@@ -217,9 +221,12 @@ impl Manager<'_> {
         })
     }
 
-    fn restart_into(&self, before: &Relay, after: &Relay) -> Result<(), Error> {
-        self.write_out(before, after)?;
-        self.restart.restart()
+    fn restart_xray(&self) -> Result<(), Error> {
+        self.restart.restart().map_err(|error| {
+            Error::new(format!(
+                "{error}; the change is saved but xray still runs the old config: run `relayd maintenance refill-pool` or restart it"
+            ))
+        })
     }
 
     /// The state is saved first, so a crash after the config swap never leaves a config that
