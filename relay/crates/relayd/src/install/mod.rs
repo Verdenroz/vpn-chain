@@ -126,7 +126,7 @@ fn print_first_code(site: &Site, device: Option<&str>) -> Result<(), Error> {
     print!("{}", pairing::show(&link, Purpose::FirstAdmin));
     if Relay::load(&site.state, &site.secrets)?.state.devices.len() > 1 {
         say(
-            "devices that already connect keep working; the admin can give each of them a code in the app (Devices > New code) to manage them there",
+            "devices that already connect keep working; the admin can give each of them a code in the app (Settings → Devices → New code) to manage them there",
         );
     }
     Ok(())
