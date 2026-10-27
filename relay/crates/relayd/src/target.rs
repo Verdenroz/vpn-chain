@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use relayd::{DEVICES_LOCK, SPARES, secrets_path};
+use relayd::{DEVICES_LOCK, SPARES, layout, secrets_path};
 
 use crate::args::Args;
 
@@ -22,15 +22,35 @@ pub struct Target {
 
 impl Target {
     pub fn from(args: &mut Args) -> Option<Self> {
-        let state = args.path("state")?;
-        let config = args.path("config")?;
+        Self::build(args, false)
+    }
+
+    /// Like [`Target::from`], but without `--state` it is the relay `relayd install` made.
+    pub fn from_or_installed(args: &mut Args) -> Option<Self> {
+        Self::build(args, true)
+    }
+
+    fn build(args: &mut Args, installed: bool) -> Option<Self> {
+        let given = args.path("state");
+        let defaults = installed && given.is_none();
+        let state = match given {
+            Some(state) => state,
+            None if installed => PathBuf::from(layout::STATE),
+            None => return None,
+        };
+        let config = match args.path("config") {
+            Some(config) => config,
+            None if defaults => PathBuf::from(layout::XRAY_CONFIG),
+            None => return None,
+        };
+        let xray = if defaults { layout::XRAY } else { "xray" };
         Some(Self {
             secrets: args.path("secrets").unwrap_or_else(|| secrets_path(&state)),
             config,
             lock: args
                 .path("lock")
                 .unwrap_or_else(|| PathBuf::from(DEVICES_LOCK)),
-            xray: args.path("xray").unwrap_or_else(|| PathBuf::from("xray")),
+            xray: args.path("xray").unwrap_or_else(|| PathBuf::from(xray)),
             group: args.value("group").unwrap_or_else(|| XRAY_GROUP.to_owned()),
             spares: match args.value("spares") {
                 Some(spares) => spares.parse().ok()?,

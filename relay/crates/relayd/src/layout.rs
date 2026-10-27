@@ -11,3 +11,5 @@ pub const STATE: &str = "/var/lib/vpn-chain/relay/relay.json";
 pub const XRAY_CONFIG: &str = "/usr/local/etc/xray/config.json";
 
 pub const XRAY_ROOT: &str = "/opt/vpn-chain/xray";
+
+pub const XRAY: &str = "/opt/vpn-chain/xray/current/xray";

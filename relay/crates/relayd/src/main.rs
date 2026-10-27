@@ -21,7 +21,7 @@ const USAGE: &str = "usage: relayd install [--name <device> | --device <device>]
        relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>]
        relayd adopt --config <config.json> [--devices <devices.json>] --state <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>] [--xray <path>] [--group <name>] [--restart]
        relayd render --state <state.json> [--secrets <secrets.json>] --out <config.json> [--group <name>] [--swap [--xray <path>]]
-       relayd device list --state <state.json> [--secrets <secrets.json>]
+       relayd device list [--state <state.json>] [--secrets <secrets.json>]
        relayd device add <name> --out <identity.json> [--role member|admin] [--allow-restart] <target>
        relayd device rename <old> <new> <target>
        relayd device rekey <name> --out <identity.json> <target>
@@ -29,9 +29,9 @@ const USAGE: &str = "usage: relayd install [--name <device> | --device <device>]
        relayd maintenance refill-pool <target>
        relayd keys add <device> --public-key <file> [--role member|admin] --state <state.json> [--secrets <secrets.json>] [--lock <file>]
        relayd serve [--audit <audit.jsonl>] [--jobs <state dir>] <target>
-       relayd pair [--device <name>] [--state <state.json>] [--secrets <secrets.json>] [--lock <file>]
+       relayd pair [--device <name> | --new <name> [--role member|admin]] [--state <state.json>] [--secrets <secrets.json>] [--lock <file>]
        relayd egress (--state <state.json> [--secrets <secrets.json>] | --agent-port <n>) [--resolv <file>] [--print]
-target: --state <state.json> --config <config.json> [--secrets <secrets.json>] [--lock <file>] [--xray <path>] [--group <name>] [--spares <n>]";
+target: [--state <state.json> --config <config.json>] [--secrets <secrets.json>] [--lock <file>] [--xray <path>] [--group <name>] [--spares <n>]";
 
 const EX_USAGE: u8 = 64;
 

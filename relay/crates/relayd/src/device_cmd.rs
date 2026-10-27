@@ -1,7 +1,9 @@
 use std::time::Duration;
 
+use std::path::PathBuf;
+
 use relayd::{
-    Device, Error, Manager, Placement, Relay, Role, Systemctl, XrayLive, now, secrets_path,
+    Device, Error, Manager, Placement, Relay, Role, Systemctl, XrayLive, layout, now, secrets_path,
 };
 
 use crate::args::Args;
@@ -51,7 +53,7 @@ pub fn maintenance(args: &[&str]) -> Option<Result<(), Error>> {
     };
     let mut args = Args::parse(rest, &valued(&[]), &[])?;
     let [] = args.words()?;
-    let target = Target::from(&mut args)?;
+    let target = Target::from_or_installed(&mut args)?;
     let added = target.manage(|manager| manager.refill_pool());
     Some(added.map(|added| match added {
         0 => println!("the pool was full; restarted xray"),
@@ -62,7 +64,9 @@ pub fn maintenance(args: &[&str]) -> Option<Result<(), Error>> {
 fn list(args: &[&str]) -> Option<Result<(), Error>> {
     let mut args = Args::parse(args, &["state", "secrets"], &[])?;
     let [] = args.words()?;
-    let state = args.path("state")?;
+    let state = args
+        .path("state")
+        .unwrap_or_else(|| PathBuf::from(layout::STATE));
     let secrets = args.path("secrets").unwrap_or_else(|| secrets_path(&state));
     Some(Relay::load(&state, &secrets).map(|relay| print_devices(&relay.state.devices)))
 }
@@ -78,7 +82,7 @@ fn add(args: &[&str]) -> Option<Result<(), Error>> {
     };
     let out = args.path("out")?;
     let allow_restart = args.has("allow-restart");
-    let target = Target::from(&mut args)?;
+    let target = Target::from_or_installed(&mut args)?;
     let added = target.manage(|manager| manager.add(&name, role, &out, allow_restart));
     Some(added.map(|()| println!("added {name}; its identity is in {}", out.display())))
 }
@@ -87,7 +91,7 @@ fn rename(args: &[&str]) -> Option<Result<(), Error>> {
     let mut args = Args::parse(args, &valued(&[]), &[])?;
     let [old, new] = args.words()?;
     let (old, new) = (old.to_owned(), new.to_owned());
-    let target = Target::from(&mut args)?;
+    let target = Target::from_or_installed(&mut args)?;
     let renamed = target.manage(|manager| manager.rename(&old, &new));
     Some(renamed.map(|()| println!("renamed {old} to {new}")))
 }
@@ -97,7 +101,7 @@ fn rekey(args: &[&str]) -> Option<Result<(), Error>> {
     let [name] = args.words()?;
     let name = name.to_owned();
     let out = args.path("out")?;
-    let target = Target::from(&mut args)?;
+    let target = Target::from_or_installed(&mut args)?;
     let rekeyed = target.manage(|manager| manager.rekey(&name, &out));
     Some(rekeyed.map(|()| println!("rekeyed {name}; its new identity is in {}", out.display())))
 }
@@ -107,7 +111,7 @@ fn revoke(args: &[&str]) -> Option<Result<(), Error>> {
     let [name] = args.words()?;
     let name = name.to_owned();
     let force = args.has("force");
-    let target = Target::from(&mut args)?;
+    let target = Target::from_or_installed(&mut args)?;
     let revoked = target.manage(|manager| manager.revoke(&name, force));
     Some(revoked.map(|counters_lost| {
         if counters_lost {
