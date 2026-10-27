@@ -3,8 +3,7 @@
 name: server-tests
 
 on:
-  pull_request:
-    paths: ["server/**", "relay/crates/relayd/src/egress*.rs", ".github/workflows/server-tests.yml"]
+  workflow_call:
   push:
     branches: [main]
     paths: ["server/**", "relay/crates/relayd/src/egress*.rs", ".github/workflows/server-tests.yml"]

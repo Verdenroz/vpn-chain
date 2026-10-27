@@ -4,17 +4,6 @@
 name: deb
 
 on:
-  pull_request:
-    paths:
-      - "desktopApp/**"
-      - "cli/killswitch/**"
-      - "cli/polkit/**"
-      - "cli/systemd/**"
-      - "server/lib/pins.sh"
-      - "server/tests/fetch-singbox.sh"
-      - "gradle/libs.versions.toml"
-      - "gradle.properties"
-      - ".github/workflows/deb.yml"
   push:
     branches: [main]
     paths:

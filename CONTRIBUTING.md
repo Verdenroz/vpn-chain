@@ -164,8 +164,6 @@ the app can carry the key on a separate channel.
 ## Commits and pull requests
 
 Conventional commits (`feat:`, `fix:`, `docs:`, `ci:`, ...), subject at most 50
-characters. Commits are signed. Land a pull request by rebasing it onto `main` and
-fast-forwarding, `git push origin <branch>:main`, which closes it as merged. GitHub's
-rebase merge rewrites the commits unsigned. Documentation lives in the README, this file, CLAUDE.md, or a comment
-next to the code it explains. There is no docs directory, and CI fails on a link
-to one.
+characters. Pull requests are squash-merged, so the PR title becomes the commit
+subject. A PR can merge once `ci-ok` passes. Documentation lives in the README, this file, CLAUDE.md, or a comment
+next to the code it explains. There is no docs directory.

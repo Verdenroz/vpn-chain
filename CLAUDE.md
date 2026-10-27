@@ -100,7 +100,7 @@ invisible in testing.
 **Docs**
 - [ ] Read the KDoc and header comments in the files named above before changing that area.
 - [ ] There is no docs directory: user docs go in the README, maintainer docs in
-      CONTRIBUTING.md, this file, or a comment next to the code. CI fails on a link to one.
+      CONTRIBUTING.md, this file, or a comment next to the code.
 - [ ] Read [.impeccable.md](.impeccable.md) before touching `core/designsystem` or a feature's Compose UI.
 
 ## Traps

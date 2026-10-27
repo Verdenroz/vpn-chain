@@ -1,0 +1,72 @@
+# Runs the suites a pull request touches. ci-ok is the required check.
+name: ci
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      relay: ${{ steps.diff.outputs.relay }}
+      server: ${{ steps.diff.outputs.server }}
+      gradle: ${{ steps.diff.outputs.gradle }}
+      deb: ${{ steps.diff.outputs.deb }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          files="$(git diff --name-only "$BASE"...HEAD)"
+          printf '%s\n' "$files"
+          touched() { grep -qE "$1" <<<"$files" && echo true || echo false; }
+          {
+            echo "relay=$(touched '^(relay/|server/lib/pins\.sh$|server/tests/Dockerfile$|\.github/workflows/(relay|ci)\.yml$)')"
+            echo "server=$(touched '^(server/|relay/crates/relayd/src/egress[^/]*\.rs$|\.github/workflows/(server-tests|ci)\.yml$)')"
+            echo "gradle=$(touched '(\.kts?$|/src/.*/composeResources/|^gradle/|^gradle\.properties$|^build-logic/|^\.github/workflows/(test|ci)\.yml$)')"
+            echo "deb=$(touched '^(desktopApp/|cli/(killswitch|polkit|systemd)/|server/lib/pins\.sh$|server/tests/fetch-singbox\.sh$|gradle/libs\.versions\.toml$|gradle\.properties$|\.github/workflows/(deb|ci)\.yml$)')"
+          } >>"$GITHUB_OUTPUT"
+
+  relay:
+    needs: changes
+    if: needs.changes.outputs.relay == 'true'
+    uses: ./.github/workflows/relay.yml
+
+  server:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    uses: ./.github/workflows/server-tests.yml
+
+  gradle:
+    needs: changes
+    if: needs.changes.outputs.gradle == 'true'
+    uses: ./.github/workflows/test.yml
+
+  deb:
+    needs: changes
+    if: needs.changes.outputs.deb == 'true'
+    uses: ./.github/workflows/deb.yml
+
+  ci-ok:
+    needs: [changes, relay, server, gradle, deb]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for result in $RESULTS; do
+            case "$result" in success|skipped) ;; *) exit 1 ;; esac
+          done
