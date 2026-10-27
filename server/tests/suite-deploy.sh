@@ -80,6 +80,15 @@ check "Proton config passes xray -test" valid
 check "Proton chain is the catch-all exit" test "$(jq -r '.routing.rules[-1].outboundTag' "$CFG")" = exit-wg
 check "device file named after the device" test -f "$W/vpn-chain-laptop.env"
 
+# ---- xray version pin ----------------------------------------------------
+setup
+printf '#!/bin/sh\necho "Xray 26.10.21 (Xray, Penetrates Everything.) deadbeef (go1.26 linux/amd64)"\n' > "$W/xray-other"
+chmod +x "$W/xray-other"
+XRAY_BIN="$W/xray-other" deploy
+check "unpinned xray version refused" test "$RC" -ne 0
+check "refusal names the pinned version" bash -c 'grep -q "Xray v26.3.27" <<<"$1"' _ "$ALL"
+check "refused deploy writes no config" test ! -e "$CFG"
+
 # ---- unkeepable and emptied configs --------------------------------------
 setup
 printf '{ "inbounds": [\n' > "$CFG"

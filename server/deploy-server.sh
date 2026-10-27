@@ -43,6 +43,8 @@ EXIT_WG_DNS="${EXIT_WG_DNS:-10.2.0.1}"     # Proton internal resolver (applies N
 
 # shellcheck source=server/lib/xray-common.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/xray-common.sh"
+# shellcheck source=server/lib/pins.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/pins.sh"
 
 log() { printf '\033[1;36m[deploy]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -69,13 +71,15 @@ EOF
     log "WARNING: tcp_bbr module unavailable; leaving congestion control unchanged."
   fi
 
-  log "Installing Xray-core (official installer)..."
-  bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install >/dev/null
+  log "Installing Xray-core $XRAY_VERSION (official installer)..."
+  bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --version "$XRAY_VERSION" >/dev/null
 fi
 
 XRAY_BIN="${XRAY_BIN:-$(command -v xray || echo /usr/local/bin/xray)}"
 [ -x "$XRAY_BIN" ] || die "xray not found after install"
 XRAY="$XRAY_BIN"
+[ "$("$XRAY_BIN" version | sed -n '1s/^Xray \([^ ]*\) .*/v\1/p')" = "$XRAY_VERSION" ] \
+  || die "$XRAY_BIN is not Xray $XRAY_VERSION; newer releases break the sing-box REALITY client"
 
 lock
 load
