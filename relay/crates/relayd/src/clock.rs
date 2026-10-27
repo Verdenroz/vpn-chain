@@ -3,11 +3,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// The current UTC time as `date -u +%Y-%m-%dT%H:%M:%SZ` prints it, the format of `added` and
 /// `seen` in `devices.json`.
 pub fn now() -> String {
-    let seconds = SystemTime::now()
+    format_utc(seconds())
+}
+
+pub(crate) fn seconds() -> u64 {
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("the clock is past 1970")
-        .as_secs();
-    format_utc(seconds)
+        .as_secs()
 }
 
 fn format_utc(seconds: u64) -> String {
