@@ -390,7 +390,7 @@ fn replacing(devices: &[Device], name: &str, device: Device) -> Vec<Device> {
         .collect()
 }
 
-fn topped_up(spares: Vec<Secret>, size: usize) -> Vec<Secret> {
+pub(crate) fn topped_up(spares: Vec<Secret>, size: usize) -> Vec<Secret> {
     let missing = size.saturating_sub(spares.len());
     spares
         .into_iter()
@@ -410,11 +410,11 @@ fn vless_user(device: &Device) -> VlessUser {
     }
 }
 
-fn new_uuid() -> Secret {
+pub(crate) fn new_uuid() -> Secret {
     Secret::new(Uuid::new_v4().to_string())
 }
 
-fn new_short_id() -> Secret {
+pub(crate) fn new_short_id() -> Secret {
     let mut bytes = [0u8; 8];
     getrandom::fill(&mut bytes).expect("the OS provides randomness");
     Secret::new(

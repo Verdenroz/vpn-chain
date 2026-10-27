@@ -1,0 +1,20 @@
+[Unit]
+Description=vpn-chain relay agent
+After=network.target
+
+[Service]
+User=relayd
+Group=relayd
+ExecStart=/usr/local/bin/relayd serve --jobs /var/lib/vpn-chain --state /var/lib/vpn-chain/relay/relay.json --config /usr/local/etc/xray/config.json --xray /opt/vpn-chain/xray/current/xray
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/vpn-chain /usr/local/etc/xray /var/log/xray /run/lock
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
