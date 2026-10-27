@@ -51,8 +51,10 @@ val dataModule = module {
         DefaultLearnedSitesRepository(
             preferences = get(),
             store = get(),
+            closer = get(),
             now = ::currentTimeMillis,
             logger = get(),
+            scope = get<CoroutineScope>(applicationScopeQualifier),
         )
     }
     single {

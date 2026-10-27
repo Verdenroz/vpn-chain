@@ -9,6 +9,8 @@ import com.verdenroz.vpnchain.core.config.RuleSetKind
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
+import com.verdenroz.vpnchain.core.tunnel.ConnectionCloser
+import com.verdenroz.vpnchain.core.tunnel.HostMatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -17,6 +19,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 
 private const val WEEK = 7L * 24 * 60 * 60 * 1000
@@ -42,18 +47,128 @@ private class LearnedSitesPreferences : DataStore<Preferences> {
         transform(state.value).also { state.value = it }
 }
 
+/** Records each close with the direct rule-set as it stood when the close ran. */
+private class RecordingCloser(private val store: RecordingStore) : ConnectionCloser {
+    var failing = false
+    val closed = mutableListOf<Pair<HostMatch, List<String>>>()
+
+    override suspend fun close(match: HostMatch) {
+        if (failing) throw IllegalStateException("clash API unreachable")
+        closed += match to store.writtenDirect.orEmpty()
+    }
+}
+
 class DefaultLearnedSitesRepositoryTest {
     private var clock = 1_000L
+    private val scope = TestScope()
     private val store = RecordingStore()
+    private val closer = RecordingCloser(store)
     private val repository = DefaultLearnedSitesRepository(
         preferences = VpnChainPreferencesDataSource(LearnedSitesPreferences()),
         store = store,
+        closer = closer,
         now = { clock },
         logger = SilentLogger(),
+        scope = scope,
     )
 
     @Test
-    fun `a learned site is stored with its reason and time and written to the rule-set`() = runTest {
+    fun `sending a site direct closes its connections once sing-box has reloaded the rule-set`() = scope.runTest {
+        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+
+        repository.allowDirect("www.bank.example")
+        advanceTimeBy(999)
+
+        assertTrue(closer.closed.isEmpty())
+
+        advanceTimeBy(2)
+
+        assertEquals(listOf(HostMatch("www.bank.example", subdomains = false) to listOf("www.bank.example")), closer.closed)
+    }
+
+    @Test
+    fun `undo closes the connections sent direct`() = scope.runTest {
+        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+        repository.allowDirect("www.bank.example")
+        advanceUntilIdle()
+
+        repository.forget("www.bank.example")
+        advanceUntilIdle()
+
+        assertEquals(HostMatch("www.bank.example", subdomains = false) to emptyList(), closer.closed.last())
+    }
+
+    @Test
+    fun `a warp route at a registrable domain closes the names under it`() = scope.runTest {
+        repository.learn("reddit.com", LearnedRoute.Warp, BlockReason.Forbidden)
+        repository.learn("github.io", LearnedRoute.Warp, BlockReason.Forbidden)
+        repository.learn("login.bank.example", LearnedRoute.FailOpen, BlockReason.Forbidden)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                HostMatch("reddit.com", subdomains = true),
+                HostMatch("github.io", subdomains = false),
+                HostMatch("login.bank.example", subdomains = false),
+            ),
+            closer.closed.map { it.first },
+        )
+    }
+
+    @Test
+    fun `removing a warp site closes its connections`() = scope.runTest {
+        repository.learn("reddit.com", LearnedRoute.Warp, BlockReason.Forbidden)
+        advanceUntilIdle()
+
+        repository.remove("reddit.com")
+        advanceUntilIdle()
+
+        assertEquals(List(2) { HostMatch("reddit.com", subdomains = true) }, closer.closed.map { it.first })
+    }
+
+    @Test
+    fun `a verdict that moves nothing closes nothing`() = scope.runTest {
+        repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
+        repository.learn("a.com", LearnedRoute.Warp, BlockReason.RateLimited)
+        repository.learn("b.com", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
+        repository.learn("c.com", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+        repository.remove("c.com")
+        advanceUntilIdle()
+
+        assertEquals(listOf(HostMatch("a.com", subdomains = true)), closer.closed.map { it.first })
+    }
+
+    @Test
+    fun `an unwritten rule-set closes nothing`() = scope.runTest {
+        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+        store.failing = true
+
+        repository.allowDirect("www.bank.example")
+        advanceUntilIdle()
+
+        assertTrue(closer.closed.isEmpty())
+    }
+
+    @Test
+    fun `a close that fails leaves the route change in place`() = scope.runTest {
+        repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
+        closer.failing = true
+
+        repository.allowDirect("www.bank.example")
+        advanceUntilIdle()
+
+        assertEquals(LearnedRoute.Direct, repository.sites.first().single().route)
+        assertEquals(listOf("www.bank.example"), store.writtenDirect)
+
+        closer.failing = false
+        repository.forget("www.bank.example")
+        advanceUntilIdle()
+
+        assertEquals(listOf(HostMatch("www.bank.example", subdomains = false) to emptyList()), closer.closed)
+    }
+
+    @Test
+    fun `a learned site is stored with its reason and time and written to the rule-set`() = scope.runTest {
         repository.learn("example.com", LearnedRoute.Warp, BlockReason.Forbidden)
 
         val site = repository.sites.first().single()
@@ -64,7 +179,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `sites that stay on the relay are kept out of the warp rule-set`() = runTest {
+    fun `sites that stay on the relay are kept out of the warp rule-set`() = scope.runTest {
         repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
         repository.learn("b.com", LearnedRoute.RefusedByBoth, BlockReason.Forbidden)
 
@@ -72,7 +187,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `sites that fail open go in their own rule-set`() = runTest {
+    fun `sites that fail open go in their own rule-set`() = scope.runTest {
         repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
         repository.learn("b.com", LearnedRoute.FailOpen, BlockReason.Forbidden)
 
@@ -81,7 +196,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `a site offered for the bare link is in no rule-set`() = runTest {
+    fun `a site offered for the bare link is in no rule-set`() = scope.runTest {
         repository.learn("bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
 
         assertEquals(null, store.writtenOpen)
@@ -89,7 +204,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `allowing a site sends it direct and forgetting takes it back`() = runTest {
+    fun `allowing a site sends it direct and forgetting takes it back`() = scope.runTest {
         repository.learn("www.bank.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
 
         repository.allowDirect("www.bank.example")
@@ -106,7 +221,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `only a site offered for the bare link can be sent there`() = runTest {
+    fun `only a site offered for the bare link can be sent there`() = scope.runTest {
         repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
         repository.learn("b.com", LearnedRoute.RefusedEverywhere, BlockReason.Forbidden)
 
@@ -119,7 +234,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `sites failing open through the entry hop never reach the bare link's rule-set`() = runTest {
+    fun `sites failing open through the entry hop never reach the bare link's rule-set`() = scope.runTest {
         repository.learn("b.com", LearnedRoute.FailOpen, BlockReason.Forbidden)
 
         assertEquals(listOf("b.com"), store.writtenOpen)
@@ -127,7 +242,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `only warp entries at a registrable domain match the names under them`() = runTest {
+    fun `only warp entries at a registrable domain match the names under them`() = scope.runTest {
         repository.learn("reddit.com", LearnedRoute.Warp, BlockReason.Forbidden)
         repository.learn("github.io", LearnedRoute.Warp, BlockReason.Forbidden)
         repository.learn("s3.amazonaws.com", LearnedRoute.Warp, BlockReason.Forbidden)
@@ -141,7 +256,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `a probe never downgrades a site the user sent direct`() = runTest {
+    fun `a probe never downgrades a site the user sent direct`() = scope.runTest {
         repository.learn("www.shop.example", LearnedRoute.DirectAvailable, BlockReason.Forbidden)
         repository.allowDirect("www.shop.example")
 
@@ -152,7 +267,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `two sites learned at once both reach the rule-set`() = runTest {
+    fun `two sites learned at once both reach the rule-set`() = scope.runTest {
         coroutineScope {
             launch { repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden) }
             launch { repository.learn("b.com", LearnedRoute.Warp, BlockReason.Forbidden) }
@@ -162,7 +277,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `a rule-set that cannot be written keeps the site and is written on the next change`() = runTest {
+    fun `a rule-set that cannot be written keeps the site and is written on the next change`() = scope.runTest {
         store.failing = true
         repository.learn("a.com", LearnedRoute.Warp, BlockReason.Forbidden)
 
@@ -175,7 +290,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `learning a domain twice keeps one entry`() = runTest {
+    fun `learning a domain twice keeps one entry`() = scope.runTest {
         repository.learn("example.com", LearnedRoute.Warp, BlockReason.Forbidden)
         repository.learn("example.com", LearnedRoute.Warp, BlockReason.RateLimited)
 
@@ -183,7 +298,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `a removed site leaves the rule-set and is not relearned for a week`() = runTest {
+    fun `a removed site leaves the rule-set and is not relearned for a week`() = scope.runTest {
         repository.learn("example.com", LearnedRoute.Warp, BlockReason.Forbidden)
 
         repository.remove("example.com")
@@ -195,7 +310,7 @@ class DefaultLearnedSitesRepositoryTest {
     }
 
     @Test
-    fun `suppression lapses after seven days`() = runTest {
+    fun `suppression lapses after seven days`() = scope.runTest {
         repository.remove("example.com")
 
         clock += WEEK + 1

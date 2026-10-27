@@ -7,15 +7,23 @@ import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
+import com.verdenroz.vpnchain.core.tunnel.ConnectionCloser
+import com.verdenroz.vpnchain.core.tunnel.HostMatch
 import com.verdenroz.vpnchain.core.warp.probe.PublicSuffixList
 import com.verdenroz.vpnchain.core.logging.Logger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
 
-/** The sites detection has found, and the rule-set files that carry them to sing-box. */
+/**
+ * The sites detection has found, and the rule-set files that carry them to
+ * sing-box. A change of route also closes the open connections it moves.
+ */
 interface LearnedSitesRepository {
     val sites: Flow<List<LearnedSite>>
 
@@ -51,12 +59,15 @@ interface LearnedSitesRepository {
 internal class DefaultLearnedSitesRepository(
     private val preferences: VpnChainPreferencesDataSource,
     private val store: LearnedRuleSetStore,
+    private val closer: ConnectionCloser,
     private val now: () -> Long,
     private val logger: Logger,
+    private val scope: CoroutineScope,
 ) : LearnedSitesRepository {
 
     private val syncLock = Mutex()
     private var syncFailing = false
+    private var closeFailing = false
 
     override val sites: Flow<List<LearnedSite>> = preferences.learnedSites
 
@@ -70,12 +81,13 @@ internal class DefaultLearnedSitesRepository(
         if (before in KEPT && route != before) return
         preferences.putLearnedSite(LearnedSite(domain, reason, now(), route))
         // Each write reloads the rule-set in sing-box; a refusal routes nothing.
-        if (before in ROUTED || route in ROUTED) syncKeepingState()
+        if (before in ROUTED || route in ROUTED) syncAndReconnect(domain, before, route)
     }
 
     override suspend fun remove(domain: String) {
+        val before = preferences.learnedSites.first().find { it.domain == domain }?.route
         preferences.removeLearnedSite(domain, nowMillis = now(), suppressUntilMillis = now() + SUPPRESS_MILLIS)
-        syncKeepingState()
+        syncAndReconnect(domain, before, null)
     }
 
     override suspend fun allowDirect(domain: String) = reroute(domain, from = LearnedRoute.DirectAvailable, to = LearnedRoute.Direct)
@@ -85,7 +97,22 @@ internal class DefaultLearnedSitesRepository(
     private suspend fun reroute(domain: String, from: LearnedRoute, to: LearnedRoute) {
         val site = preferences.learnedSites.first().find { it.domain == domain && it.route == from } ?: return
         preferences.putLearnedSite(site.copy(route = to))
-        syncKeepingState()
+        syncAndReconnect(domain, from, to)
+    }
+
+    /**
+     * Open connections keep the route they were dialled with, so once the files
+     * are written, the ones a changed route covers are closed and redial under it.
+     */
+    private suspend fun syncAndReconnect(domain: String, before: LearnedRoute?, after: LearnedRoute?) {
+        if (!syncKeepingState() || before == after || (before !in ROUTED && after !in ROUTED)) return
+        val warpDomain = LearnedRoute.Warp in setOf(before, after) && PublicSuffixList.bundled.registrableDomain(domain) == domain
+        val match = HostMatch(domain, subdomains = warpDomain)
+        scope.launch {
+            // sing-box reloads a rule-set 100 ms after its file goes quiet; a redial before that keeps the old route.
+            delay(RELOAD_SETTLE_MILLIS)
+            closeKeepingState(match)
+        }
     }
 
     override suspend fun reachable(): Map<String, Long> = preferences.reachableDomains.first()
@@ -113,21 +140,37 @@ internal class DefaultLearnedSitesRepository(
      * delays it: the next sync writes everything again. Logged once per outage,
      * and never thrown into the probe workers that called it.
      */
-    private suspend fun syncKeepingState() {
+    private suspend fun syncKeepingState(): Boolean {
         try {
             syncRuleSets()
             syncFailing = false
+            return true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             if (!syncFailing) logger.w(TAG, "learned rule-set write failed, retrying on the next change: ${e.message}")
             syncFailing = true
+            return false
+        }
+    }
+
+    /** A connection left open keeps its old route until it ends, so a failure is logged once per outage and dropped. */
+    private suspend fun closeKeepingState(match: HostMatch) {
+        try {
+            closer.close(match)
+            closeFailing = false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (!closeFailing) logger.w(TAG, "closing rerouted connections failed: ${e.message}")
+            closeFailing = true
         }
     }
 
     private companion object {
         const val TAG = "LearnedSites"
         const val SUPPRESS_MILLIS = 7L * 24 * 60 * 60 * 1000
+        const val RELOAD_SETTLE_MILLIS = 1_000L
         val ROUTED = setOf(LearnedRoute.Warp, LearnedRoute.FailOpen, LearnedRoute.Direct)
         val KEPT = setOf(LearnedRoute.FailOpen, LearnedRoute.Direct)
     }

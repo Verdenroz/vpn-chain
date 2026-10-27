@@ -18,6 +18,8 @@ import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpExit
 import com.verdenroz.vpnchain.core.model.WarpMode
+import com.verdenroz.vpnchain.core.tunnel.ConnectionCloser
+import com.verdenroz.vpnchain.core.tunnel.HostMatch
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -207,7 +209,7 @@ internal class RepositoryWorld(
         profileRepository = profiles,
         settingsRepository = StubSettingsRepository(settings),
         warpRepository = StubWarpRepository(),
-        learnedSites = DefaultLearnedSitesRepository(preferences, store = store, now = { 0L }, logger = SilentLogger()),
+        learnedSites = DefaultLearnedSitesRepository(preferences, store, NoopConnectionCloser(), now = { 0L }, logger = SilentLogger(), scope = scope),
         learnedStore = store,
         preferences = preferences,
         logger = SilentLogger(),
@@ -319,4 +321,8 @@ internal class SilentLogger : Logger {
     override fun i(tag: String, message: String) = Unit
     override fun w(tag: String, message: String, throwable: Throwable?) = Unit
     override fun e(tag: String, message: String, throwable: Throwable?) = Unit
+}
+
+internal class NoopConnectionCloser : ConnectionCloser {
+    override suspend fun close(match: HostMatch) = Unit
 }

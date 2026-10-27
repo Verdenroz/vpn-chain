@@ -82,7 +82,7 @@ private class LearnerWorld(
     val settings = MutableStateFlow(UserSettings(warpMode = WarpMode.Automatic))
     val profile = MutableStateFlow<SavedProfile?>(CHAIN)
     val sessions = MutableStateFlow<LearningSession?>(LearningSession(PROBE, clashApi = null))
-    val learned = DefaultLearnedSitesRepository(preferences, NoopStore(), now = { 1L }, logger = SilentLogger())
+    val learned = DefaultLearnedSitesRepository(preferences, NoopStore(), NoopConnectionCloser(), now = { 1L }, logger = SilentLogger(), scope = scope)
 
     init {
         SiteLearner(
