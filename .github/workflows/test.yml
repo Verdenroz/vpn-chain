@@ -1,16 +1,8 @@
-# Runs the Gradle unit tests (commonTest and desktopTest) when Kotlin or build files change.
+# Runs the Gradle unit tests (commonTest and desktopTest). ci.yml calls it when Kotlin or build files change.
 name: test
 
 on:
-  pull_request:
-    paths:
-      - "**/*.kt"
-      - "**/*.kts"
-      - "**/src/**/composeResources/**"
-      - "gradle/**"
-      - "gradle.properties"
-      - "build-logic/**"
-      - ".github/workflows/test.yml"
+  workflow_call:
 
 permissions:
   contents: read

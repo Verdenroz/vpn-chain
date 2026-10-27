@@ -164,7 +164,8 @@ the app can carry the key on a separate channel.
 ## Commits and pull requests
 
 Conventional commits (`feat:`, `fix:`, `docs:`, `ci:`, ...), subject at most 50
-characters. Commits are signed. Land a pull request by rebasing it onto `main` and
-fast-forwarding, `git push origin <branch>:main`, which closes it as merged. GitHub's
-rebase merge rewrites the commits unsigned. Documentation lives in the README, this file, CLAUDE.md, or a comment
+characters. Pull requests are squash-merged, with the pull request title as the
+commit subject, so the title follows the same format. GitHub signs the squash commit.
+`main` takes changes only through a pull request whose `ci-ok` check passed: that job
+in `.github/workflows/ci.yml` runs the suites the change touches. Documentation lives in the README, this file, CLAUDE.md, or a comment
 next to the code it explains. There is no docs directory.
