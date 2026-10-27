@@ -48,6 +48,15 @@ data class PairingCode(val link: String, val expires: Long) {
     override fun toString() = "PairingCode(expires=$expires)"
 }
 
+/** What the agent answers to a pool refill. [job] is set when the xray restart was queued instead of done. */
+@Serializable
+data class Refilled(val added: Int, val job: String? = null)
+
+private val DEVICE_NAME = Regex("[a-z0-9][a-z0-9._-]{0,31}")
+
+/** Whether relayd accepts [name] for a device. */
+fun isDeviceName(name: String) = DEVICE_NAME.matches(name)
+
 /** What the agent answers to a revoke. [job] is set when the short ID's removal needs an xray restart. */
 @Serializable
 data class Revoked(val countersLost: Boolean, val job: String? = null)

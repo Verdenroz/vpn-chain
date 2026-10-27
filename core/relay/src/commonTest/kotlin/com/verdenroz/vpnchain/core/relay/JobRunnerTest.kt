@@ -35,6 +35,7 @@ private class ScriptedAgent(private val script: ArrayDeque<Any>) : RelayAgent {
     override suspend fun revoke(name: String) = error("unused")
     override suspend fun rekey(name: String) = error("unused")
     override suspend fun pair(name: String) = error("unused")
+    override suspend fun refillPool() = error("unused")
     override suspend fun enroll(token: String, managementKey: ManagementKey) = error("unused")
 }
 

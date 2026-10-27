@@ -86,7 +86,7 @@ class PairRelayUseCase(
             throw e
         }
         profiles.save(
-            relay.copy(vlessUuid = enrolled.identity.uuid, shortId = enrolled.identity.shortId, managementKeyId = key.id, managementAdmin = enrolled.role == DeviceRole.Admin),
+            relay.copy(vlessUuid = enrolled.identity.uuid, shortId = enrolled.identity.shortId, managementKeyId = key.id, managementAdmin = enrolled.role == DeviceRole.Admin, managementDevice = enrolled.identity.name),
             entryHop = null,
         )
         onStep(PairingStep.Reconnecting, link.host)
