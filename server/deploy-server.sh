@@ -45,6 +45,8 @@ EXIT_WG_DNS="${EXIT_WG_DNS:-10.2.0.1}"     # Proton internal resolver (applies N
 . "$(dirname "${BASH_SOURCE[0]}")/lib/xray-common.sh"
 # shellcheck source=server/lib/pins.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/pins.sh"
+# shellcheck source=server/lib/xray-installer.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/xray-installer.sh"
 
 log() { printf '\033[1;36m[deploy]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -72,7 +74,10 @@ EOF
   fi
 
   log "Installing Xray-core $XRAY_VERSION (official installer)..."
-  bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --version "$XRAY_VERSION" >/dev/null
+  INSTALLER="$(mktemp)"
+  fetch_xray_installer "$INSTALLER"
+  bash "$INSTALLER" install --version "$XRAY_VERSION" >/dev/null
+  rm -f "$INSTALLER"
 fi
 
 XRAY_BIN="${XRAY_BIN:-$(command -v xray || echo /usr/local/bin/xray)}"

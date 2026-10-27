@@ -89,6 +89,13 @@ check "unpinned xray version refused" test "$RC" -ne 0
 check "refusal names the pinned version" bash -c 'grep -q "Xray v26.3.27" <<<"$1"' _ "$ALL"
 check "refused deploy writes no config" test ! -e "$CFG"
 
+# ---- installer pin -------------------------------------------------------
+setup
+printf '#!/bin/sh\necho tampered\n' > "$W/installer.sh"
+TAMPER="$(bash -c '. "$1/lib/pins.sh"; . "$1/lib/xray-installer.sh"; die() { echo "$*"; exit 1; }; fetch_xray_installer "$2/out.sh" "file://$2/installer.sh"' _ "$SERVER" "$W" 2>&1)" && RC=0 || RC=$?
+check "tampered installer refused" test "$RC" -ne 0
+check "refusal names the pinned sha256" bash -c 'grep -q "pinned sha256" <<<"$1"' _ "$TAMPER"
+
 # ---- unkeepable and emptied configs --------------------------------------
 setup
 printf '{ "inbounds": [\n' > "$CFG"
