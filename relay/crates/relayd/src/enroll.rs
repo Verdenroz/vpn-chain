@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::ErrorKind;
 use std::os::unix::fs::{MetadataExt, chown};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -39,8 +40,13 @@ struct Tokens {
 /// What presenting a token came to.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Verdict {
-    /// The token was good and is now burned.
-    Claimed { device: String, role: Role },
+    /// The token was good and is now burned. `entry` is the WireGuard entry hop that waited for
+    /// it, handed over once and no longer kept.
+    Claimed {
+        device: String,
+        role: Role,
+        entry: Option<Secret>,
+    },
     /// No such token, or one already used.
     Unknown,
     /// The token was past its expiry, and is burned too.
@@ -48,7 +54,9 @@ pub enum Verdict {
 }
 
 /// The enroll tokens waiting to be claimed, in a 0600 file beside the state. Only the SHA-256
-/// of a token is stored, so the file cannot be used to enroll.
+/// of a token is stored, so the file cannot be used to enroll. A WireGuard entry hop that goes
+/// with a token waits in a 0600 file named by the token's hash, until the token is claimed,
+/// replaced or expires.
 pub struct Enrollments {
     path: PathBuf,
 }
@@ -77,9 +85,11 @@ impl Enrollments {
         let token = URL_SAFE_NO_PAD.encode(bytes);
         let _held = store::lock_within(lock, lock_wait)?;
         let mut tokens = self.read()?;
-        tokens
+        let (kept, dropped): (Vec<_>, Vec<_>) = tokens
             .pending
-            .retain(|held| held.device != device && held.expires >= now);
+            .into_iter()
+            .partition(|held| held.device != device && held.expires >= now);
+        tokens.pending = kept;
         tokens.pending.push(Pending {
             hash: digest(&token),
             device: device.to_owned(),
@@ -87,7 +97,22 @@ impl Enrollments {
             expires: now + ttl,
         });
         self.write(&tokens)?;
+        self.forget(&dropped);
         Ok(Secret::new(token))
+    }
+
+    /// Keeps `entry` for the device that claims `token`, which `issue` returned.
+    pub fn keep_entry(
+        &self,
+        lock: &Path,
+        lock_wait: Duration,
+        token: &Secret,
+        entry: &Secret,
+    ) -> Result<(), Error> {
+        let _held = store::lock_within(lock, lock_wait)?;
+        let path = self.entry_path(&digest(token.expose()));
+        store::replace(&path, entry.expose().as_bytes(), 0o600)?;
+        self.hand_over(&path)
     }
 
     /// Checks `token` and burns it.
@@ -105,16 +130,43 @@ impl Enrollments {
             return Ok(Verdict::Unknown);
         };
         let claimed = tokens.pending.remove(found);
-        tokens.pending.retain(|held| held.expires >= now);
+        let (kept, expired): (Vec<_>, Vec<_>) = tokens
+            .pending
+            .into_iter()
+            .partition(|held| held.expires >= now);
+        tokens.pending = kept;
+        let entry = self.read_entry(&claimed.hash)?;
         self.write(&tokens)?;
+        self.forget(&expired);
+        self.forget(std::slice::from_ref(&claimed));
         Ok(if claimed.expires < now {
             Verdict::Expired
         } else {
             Verdict::Claimed {
                 device: claimed.device,
                 role: claimed.role,
+                entry,
             }
         })
+    }
+
+    fn entry_path(&self, hash: &str) -> PathBuf {
+        self.path.with_file_name(format!("enroll-{hash}.entry"))
+    }
+
+    fn read_entry(&self, hash: &str) -> Result<Option<Secret>, Error> {
+        let path = self.entry_path(hash);
+        match fs::read_to_string(&path) {
+            Ok(text) => Ok(Some(Secret::new(text))),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(Error::at(&path, error)),
+        }
+    }
+
+    fn forget(&self, gone: &[Pending]) {
+        for held in gone {
+            let _ = fs::remove_file(self.entry_path(&held.hash));
+        }
     }
 
     fn read(&self) -> Result<Tokens, Error> {
@@ -138,10 +190,13 @@ impl Enrollments {
     /// readable by the agent.
     fn write(&self, tokens: &Tokens) -> Result<(), Error> {
         store::replace(&self.path, &store::to_json(tokens), 0o600)?;
+        self.hand_over(&self.path)
+    }
+
+    fn hand_over(&self, path: &Path) -> Result<(), Error> {
         let dir = self.path.parent().expect("a store file has a directory");
         let owner = fs::metadata(dir).map_err(|error| Error::at(dir, error))?;
-        chown(&self.path, Some(owner.uid()), Some(owner.gid()))
-            .map_err(|error| Error::at(&self.path, error))
+        chown(path, Some(owner.uid()), Some(owner.gid())).map_err(|error| Error::at(path, error))
     }
 }
 

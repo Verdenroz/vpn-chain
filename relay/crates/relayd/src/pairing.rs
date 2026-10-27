@@ -88,6 +88,19 @@ pub fn issue(
     device: Option<&str>,
     purpose: Purpose,
 ) -> Result<Secret, Error> {
+    issue_with_entry(state, secrets, lock, device, purpose, None)
+}
+
+/// [`issue`] for a device that also gets a WireGuard entry hop when it enrolls. The entry hop is
+/// kept beside the token's hash and never goes into the link.
+pub fn issue_with_entry(
+    state: &Path,
+    secrets: &Path,
+    lock: &Path,
+    device: Option<&str>,
+    purpose: Purpose,
+    entry: Option<&Secret>,
+) -> Result<Secret, Error> {
     let relay = Relay::load(state, secrets)?;
     let device = match device {
         Some(name) => relay.state.devices.iter().find(|held| held.name == name),
@@ -101,8 +114,11 @@ pub fn issue(
     let public = Public::read(&Public::beside(state))?;
     let now = seconds();
     let ttl = purpose.ttl();
-    let token =
-        Enrollments::beside(state).issue(lock, LOCK_WAIT, &device.name, device.role, now, ttl)?;
+    let tokens = Enrollments::beside(state);
+    let token = tokens.issue(lock, LOCK_WAIT, &device.name, device.role, now, ttl)?;
+    if let Some(entry) = entry {
+        tokens.keep_entry(lock, LOCK_WAIT, &token, entry)?;
+    }
     let inbound = &relay.state.inbound;
     let host = match public.host.parse::<Ipv6Addr>() {
         Ok(_) => format!("[{}]", public.host),

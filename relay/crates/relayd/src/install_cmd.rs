@@ -6,7 +6,15 @@ use crate::args::Args;
 pub fn install(args: &[&str]) -> Option<Result<(), Error>> {
     let mut args = Args::parse(
         args,
-        &["name", "device", "sni", "port", "host", "wireguard"],
+        &[
+            "name",
+            "device",
+            "sni",
+            "port",
+            "host",
+            "wireguard",
+            "entry",
+        ],
         &[],
     )?;
     let [] = args.words()?;
@@ -20,6 +28,7 @@ pub fn install(args: &[&str]) -> Option<Result<(), Error>> {
         },
         host: args.value("host"),
         wireguard: args.path("wireguard"),
+        entry: args.path("entry"),
     };
     Some(install::run_install(&options))
 }
