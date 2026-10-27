@@ -49,6 +49,7 @@ data class PairingLink(
         private val base64Url = Regex("""[A-Za-z0-9_-]{$KEY_LENGTH}""")
         private val shortIdHex = Regex("""([0-9a-fA-F]{2}){1,8}""")
         private val uuidText = Regex("""[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}""")
+        private val hexByte = Regex("[0-9a-fA-F]{2}")
         private val deviceNameText = Regex("""[a-z0-9][a-z0-9._-]{0,31}""")
 
         fun looksLikeLink(text: String) = text.trimStart().startsWith("vpnchain://")
@@ -128,7 +129,7 @@ data class PairingLink(
             var i = 0
             while (i < value.length) {
                 if (value[i] == '%') {
-                    val byte = value.substring(i + 1, minOf(i + 3, value.length)).takeIf { it.length == 2 }?.toIntOrNull(16)
+                    val byte = value.substring(i + 1, minOf(i + 3, value.length)).takeIf(hexByte::matches)?.toInt(16)
                         ?: return null
                     out.writeByte(byte)
                     i += 3

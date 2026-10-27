@@ -134,6 +134,7 @@ class SettingsViewModel(
 
     private val _pairing = MutableStateFlow<PairingStatus?>(null)
     val pairing: StateFlow<PairingStatus?> = _pairing.asStateFlow()
+    private var pairingInFlight = false
 
     /** Bumped each time pasted text is taken, so the UI can clear the paste field. */
     private val _importsTaken = MutableStateFlow(0)
@@ -255,13 +256,15 @@ class SettingsViewModel(
 
     /** A pairing link is the user's own act to scan or paste, and is single use, so it skips the review. */
     private fun pair(text: String) {
-        if (_pairing.value is PairingStatus.Working) return
+        if (pairingInFlight) return
+        pairingInFlight = true
         _importsTaken.value++
         viewModelScope.launch {
             relayPairing.pair(text) { step, host -> _pairing.value = PairingStatus.Working(step, host) }.fold(
                 onSuccess = { _pairing.value = PairingStatus.Done(it) },
                 onFailure = { _pairing.value = PairingStatus.Failed(it.toPairingText((_pairing.value as? PairingStatus.Working)?.host.orEmpty())) },
             )
+            pairingInFlight = false
         }
     }
 
