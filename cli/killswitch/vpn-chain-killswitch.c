@@ -30,6 +30,8 @@
  * --allow-mark additionally accepts packets carrying that fwmark (0x-prefixed,
  * up to 8 hex digits, not zero). sing-box stamps it on its `direct` outbound, so
  * the hole closes when sing-box dies; any process with CAP_NET_ADMIN can set it too.
+ * It exempts everything on `direct`, which is safe only while failing open to the
+ * bare link is that outbound's sole use.
  *
  * All exempt IPs are validated as strict IPv4 dotted-quads before touching
  * anything, and malformed input is rejected outright. `up` renders the whole
