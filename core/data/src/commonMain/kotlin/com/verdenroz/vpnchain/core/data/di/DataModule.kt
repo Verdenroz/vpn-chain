@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.core.data.di
 import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.common.di.applicationScopeQualifier
 import com.verdenroz.vpnchain.core.common.di.commonModule
+import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ConnectivityRepository
 import com.verdenroz.vpnchain.core.data.DefaultChainRepository
@@ -23,6 +24,8 @@ import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.data.learningSessionOf
 import com.verdenroz.vpnchain.core.datastore.di.dataStoreModule
 import com.verdenroz.vpnchain.core.logging.di.loggingModule
+import com.verdenroz.vpnchain.core.relay.ProbeSource
+import com.verdenroz.vpnchain.core.relay.di.relayModule
 import com.verdenroz.vpnchain.core.tunnel.ProbeGate
 import com.verdenroz.vpnchain.core.tunnel.TunnelController
 import com.verdenroz.vpnchain.core.tunnel.di.tunnelModule
@@ -33,7 +36,12 @@ import org.koin.core.Koin
 import org.koin.dsl.module
 
 val dataModule = module {
-    includes(commonModule, loggingModule, dataStoreModule, tunnelModule, warpModule)
+    includes(commonModule, loggingModule, dataStoreModule, tunnelModule, warpModule, relayModule)
+
+    single<ProbeSource> {
+        val controller = get<TunnelController>()
+        ProbeSource { controller.runningConfig.value?.let(ProbeProxy::fromConfig) }
+    }
 
     single<ProfileRepository> { DefaultProfileRepository(get()) }
     single<OriginRepository> { DefaultOriginRepository(get()) }
