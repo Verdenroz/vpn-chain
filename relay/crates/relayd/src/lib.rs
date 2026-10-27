@@ -15,6 +15,8 @@
 //! `devices.json` last recorded them: what xray counted since the scripts last folded its stats
 //! is not read, and folding them before import is still to be built.
 
+mod adapters;
+mod adopt;
 mod clock;
 mod config_file;
 mod devices;
@@ -28,6 +30,8 @@ mod state;
 mod store;
 mod validate;
 
+pub use adapters::{Systemctl, XrayLive};
+pub use adopt::adopt;
 pub use clock::now;
 pub use config_file::{Placement, write_config};
 pub use devices::{Manager, SPARES};
