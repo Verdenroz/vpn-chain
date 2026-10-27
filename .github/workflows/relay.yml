@@ -1,6 +1,6 @@
 # Checks the Rust workspace under relay/ (relayd and the xray API client), which
-# the Gradle build does not touch. The live job runs the xray API client against
-# a dockerised Xray and the sing-box clients the apps ship.
+# the Gradle build does not touch. The live job runs the xray API client and relayd's
+# device operations against a dockerised Xray and the sing-box clients the apps ship.
 name: relay
 
 on:
@@ -40,3 +40,4 @@ jobs:
       - run: rustup toolchain install
       - run: crates/live-harness/fetch-bins.sh
       - run: cargo test -p xray-api --locked --test live -- --ignored
+      - run: cargo test -p relayd --locked --test live -- --ignored

@@ -10,6 +10,11 @@
 //! `Debug` hides it, so the state can be printed, logged and diffed. Device UUIDs and short IDs
 //! stay in the state, which is 0600 too, because each belongs to one device entry.
 //!
+//! [`Manager`] changes devices without restarting xray where it can: an added, renamed or
+//! rekeyed device goes in through xray's API and is also written to the state and the config,
+//! and only a revocation, which has to cut open connections, restarts it. xray's traffic
+//! counters are folded into the state before every change.
+//!
 //! [`import`] adopts a relay exactly as `server/deploy-server.sh` and `server/xray-clients.sh`
 //! leave it, and refuses one it could not render back the same. It takes the traffic counters as
 //! `devices.json` last recorded them: what xray counted since the scripts last folded its stats
