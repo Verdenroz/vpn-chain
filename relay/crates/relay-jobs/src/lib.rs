@@ -2,6 +2,7 @@ mod error;
 mod job;
 mod jobs;
 mod layout;
+pub mod runner;
 mod store;
 
 pub use error::Error;
