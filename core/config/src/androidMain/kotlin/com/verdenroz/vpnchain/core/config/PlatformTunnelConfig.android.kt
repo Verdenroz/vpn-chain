@@ -30,6 +30,6 @@ actual fun renderPlatformTunnelConfig(
         learnedOpenPath = learned?.path(RuleSetKind.Open),
         learnedDirectPath = learned?.path(RuleSetKind.Direct),
         failOpen = settings.failOpen,
-            connectionLog = settings.connectionLog,
+        connectionLog = settings.connectionLog,
     )
 }
