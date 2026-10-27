@@ -37,6 +37,7 @@ object SingBoxConfigFactory {
         learnedWarpPath: String? = null,
         learnedDirectPath: String? = null,
         failOpen: Boolean = false,
+        connectionLog: Boolean = false,
     ): String {
         val tail = warp.takeIf { warpMode != WarpMode.Off }
         val learnedPath = learnedWarpPath.takeIf { tail != null && warpMode == WarpMode.Automatic }
@@ -44,7 +45,7 @@ object SingBoxConfigFactory {
         // No entry hop here, so only sites the user sent to the bare link leave the relay.
         val openPath = learnedDirectPath.takeIf { opensDirect }
         return render {
-            putInfoLog()
+            putLog(connectionLog)
             putExperimental(clashApi, cacheFile = false, cachePath = null)
             // The relay resolves its own names; WARP and direct would otherwise ask the local resolver.
             if (tail != null || opensDirect) putJsonObject("dns") { putDnsServers(entry = null, remoteDetour = "proxy") }
@@ -99,6 +100,7 @@ object SingBoxConfigFactory {
         learnedDirectPath: String? = null,
         failOpen: Boolean = false,
         markDirect: Boolean = false,
+        connectionLog: Boolean = false,
     ): String {
         val filtering = dnsFilter != DnsFilter.Off
         // No credentials means no tail, whatever the mode says: registration
@@ -114,7 +116,7 @@ object SingBoxConfigFactory {
         val probesFallback = opensOutside && entry != null
         val directMark = FAIL_OPEN_MARK.takeIf { markDirect && entry == null && openPath != null }
         return render {
-            putInfoLog(logPath)
+            putLog(connectionLog, logPath)
             // The rule-set is remote, so it needs somewhere to persist between
             // runs; without the cache every connect re-downloads it.
             putExperimental(clashApi, cacheFile = filtering, cachePath = cachePath)
@@ -184,10 +186,11 @@ object SingBoxConfigFactory {
         cachePath: String? = null,
         allowLocalNetworks: Boolean = false,
         logPath: String? = null,
+        connectionLog: Boolean = false,
     ): String {
         val filtering = dnsFilter != DnsFilter.Off
         return render {
-            putInfoLog(logPath)
+            putLog(connectionLog, logPath)
             putExperimental(clashApi, cacheFile = filtering, cachePath = cachePath)
             putJsonObject("dns") {
                 putDnsServers(entry, remoteDetour = ENTRY_HOP_TAG)
@@ -303,9 +306,10 @@ object SingBoxConfigFactory {
         DnsFilter.AdsAndTrackers -> listOf(THREATS_LIST, GEOSITE_ADS_LIST, ADS_TRACKERS_LIST)
     }
 
-    private fun JsonObjectBuilder.putInfoLog(output: String? = null) =
+    // Info records every connection and DNS answer, so it is opt-in.
+    private fun JsonObjectBuilder.putLog(connectionLog: Boolean, output: String? = null) =
         putJsonObject("log") {
-            put("level", "info")
+            put("level", if (connectionLog) "info" else "warn")
             put("timestamp", true)
             // Under systemd the app can't read the process's stdout, so sing-box
             // writes the log itself and the app tails that file.

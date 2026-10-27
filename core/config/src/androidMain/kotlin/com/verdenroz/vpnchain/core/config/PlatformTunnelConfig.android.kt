@@ -17,6 +17,7 @@ actual fun renderPlatformTunnelConfig(
         ?: return SingBoxConfigFactory.wireGuardConfig(
             entry = requireNotNull(profile.wireGuard),
             dnsFilter = settings.dnsFilter,
+            connectionLog = settings.connectionLog,
         )
     return SingBoxConfigFactory.androidChainConfig(
         profile = relay,
@@ -29,5 +30,6 @@ actual fun renderPlatformTunnelConfig(
         learnedOpenPath = learned?.path(RuleSetKind.Open),
         learnedDirectPath = learned?.path(RuleSetKind.Direct),
         failOpen = settings.failOpen,
+            connectionLog = settings.connectionLog,
     )
 }

@@ -34,6 +34,7 @@ actual fun renderPlatformTunnelConfig(
             cachePath = cachePath,
             allowLocalNetworks = settings.allowLocalNetworks,
             logPath = logPath,
+            connectionLog = settings.connectionLog,
         )
     } else if (settings.systemWideTun) {
         SingBoxConfigFactory.androidChainConfig(
@@ -51,6 +52,7 @@ actual fun renderPlatformTunnelConfig(
             learnedOpenPath = learned?.path(RuleSetKind.Open),
             learnedDirectPath = learned?.path(RuleSetKind.Direct),
             failOpen = settings.failOpen,
+            connectionLog = settings.connectionLog,
             markDirect = true,
         )
     } else {
@@ -63,6 +65,7 @@ actual fun renderPlatformTunnelConfig(
             learnedWarpPath = learned?.path(RuleSetKind.Warp),
             learnedDirectPath = learned?.path(RuleSetKind.Direct),
             failOpen = settings.failOpen,
+            connectionLog = settings.connectionLog,
         )
     }
 }

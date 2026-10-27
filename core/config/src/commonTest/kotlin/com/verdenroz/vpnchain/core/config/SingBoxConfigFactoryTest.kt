@@ -46,12 +46,37 @@ private fun probe() = ProbeProxy(relayPort = 41001, warpPort = 41002, fallbackPo
 
 private fun parse(raw: String): JsonObject = Json.parseToJsonElement(raw).jsonObject
 
+private fun logLevel(raw: String): String =
+    parse(raw).getValue("log").jsonObject.getValue("level").jsonPrimitive.content
+
 private fun JsonObject.array(key: String): JsonArray = getValue(key).jsonArray
 
 private fun JsonArray.taggedWith(tag: String): JsonObject? =
     map { it.jsonObject }.firstOrNull { it["tag"]?.jsonPrimitive?.content == tag }
 
 class SingBoxConfigFactoryTest {
+
+    @Test
+    fun `every render logs at warn by default`() {
+        val renders = listOf(
+            SingBoxConfigFactory.mixedProxyConfig(profile()),
+            SingBoxConfigFactory.androidChainConfig(profile()),
+            SingBoxConfigFactory.wireGuardConfig(entry()),
+        )
+
+        renders.forEach { assertEquals("warn", logLevel(it)) }
+    }
+
+    @Test
+    fun `connection log restores info on every render`() {
+        val renders = listOf(
+            SingBoxConfigFactory.mixedProxyConfig(profile(), connectionLog = true),
+            SingBoxConfigFactory.androidChainConfig(profile(), connectionLog = true),
+            SingBoxConfigFactory.wireGuardConfig(entry(), connectionLog = true),
+        )
+
+        renders.forEach { assertEquals("info", logLevel(it)) }
+    }
 
     @Test
     fun `proxy config listens on the profile's local port and never opens a tun`() {

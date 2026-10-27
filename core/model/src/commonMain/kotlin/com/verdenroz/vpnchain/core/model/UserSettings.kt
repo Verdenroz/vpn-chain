@@ -67,6 +67,11 @@ data class UserSettings(
      */
     val failOpen: Boolean = true,
     /**
+     * Log every connection and DNS answer the chain handles, which records each
+     * site visited. For troubleshooting; the default log keeps warnings and errors.
+     */
+    val connectionLog: Boolean = false,
+    /**
      * Bring the chain up on app start when a profile exists. Off by default:
      * connecting without being asked is a surprise, not a convenience.
      */

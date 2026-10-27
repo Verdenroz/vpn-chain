@@ -143,7 +143,7 @@ private val CLASH = ClashApi(port = 9090, secret = "s3cret")
 private val MIXED_RELAY = """
 {
     "log": {
-        "level": "info",
+        "level": "warn",
         "timestamp": true
     },
     "experimental": {
@@ -205,7 +205,7 @@ private val MIXED_RELAY = """
 private val MIXED_RELAY_AUTOMATIC = """
 {
     "log": {
-        "level": "info",
+        "level": "warn",
         "timestamp": true
     },
     "experimental": {
@@ -304,7 +304,7 @@ private val MIXED_RELAY_AUTOMATIC = """
 private val TUN_RELAY = """
 {
     "log": {
-        "level": "info",
+        "level": "warn",
         "timestamp": true
     },
     "dns": {
@@ -386,7 +386,7 @@ private val TUN_RELAY = """
 private val TUN_CHAIN = """
 {
     "log": {
-        "level": "info",
+        "level": "warn",
         "timestamp": true,
         "output": "/tmp/relay.log"
     },
@@ -545,7 +545,7 @@ private val TUN_CHAIN = """
 private val TUN_CHAIN_WARP = """
 {
     "log": {
-        "level": "info",
+        "level": "warn",
         "timestamp": true
     },
     "dns": {
@@ -673,7 +673,7 @@ private val TUN_CHAIN_WARP = """
 private val TUN_RELAY_WARP = """
 {
     "log": {
-        "level": "info",
+        "level": "warn",
         "timestamp": true
     },
     "dns": {
