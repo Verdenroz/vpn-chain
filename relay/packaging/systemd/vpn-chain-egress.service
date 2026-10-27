@@ -1,0 +1,14 @@
+[Unit]
+Description=Keep xray off loopback and private addresses
+After=network-online.target
+Wants=network-online.target
+Before=xray.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/relayd egress --state /var/lib/vpn-chain/relay/relay.json
+ExecStop=-/usr/sbin/nft delete table inet vpn_chain_egress
+
+[Install]
+WantedBy=multi-user.target

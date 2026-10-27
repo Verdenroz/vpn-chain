@@ -14,7 +14,6 @@ install -m644 /opt/units/relay-privileged.path /opt/units/relay-privileged.servi
 install -Dm644 /opt/units/xray.service.d/10-vpn-chain.conf /etc/systemd/system/xray.service.d/10-vpn-chain.conf
 install -Dm644 /opt/units/vpn-chain.sysusers /etc/sysusers.d/vpn-chain.conf
 install -Dm644 /opt/units/vpn-chain.tmpfiles /etc/tmpfiles.d/vpn-chain.conf
-echo 'u xray - "xray"' >/etc/sysusers.d/xray.conf
 systemd-sysusers
 systemd-tmpfiles --create
 

@@ -31,6 +31,7 @@ mod enroll;
 mod error;
 mod identity;
 mod import;
+pub mod install;
 mod key;
 pub mod layout;
 mod live;
@@ -42,7 +43,7 @@ mod store;
 mod validate;
 
 pub use adapters::{JobsRestart, Systemctl, XrayLive};
-pub use adopt::adopt;
+pub use adopt::{adopt, adopt_with};
 pub use clock::now;
 pub use config_file::{Placement, write_config};
 pub use devices::{Manager, SPARES};
