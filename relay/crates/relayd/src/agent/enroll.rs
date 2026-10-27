@@ -126,5 +126,5 @@ fn claim(service: &Service, body: &[u8]) -> Result<serde_json::Value, ApiError> 
                 .record(&key.id, "enroll", Some(&device), "failed")
         })?;
     service.audit.record(&key.id, "enroll", Some(&device), "ok");
-    Ok(json!({ "identity": identity, "keyId": key.id }))
+    Ok(json!({ "identity": identity, "keyId": key.id, "role": role }))
 }
