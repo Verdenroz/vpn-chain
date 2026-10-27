@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -34,6 +35,7 @@ import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.relay.DeviceRole
 import com.verdenroz.vpnchain.core.relay.PairingCode
 import com.verdenroz.vpnchain.core.ui.asString
+import com.verdenroz.vpnchain.feature.settings.DevicePending
 import com.verdenroz.vpnchain.feature.settings.DeviceRow
 import com.verdenroz.vpnchain.feature.settings.DevicesBoard
 import com.verdenroz.vpnchain.feature.settings.DevicesStep
@@ -50,6 +52,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_confi
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_confirm_restart
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_copy_link
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_cut_off
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_dismiss_notice
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_done
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_last_seen
@@ -59,6 +62,9 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_never
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_new_code
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_no_key
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_offline
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_pending_cut_off
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_pending_new_code
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_pending_rename
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_rename
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_restart_and_add
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_role_admin
@@ -84,6 +90,7 @@ internal class DevicesActions(
     val onAskCutOff: (String) -> Unit,
     val onAskNewCode: (String) -> Unit,
     val onDismiss: () -> Unit,
+    val onDismissNotice: () -> Unit,
 )
 
 /** The relay's devices, and the step an admin is in the middle of. A member sees only its own row. */
@@ -94,6 +101,13 @@ internal fun DevicesSection(state: DevicesUiState, actions: DevicesActions, modi
         state.error?.let {
             SelectionContainer {
                 Text(it.asString(), style = MaterialTheme.typography.bodyMedium, color = colors.unprotectedText)
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        state.notice?.let {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(it.asString(), style = MaterialTheme.typography.bodyMedium, color = colors.ink, modifier = Modifier.weight(1f))
+                ActionButton(compact = true, text = stringResource(Res.string.devices_dismiss_notice), onClick = actions.onDismissNotice)
             }
             Spacer(Modifier.height(12.dp))
         }
@@ -116,7 +130,7 @@ internal fun DevicesSection(state: DevicesUiState, actions: DevicesActions, modi
             is DevicesBoard.Ready -> {
                 board.devices.forEachIndexed { index, device ->
                     if (index > 0) Spacer(Modifier.height(8.dp))
-                    DeviceRowView(device, board.admin && !state.busy, actions)
+                    DeviceRowView(device, board.admin && !state.busy, state.pending?.takeIf { it.name == device.name }, actions)
                 }
                 if (board.admin) {
                     Spacer(Modifier.height(14.dp))
@@ -138,7 +152,7 @@ private fun Muted(text: String) {
 }
 
 @Composable
-private fun DeviceRowView(device: DeviceRow, canManage: Boolean, actions: DevicesActions) {
+private fun DeviceRowView(device: DeviceRow, canManage: Boolean, pending: DevicePending?, actions: DevicesActions) {
     val colors = VpnChainTheme.colors
     Column(
         Modifier
@@ -167,7 +181,18 @@ private fun DeviceRowView(device: DeviceRow, canManage: Boolean, actions: Device
             style = MaterialTheme.typography.bodySmall,
             color = colors.inkMuted,
         )
-        if (canManage && !device.self) {
+        if (pending != null) {
+            Spacer(Modifier.height(8.dp))
+            Muted(
+                stringResource(
+                    when (pending.action) {
+                        DevicePending.Action.CuttingOff -> Res.string.devices_pending_cut_off
+                        DevicePending.Action.Renaming -> Res.string.devices_pending_rename
+                        DevicePending.Action.NewCode -> Res.string.devices_pending_new_code
+                    },
+                ),
+            )
+        } else if (canManage && !device.self) {
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionButton(compact = true, text = stringResource(Res.string.devices_rename), onClick = { actions.onStartRename(device.name) })

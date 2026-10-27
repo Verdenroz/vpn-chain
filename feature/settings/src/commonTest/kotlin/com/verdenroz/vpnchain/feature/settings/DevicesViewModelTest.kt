@@ -10,12 +10,17 @@ import com.verdenroz.vpnchain.core.relay.AgentExit
 import com.verdenroz.vpnchain.core.relay.ExitChange
 import com.verdenroz.vpnchain.core.relay.DeviceRole
 import com.verdenroz.vpnchain.core.relay.PairingCode
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_cut_off_done
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_renamed
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlin.test.AfterTest
@@ -27,6 +32,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 private val LAPTOP = AgentDevice("laptop", DeviceRole.Admin, added = "2026-10-01T00:00:00Z", up = 1_000, down = 2_000, seen = "2026-10-26T07:33:20Z")
 private val PHONE = AgentDevice("phone", DeviceRole.Member, added = "2026-10-02T00:00:00Z", up = 0, down = 0)
@@ -38,8 +44,10 @@ class DevicesViewModelTest {
     private val log = mutableListOf<String>()
     private val relay = FakeDevices(log)
 
+    private val dispatcher = UnconfinedTestDispatcher()
+
     @BeforeTest
-    fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+    fun setUp() = Dispatchers.setMain(dispatcher)
 
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
@@ -227,6 +235,131 @@ class DevicesViewModelTest {
     }
 
     @Test
+    fun `cutting off marks the row pending, then confirms and clears itself`() {
+        val gate = CompletableDeferred<Unit>().also { relay.gate = it }
+        val model = viewModel()
+        model.askCutOff("phone")
+
+        model.cutOff()
+
+        assertEquals(DevicePending("phone", DevicePending.Action.CuttingOff), model.state.value.pending)
+        assertNull(model.state.value.step)
+        assertNull(model.state.value.notice)
+
+        relay.board = Result.success(DeviceBoard(listOf(LAPTOP), self = "laptop", admin = true, poolEmpty = false))
+        gate.complete(Unit)
+
+        assertNull(model.state.value.pending)
+        assertEquals(listOf("laptop"), model.ready().devices.map { it.name })
+        assertEquals(UiText.Resource(Res.string.devices_cut_off_done, listOf("phone")), model.state.value.notice)
+
+        dispatcher.scheduler.advanceTimeBy(7.seconds)
+
+        assertNull(model.state.value.notice)
+    }
+
+    @Test
+    fun `a confirmed cut off can be dismissed`() {
+        val model = viewModel()
+        model.askCutOff("phone")
+        model.cutOff()
+
+        model.dismissNotice()
+
+        assertNull(model.state.value.notice)
+    }
+
+    @Test
+    fun `a failed cut off returns the row and says why`() {
+        val gate = CompletableDeferred<Unit>().also { relay.gate = it }
+        relay.cutOffResult = Result.failure(DevicesFailed(DevicesFailed.Reason.Refused, "the relay did not restart"))
+        val model = viewModel()
+        model.askCutOff("phone")
+        model.cutOff()
+
+        gate.complete(Unit)
+
+        assertNull(model.state.value.pending)
+        assertNull(model.state.value.notice)
+        assertEquals(UiText.Dynamic("the relay did not restart"), model.state.value.error)
+        assertEquals(listOf("laptop", "phone"), model.ready().devices.map { it.name })
+    }
+
+    @Test
+    fun `renaming marks the row pending and confirms the new name`() {
+        val gate = CompletableDeferred<Unit>().also { relay.gate = it }
+        val model = viewModel()
+        model.startRename("phone")
+
+        model.rename("phone", "tablet")
+
+        assertEquals(DevicePending("phone", DevicePending.Action.Renaming), model.state.value.pending)
+        assertNull(model.state.value.step)
+
+        gate.complete(Unit)
+
+        assertNull(model.state.value.pending)
+        assertEquals(UiText.Resource(Res.string.devices_renamed, listOf("phone", "tablet")), model.state.value.notice)
+    }
+
+    @Test
+    fun `a rename that is refused returns the row and reopens the form with a reason`() {
+        relay.renameResult = Result.failure(DevicesFailed(DevicesFailed.Reason.NameTaken))
+        val model = viewModel()
+        model.startRename("phone")
+
+        model.rename("phone", "laptop")
+
+        assertNull(model.state.value.pending)
+        assertNull(model.state.value.notice)
+        val step = assertIs<DevicesStep.Renaming>(model.state.value.step)
+        assertIs<UiText.Resource>(step.error)
+    }
+
+    @Test
+    fun `a rename that fails otherwise returns the row with an error`() {
+        relay.renameResult = Result.failure(DevicesFailed(DevicesFailed.Reason.Offline))
+        val model = viewModel()
+        model.startRename("phone")
+
+        model.rename("phone", "tablet")
+
+        assertNull(model.state.value.pending)
+        assertNull(model.state.value.step)
+        assertIs<UiText.Resource>(model.state.value.error)
+    }
+
+    @Test
+    fun `a new code marks the row pending until the code is ready`() {
+        val gate = CompletableDeferred<Unit>().also { relay.gate = it }
+        val model = viewModel()
+        model.askNewCode("phone")
+
+        model.newCode()
+
+        assertEquals(DevicePending("phone", DevicePending.Action.NewCode), model.state.value.pending)
+        assertNull(model.state.value.step)
+
+        gate.complete(Unit)
+
+        assertNull(model.state.value.pending)
+        assertEquals(DevicesStep.ShowCode("phone", CODE), model.state.value.step)
+    }
+
+    @Test
+    fun `a failed new code returns the row with an error`() {
+        relay.newCodeResult = Result.failure(DevicesFailed(DevicesFailed.Reason.Failed))
+        val model = viewModel()
+        model.askNewCode("phone")
+
+        model.newCode()
+
+        assertNull(model.state.value.pending)
+        assertNull(model.state.value.step)
+        assertIs<UiText.Resource>(model.state.value.error)
+    }
+
+    @Test
     fun `the list reloads when the tunnel or key changes`() {
         val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         relay.changes = changes
@@ -244,6 +377,9 @@ internal class FakeDevices(private val log: MutableList<String>) : RelayDevices 
     var addResult = Result.success(CODE)
     var refillResult = Result.success(Unit)
     var cutOffResult = Result.success(Unit)
+    var renameResult = Result.success(Unit)
+    var newCodeResult = Result.success(CODE)
+    var gate: CompletableDeferred<Unit>? = null
     var exitBoard = Result.success(ExitBoard(admin = true, exit = AgentExit.Direct))
     var setExitResult = Result.success(Unit)
     override var changes: Flow<Unit> = flowOf(Unit)
@@ -260,17 +396,20 @@ internal class FakeDevices(private val log: MutableList<String>) : RelayDevices 
 
     override suspend fun rename(name: String, to: String): Result<Unit> {
         log += "rename:$name:$to"
-        return Result.success(Unit)
+        gate?.await()
+        return renameResult
     }
 
     override suspend fun cutOff(name: String): Result<Unit> {
         log += "cutOff:$name"
+        gate?.await()
         return cutOffResult
     }
 
     override suspend fun newCode(name: String): Result<PairingCode> {
         log += "newCode:$name"
-        return Result.success(CODE)
+        gate?.await()
+        return newCodeResult
     }
 
     override suspend fun refillPool(): Result<Unit> {

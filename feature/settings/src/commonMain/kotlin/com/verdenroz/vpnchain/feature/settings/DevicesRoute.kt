@@ -33,6 +33,7 @@ fun DevicesRoute(
                 onAskCutOff = viewModel::askCutOff,
                 onAskNewCode = viewModel::askNewCode,
                 onDismiss = viewModel::dismiss,
+                onDismissNotice = viewModel::dismissNotice,
             ),
         )
         ExitSection(
