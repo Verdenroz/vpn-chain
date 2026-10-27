@@ -16,6 +16,7 @@ private const val AMBER_HUE = 65f
  * [connected] and [unprotected] fill the status bar and the primary button;
  * their `Text` twins (and [reroutedText]) are the same hues lightened (dark) or
  * deepened (light) to read as text on [surface]. [route] is the drawn connected leg.
+ * [rerouted] is light in both themes, so text on it is dark ([onRerouted]).
  */
 @Immutable
 data class VpnChainColors(
@@ -35,6 +36,7 @@ data class VpnChainColors(
     val rerouted: Color,
     val reroutedText: Color,
     val onFilled: Color,
+    val onRerouted: Color,
     val outline: Color,
     val ring: Color,
     val selected: Color,
@@ -60,6 +62,7 @@ val DarkVpnChainColors = VpnChainColors(
     rerouted = oklch(0.80f, 0.13f, AMBER_HUE),
     reroutedText = oklch(0.80f, 0.13f, AMBER_HUE),
     onFilled = oklch(0.98f, 0.005f, NEUTRAL_HUE),
+    onRerouted = oklch(0.21f, 0.04f, NEUTRAL_HUE),
     outline = oklch(0.40f, 0.03f, NEUTRAL_HUE),
     ring = oklch(0.80f, 0.03f, NEUTRAL_HUE),
     selected = oklch(0.30f, 0.04f, NEUTRAL_HUE),
@@ -85,6 +88,7 @@ val LightVpnChainColors = VpnChainColors(
     rerouted = oklch(0.66f, 0.13f, AMBER_HUE),
     reroutedText = oklch(0.52f, 0.12f, AMBER_HUE),
     onFilled = oklch(0.99f, 0.004f, NEUTRAL_HUE),
+    onRerouted = oklch(0.24f, 0.03f, NEUTRAL_HUE),
     outline = oklch(0.85f, 0.01f, NEUTRAL_HUE),
     ring = oklch(0.40f, 0.03f, NEUTRAL_HUE),
     selected = oklch(0.90f, 0.014f, NEUTRAL_HUE),

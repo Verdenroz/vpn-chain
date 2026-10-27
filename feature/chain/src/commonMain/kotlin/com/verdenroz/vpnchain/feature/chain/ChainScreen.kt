@@ -41,8 +41,8 @@ fun ChainRoute(
         onConnect = viewModel::connect,
         onDisconnect = viewModel::disconnect,
         onOpenSettings = onOpenSettings,
-        onSendDirect = viewModel::sendDirect,
-        onUndoDirect = viewModel::undoDirect,
+        onUseMyConnection = viewModel::sendDirect,
+        onDismissBlocked = viewModel::dismissBlocked,
         modifier = modifier,
     )
 }
@@ -53,8 +53,8 @@ fun ChainScreen(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
-    onSendDirect: (String) -> Unit,
-    onUndoDirect: (String) -> Unit,
+    onUseMyConnection: (String) -> Unit,
+    onDismissBlocked: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val nodes = remember(uiState.route) { uiState.route.toMapNodes() }
@@ -65,20 +65,31 @@ fun ChainScreen(
             Row(Modifier.fillMaxSize()) {
                 RouteMap(nodes, connected, Modifier.weight(1f).fillMaxHeight())
                 SidePanel {
-                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, onSendDirect, onUndoDirect, fillHeight = true)
+                    uiState.blockedSite?.let { site ->
+                        BlockedSitePrompt(site, onDismissBlocked, onUseMyConnection, Modifier.padding(bottom = 16.dp))
+                    }
+                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, fillHeight = true)
                 }
             }
         } else {
             val cardMaxHeight = maxHeight - MIN_MAP_HEIGHT
             Column(Modifier.fillMaxSize()) {
                 RouteMap(nodes, connected, Modifier.weight(1f).fillMaxWidth())
+                uiState.blockedSite?.let { site ->
+                    BlockedSitePrompt(
+                        site,
+                        onDismissBlocked,
+                        onUseMyConnection,
+                        Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    )
+                }
                 InfoCard(
                     Modifier
                         .heightIn(max = cardMaxHeight)
                         .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
                         .fillMaxWidth(),
                 ) {
-                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, onSendDirect, onUndoDirect)
+                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings)
                 }
             }
         }

@@ -34,7 +34,6 @@ import com.verdenroz.vpnchain.core.domain.HopRole
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.KillSwitchState
 import com.verdenroz.vpnchain.core.model.TunnelState
-import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.chain.generated.resources.Res
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_change
@@ -59,18 +58,9 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switc
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_none
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_protected
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_open_settings
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_outside_direct
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_outside_entry_hop
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_outside_refused
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_send_direct
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_undo_direct
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_rerouted_all
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_site_count
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_ip
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_kill_switch
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_outside
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_placeholder
-import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_rerouted
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_state_connected
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_state_connected_rtt
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_state_connecting
@@ -79,7 +69,6 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_state_erro
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_uptime
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.StringResource
-import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** Everything the card and the desktop side panel say, plus the two buttons. */
@@ -89,13 +78,11 @@ internal fun ChainDetails(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
-    onSendDirect: (String) -> Unit,
-    onUndoDirect: (String) -> Unit,
     fillHeight: Boolean = false,
 ) {
     Column(if (fillHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f, fill = fillHeight).verticalScroll(rememberScrollState())) {
-            Readouts(uiState, onSendDirect, onUndoDirect)
+            Readouts(uiState)
         }
         Spacer(Modifier.height(16.dp))
         if (uiState.hasProfile) {
@@ -124,7 +111,7 @@ internal fun ChainDetails(
 }
 
 @Composable
-private fun Readouts(uiState: ChainUiState, onSendDirect: (String) -> Unit, onUndoDirect: (String) -> Unit) {
+private fun Readouts(uiState: ChainUiState) {
     val status = uiState.status
     val connected = status.state == TunnelState.Connected
     val exit = uiState.route.hop(HopRole.Exit)
@@ -143,8 +130,6 @@ private fun Readouts(uiState: ChainUiState, onSendDirect: (String) -> Unit, onUn
 
     Spacer(Modifier.height(12.dp))
     uiState.route.hops.forEach { hop -> HopInfoRow(hop) }
-    RerouteRow(uiState.routing)
-    OutsideChainRows(uiState.routing, onSendDirect, onUndoDirect)
     InfoRow(
         label = stringResource(Res.string.chain_row_ip),
         value = exit?.ip ?: stringResource(Res.string.chain_row_placeholder),
@@ -212,59 +197,6 @@ private fun HopInfoRow(hop: ChainHop) {
         },
         note = hop.evidence.labelRes()?.let { stringResource(it) },
     )
-}
-
-@Composable
-private fun RerouteRow(routing: LearnedRouting) {
-    val value = when (routing.warpMode) {
-        WarpMode.Off -> return
-        WarpMode.AllTraffic -> stringResource(Res.string.chain_rerouted_all)
-        WarpMode.Automatic ->
-            if (routing.warpCount == 0) return
-            else pluralStringResource(Res.plurals.chain_site_count, routing.warpCount, routing.warpCount)
-    }
-    InfoRow(
-        label = stringResource(Res.string.chain_row_rerouted),
-        value = value,
-        marker = RowMarker(VpnChainTheme.colors.rerouted, filled = true),
-    )
-}
-
-/**
- * Sites that skip the relay, and how. Through the entry hop they are counted;
- * the bare link is listed per site, since each one is there by the user's choice.
- */
-@Composable
-private fun OutsideChainRows(routing: LearnedRouting, onSendDirect: (String) -> Unit, onUndoDirect: (String) -> Unit) {
-    val colors = VpnChainTheme.colors
-    if (routing.entryHopCount > 0) {
-        InfoRow(
-            label = stringResource(Res.string.chain_row_outside),
-            value = pluralStringResource(Res.plurals.chain_site_count, routing.entryHopCount, routing.entryHopCount),
-            marker = RowMarker(colors.unprotected, filled = true),
-            note = stringResource(Res.string.chain_outside_entry_hop),
-        )
-    }
-    routing.sentDirect.forEach { domain ->
-        InfoRow(
-            label = domain,
-            value = stringResource(Res.string.chain_outside_direct),
-            marker = RowMarker(colors.unprotected, filled = true),
-            action = {
-                ActionButton(stringResource(Res.string.chain_undo_direct), onClick = { onUndoDirect(domain) }, compact = true)
-            },
-        )
-    }
-    routing.offered.forEach { domain ->
-        InfoRow(
-            label = domain,
-            value = stringResource(Res.string.chain_outside_refused),
-            marker = RowMarker(colors.unprotected, filled = false),
-            action = {
-                ActionButton(stringResource(Res.string.chain_send_direct), onClick = { onSendDirect(domain) }, compact = true)
-            },
-        )
-    }
 }
 
 @Composable

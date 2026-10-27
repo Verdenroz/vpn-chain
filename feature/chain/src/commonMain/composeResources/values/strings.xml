@@ -9,18 +9,10 @@
     <string name="chain_row_placeholder">—</string>
     <string name="chain_row_ip">IP</string>
     <string name="chain_row_kill_switch">Kill switch</string>
-    <string name="chain_row_rerouted">Rerouted</string>
-    <string name="chain_rerouted_all">All traffic</string>
-    <plurals name="chain_site_count">
-        <item quantity="one">%1$d site</item>
-        <item quantity="other">%1$d sites</item>
-    </plurals>
-    <string name="chain_row_outside">Outside chain</string>
-    <string name="chain_outside_entry_hop">entry hop</string>
-    <string name="chain_outside_direct">direct, shows your address</string>
-    <string name="chain_outside_refused">relay and WARP refused</string>
-    <string name="chain_send_direct">Send direct</string>
-    <string name="chain_undo_direct">Undo</string>
+    <string name="chain_blocked_title">%1$s blocks VPNs</string>
+    <string name="chain_blocked_detail">Your connection works, but shows your IP.</string>
+    <string name="chain_blocked_dismiss">Not now</string>
+    <string name="chain_blocked_use">Use my connection</string>
     <string name="chain_hop_origin">You</string>
     <string name="chain_hop_entry">Entry</string>
     <string name="chain_hop_exit">Exit</string>

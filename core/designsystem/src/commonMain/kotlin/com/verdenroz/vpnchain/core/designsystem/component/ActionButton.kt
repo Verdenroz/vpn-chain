@@ -20,7 +20,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 
-enum class ActionTone { Outlined, Primary, Danger }
+enum class ActionTone { Outlined, Plain, Primary, Danger, Rerouted }
 
 private val ButtonShape = RoundedCornerShape(10.dp)
 
@@ -35,9 +35,10 @@ fun ActionButton(
 ) {
     val colors = VpnChainTheme.colors
     val fill = when (tone) {
-        ActionTone.Outlined -> null
+        ActionTone.Outlined, ActionTone.Plain -> null
         ActionTone.Primary -> colors.connected
         ActionTone.Danger -> colors.disconnect
+        ActionTone.Rerouted -> colors.rerouted
     }
     Box(
         modifier
@@ -46,8 +47,11 @@ fun ActionButton(
             .alpha(if (enabled) 1f else 0.5f)
             .clip(ButtonShape)
             .then(
-                if (fill != null) Modifier.background(fill)
-                else Modifier.border(BorderStroke(1.dp, colors.outline), ButtonShape),
+                when {
+                    fill != null -> Modifier.background(fill)
+                    tone == ActionTone.Plain -> Modifier
+                    else -> Modifier.border(BorderStroke(1.dp, colors.outline), ButtonShape)
+                },
             )
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp),
@@ -56,7 +60,11 @@ fun ActionButton(
         Text(
             text,
             style = if (compact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.labelLarge,
-            color = if (fill != null) colors.onFilled else colors.ink,
+            color = when {
+                tone == ActionTone.Rerouted -> colors.onRerouted
+                fill != null -> colors.onFilled
+                else -> colors.ink
+            },
             maxLines = 1,
         )
     }

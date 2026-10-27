@@ -5,7 +5,6 @@ import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.OriginRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
-import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.ObserveChainRouteUseCase
@@ -23,13 +22,11 @@ import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
-import com.verdenroz.vpnchain.core.model.WarpExit
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -40,9 +37,10 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class ChainViewModelDirectTest {
+class ChainViewModelBlockedSiteTest {
 
     @BeforeTest
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -51,27 +49,60 @@ class ChainViewModelDirectTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun `send direct moves an offered site to the bare link and undo takes it back`() = runTest {
-        val learned = FakeLearned(LearnedSite("reddit.com", BlockReason.Forbidden, 0L, LearnedRoute.DirectAvailable))
+    fun `a site that can go over the user's connection is prompted`() = runTest {
+        val viewModel = chainViewModel(FakeLearned(offered("reddit.com", 1L)))
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        runCurrent()
+
+        assertEquals(BlockedSite("reddit.com", "reddit.com"), viewModel.uiState.value.blockedSite)
+    }
+
+    @Test
+    fun `not now hides the prompt and leaves the site waiting`() = runTest {
+        val learned = FakeLearned(offered("reddit.com", 1L))
         val viewModel = chainViewModel(learned)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         runCurrent()
-        assertEquals(listOf("reddit.com"), viewModel.uiState.value.routing.offered)
+
+        viewModel.dismissBlocked("reddit.com")
+        runCurrent()
+
+        assertNull(viewModel.uiState.value.blockedSite)
+        assertEquals(emptyList(), learned.calls)
+        assertEquals(LearnedRoute.DirectAvailable, learned.sites.value.single().route)
+    }
+
+    @Test
+    fun `use my connection allows the site and clears the prompt`() = runTest {
+        val learned = FakeLearned(offered("reddit.com", 1L))
+        val viewModel = chainViewModel(learned)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        runCurrent()
 
         viewModel.sendDirect("reddit.com")
         runCurrent()
 
         assertEquals(listOf("allowDirect:reddit.com"), learned.calls)
-        assertEquals(emptyList(), viewModel.uiState.value.routing.offered)
-        assertEquals(listOf("reddit.com"), viewModel.uiState.value.routing.sentDirect)
+        assertNull(viewModel.uiState.value.blockedSite)
+    }
 
-        viewModel.undoDirect("reddit.com")
+    @Test
+    fun `one prompt at a time, newest first`() = runTest {
+        val learned = FakeLearned(offered("old.example", 1L), offered("new.example", 2L))
+        val viewModel = chainViewModel(learned)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        runCurrent()
+        assertEquals("new.example", viewModel.uiState.value.blockedSite?.domain)
+
+        viewModel.dismissBlocked("new.example")
         runCurrent()
 
-        assertEquals(listOf("allowDirect:reddit.com", "forget:reddit.com"), learned.calls)
-        assertEquals(listOf("reddit.com"), viewModel.uiState.value.routing.offered)
+        assertEquals("old.example", viewModel.uiState.value.blockedSite?.domain)
     }
 }
+
+private fun offered(domain: String, learnedAtMillis: Long) =
+    LearnedSite(domain, BlockReason.Forbidden, learnedAtMillis, LearnedRoute.DirectAvailable)
 
 private val RELAY = ChainProfile(vpsIp = "203.0.113.10", vlessUuid = "uuid", realityPublicKey = "pubkey", shortId = "ab12")
 
@@ -87,7 +118,6 @@ private fun chainViewModel(learned: LearnedSitesRepository): ChainViewModel {
         profileRepository = profiles,
         settingsRepository = settings,
         learnedSites = learned,
-        warpRepository = StubWarp(),
     )
 }
 
@@ -161,11 +191,6 @@ private class StubSettings : SettingsRepository {
 
     override suspend fun setConnectionLog(enabled: Boolean) = Unit
     override suspend fun setCloseToTray(enabled: Boolean) = Unit
-}
-
-private class StubWarp : WarpRepository {
-    override val registered = flowOf(true)
-    override suspend fun exit(): WarpExit? = null
 }
 
 private class StubOrigin : OriginRepository {
