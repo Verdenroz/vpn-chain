@@ -75,21 +75,13 @@ fun ChainScreen(
             val cardMaxHeight = maxHeight - MIN_MAP_HEIGHT
             Column(Modifier.fillMaxSize()) {
                 RouteMap(nodes, connected, Modifier.weight(1f).fillMaxWidth())
-                uiState.blockedSite?.let { site ->
-                    BlockedSitePrompt(
-                        site,
-                        onDismissBlocked,
-                        onUseMyConnection,
-                        Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                    )
-                }
-                InfoCard(
-                    Modifier
-                        .heightIn(max = cardMaxHeight)
-                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
-                        .fillMaxWidth(),
-                ) {
-                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings)
+                Column(Modifier.heightIn(max = cardMaxHeight).padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+                    uiState.blockedSite?.let { site ->
+                        BlockedSitePrompt(site, onDismissBlocked, onUseMyConnection, Modifier.padding(bottom = 12.dp))
+                    }
+                    InfoCard(Modifier.weight(1f, fill = false).fillMaxWidth()) {
+                        ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings)
+                    }
                 }
             }
         }

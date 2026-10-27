@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.feature.sites
 import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
+import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.model.BlockReason
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
@@ -11,11 +12,13 @@ import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpExit
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -39,7 +42,7 @@ class SitesViewModelTest {
     @Test
     fun `use my connection moves a blocked site to your connection and undo takes it back`() = runTest {
         val learned = FakeLearned(LearnedSite("reddit.com", BlockReason.Forbidden, 0L, LearnedRoute.DirectAvailable))
-        val viewModel = SitesViewModel(learned, StubProfiles(), StubSettings())
+        val viewModel = SitesViewModel(learned, StubProfiles(), StubSettings(), StubWarp())
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         runCurrent()
 
@@ -57,7 +60,7 @@ class SitesViewModelTest {
     @Test
     fun `remove drops the site`() = runTest {
         val learned = FakeLearned(LearnedSite("reddit.com", BlockReason.Forbidden, 0L, LearnedRoute.Warp))
-        val viewModel = SitesViewModel(learned, StubProfiles(), StubSettings())
+        val viewModel = SitesViewModel(learned, StubProfiles(), StubSettings(), StubWarp())
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
         runCurrent()
 
@@ -130,4 +133,9 @@ private class StubSettings : SettingsRepository {
     override suspend fun setAutoReconnect(enabled: Boolean) = Unit
     override suspend fun setConnectionLog(enabled: Boolean) = Unit
     override suspend fun setCloseToTray(enabled: Boolean) = Unit
+}
+
+private class StubWarp : WarpRepository {
+    override val registered = flowOf(true)
+    override suspend fun exit(): WarpExit? = null
 }

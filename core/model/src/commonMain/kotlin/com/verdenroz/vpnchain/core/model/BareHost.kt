@@ -1,4 +1,4 @@
-package com.verdenroz.vpnchain.core.ui
+package com.verdenroz.vpnchain.core.model
 
 /** [domain] without its `www.`, unless [among] also lists that shorter host. */
 fun bareHost(domain: String, among: Collection<String>): String {

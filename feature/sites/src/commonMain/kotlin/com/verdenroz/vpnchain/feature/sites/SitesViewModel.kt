@@ -5,14 +5,16 @@ import androidx.lifecycle.viewModelScope
 import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
+import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.OutsideExit
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpMode
+import com.verdenroz.vpnchain.core.model.bareHost
+import com.verdenroz.vpnchain.core.model.offersDirect
 import com.verdenroz.vpnchain.core.model.outsideExit
-import com.verdenroz.vpnchain.core.model.outsideExitFor
-import com.verdenroz.vpnchain.core.ui.bareHost
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -34,22 +36,28 @@ data class SitesUiState(
 }
 
 /**
- * A blocked site can go over the user's own connection only where no entry hop
- * is dialled; anywhere else it can only be removed.
+ * A site learned for WARP is listed there only while the tail is rendered; with
+ * WARP off or unregistered it goes through the relay, which refuses it.
  */
-internal fun sitesUiState(sites: List<LearnedSite>, settings: UserSettings, profile: SavedProfile?): SitesUiState {
-    val domains = sites.map { it.domain }
-    val directOffered = profile.outsideExitFor(settings) == OutsideExit.Direct
+internal fun sitesUiState(
+    sites: List<LearnedSite>,
+    settings: UserSettings,
+    profile: SavedProfile?,
+    warpRegistered: Boolean,
+): SitesUiState {
+    val domains = sites.mapTo(HashSet()) { it.domain }
+    val directOffered = profile.offersDirect(settings)
+    val warpActive = warpRegistered && settings.warpMode != WarpMode.Off && profile?.supportsWarpExit == true
     val sections = sites.sortedByDescending { it.learnedAtMillis }.map { site ->
         val exit = site.outsideExit(settings, profile)
         val section = when {
-            site.route == LearnedRoute.Warp -> Section.Warp
+            site.route == LearnedRoute.Warp && warpActive -> Section.Warp
             exit == OutsideExit.EntryHop -> Section.Entry
             exit == OutsideExit.Direct -> Section.Direct
             else -> Section.Blocked
         }
         val action = when {
-            section == Section.Direct -> SiteAction.Undo
+            site.route == LearnedRoute.Direct -> SiteAction.Undo
             section == Section.Blocked && site.route == LearnedRoute.DirectAvailable && directOffered ->
                 SiteAction.UseMyConnection
             else -> SiteAction.Remove
@@ -70,10 +78,17 @@ class SitesViewModel(
     private val learnedSites: LearnedSitesRepository,
     profileRepository: ProfileRepository,
     settingsRepository: SettingsRepository,
+    warpRepository: WarpRepository,
 ) : ViewModel() {
 
     val uiState: StateFlow<SitesUiState> =
-        combine(learnedSites.sites, settingsRepository.settings, profileRepository.profile, ::sitesUiState)
+        combine(
+            learnedSites.sites,
+            settingsRepository.settings,
+            profileRepository.profile,
+            warpRepository.registered,
+            ::sitesUiState,
+        )
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),

@@ -86,4 +86,11 @@ class OutsideChainTest {
     fun `nothing fails open on a WireGuard-only connection`() {
         assertNull(OPEN_SITE.outsideExit(UserSettings(), SavedProfile(id = "w", name = "w", wireGuard = ENTRY)))
     }
+
+    @Test
+    fun `only a relay with no entry hop dialled offers the bare link`() {
+        assertEquals(true, profile().offersDirect(UserSettings()))
+        assertEquals(false, profile(ENTRY).offersDirect(UserSettings()))
+        assertEquals(false, null.offersDirect(UserSettings()))
+    }
 }

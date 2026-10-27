@@ -13,11 +13,10 @@ import com.verdenroz.vpnchain.core.domain.ObserveChainRouteUseCase
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
-import com.verdenroz.vpnchain.core.model.OutsideExit
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
-import com.verdenroz.vpnchain.core.model.outsideExitFor
-import com.verdenroz.vpnchain.core.ui.bareHost
+import com.verdenroz.vpnchain.core.model.bareHost
+import com.verdenroz.vpnchain.core.model.offersDirect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -50,12 +49,12 @@ internal fun blockedSite(
     profile: SavedProfile?,
     dismissed: Set<String>,
 ): BlockedSite? {
-    if (profile?.supportsWarpExit != true || profile.outsideExitFor(settings) != OutsideExit.Direct) return null
+    if (!profile.offersDirect(settings)) return null
     val newest = sites
         .filter { it.route == LearnedRoute.DirectAvailable && it.domain !in dismissed }
         .maxByOrNull { it.learnedAtMillis }
         ?: return null
-    return BlockedSite(newest.domain, bareHost(newest.domain, sites.map { it.domain }))
+    return BlockedSite(newest.domain, bareHost(newest.domain, sites.mapTo(HashSet()) { it.domain }))
 }
 
 class ChainViewModel(

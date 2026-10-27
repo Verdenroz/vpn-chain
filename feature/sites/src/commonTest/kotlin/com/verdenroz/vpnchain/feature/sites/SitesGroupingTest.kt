@@ -6,6 +6,7 @@ import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -38,6 +39,7 @@ class SitesGroupingTest {
             ),
             UserSettings(),
             RELAY_ONLY,
+            warpRegistered = true,
         )
 
         assertEquals(
@@ -59,6 +61,7 @@ class SitesGroupingTest {
             listOf(site("bank.example", LearnedRoute.FailOpen), site("shop.example", LearnedRoute.DirectAvailable)),
             UserSettings(),
             CHAIN,
+            warpRegistered = true,
         )
 
         assertEquals(listOf(SiteRow("bank.example", "bank.example", SiteAction.Remove)), state.entry)
@@ -71,6 +74,7 @@ class SitesGroupingTest {
             listOf(site("old.example", LearnedRoute.Warp, at = 1L), site("new.example", LearnedRoute.Warp, at = 2L)),
             UserSettings(),
             RELAY_ONLY,
+            warpRegistered = true,
         )
 
         assertEquals(listOf("new.example", "old.example"), state.warp.map { it.domain })
@@ -82,6 +86,7 @@ class SitesGroupingTest {
             listOf(site("www.reddit.com", LearnedRoute.Warp), site("reddit.com", LearnedRoute.Warp)),
             UserSettings(),
             RELAY_ONLY,
+            warpRegistered = true,
         )
 
         assertEquals(setOf("www.reddit.com", "reddit.com"), state.warp.map { it.host }.toSet())
@@ -89,6 +94,38 @@ class SitesGroupingTest {
 
     @Test
     fun `no learned sites reads as empty`() {
-        assertTrue(sitesUiState(emptyList(), UserSettings(), RELAY_ONLY).isEmpty)
+        assertTrue(sitesUiState(emptyList(), UserSettings(), RELAY_ONLY, warpRegistered = true).isEmpty)
+    }
+
+    @Test
+    fun `with WARP off a site learned for it is listed as blocked`() {
+        val state = sitesUiState(
+            listOf(site("reddit.com", LearnedRoute.Warp)),
+            UserSettings(warpMode = WarpMode.Off),
+            RELAY_ONLY,
+            warpRegistered = true,
+        )
+
+        assertEquals(listOf(SiteRow("reddit.com", "reddit.com", SiteAction.Remove)), state.blocked)
+        assertEquals(emptyList(), state.warp)
+    }
+
+    @Test
+    fun `without a registration nothing is listed under WARP`() {
+        val state = sitesUiState(listOf(site("reddit.com", LearnedRoute.Warp)), UserSettings(), RELAY_ONLY, warpRegistered = false)
+
+        assertEquals(emptyList(), state.warp)
+    }
+
+    @Test
+    fun `a site sent direct that can no longer go direct can still be undone`() {
+        val state = sitesUiState(
+            listOf(site("mail.example", LearnedRoute.Direct)),
+            UserSettings(failOpen = false),
+            RELAY_ONLY,
+            warpRegistered = true,
+        )
+
+        assertEquals(listOf(SiteRow("mail.example", "mail.example", SiteAction.Undo)), state.blocked)
     }
 }
