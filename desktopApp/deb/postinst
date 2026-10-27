@@ -1,0 +1,41 @@
+#!/bin/sh
+set -e
+
+libexec=/opt/vpn-chain/libexec
+tmpfiles=/etc/tmpfiles.d/vpn-chain.conf
+
+# The handoff directory is owned by the person at the desktop, so the app can
+# write the relay config without a group that a running session only gains at
+# its next login.
+desktop_user() {
+    if [ -n "${SUDO_USER:-}" ]; then
+        echo "$SUDO_USER"
+    elif [ -n "${PKEXEC_UID:-}" ]; then
+        getent passwd "$PKEXEC_UID" | cut -d: -f1
+    fi
+}
+
+case "$1" in
+configure)
+    getent group vpn-chain >/dev/null || addgroup --system --quiet vpn-chain
+    if ! getent passwd sing-box >/dev/null; then
+        adduser --system --quiet --no-create-home --home /nonexistent --shell /usr/sbin/nologin sing-box
+        install -d /var/lib/vpn-chain
+        touch /var/lib/vpn-chain/.created-sing-box-user
+    fi
+
+    setcap cap_net_admin=eip "$libexec/vpn-chain-killswitch"
+
+    owner="$(desktop_user)"
+    if [ -n "$owner" ] && [ "$owner" != root ]; then
+        sed "s|^d /run/vpn-chain 2770 sing-box|d /run/vpn-chain 2770 $owner|" \
+            /usr/lib/tmpfiles.d/vpn-chain.conf >"$tmpfiles"
+    fi
+    systemd-tmpfiles --create vpn-chain.conf
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+    fi
+    ;;
+esac
+
+exit 0

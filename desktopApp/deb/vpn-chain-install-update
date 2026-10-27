@@ -1,0 +1,25 @@
+#!/bin/sh
+# Installs a vpn-chain update as root: vpn-chain-install-update SHA256 < vpn-chain.deb
+# Run through pkexec, which asks for an administrator password. The package is
+# copied out of the caller's reach before it is hashed, so the file that is
+# checked is the file that is installed.
+set -eu
+
+sha256="${1:-}"
+case "$sha256" in
+    *[!0-9a-f]* | "") echo "usage: ${0##*/} SHA256 < vpn-chain.deb" >&2; exit 2 ;;
+esac
+[ "${#sha256}" -eq 64 ] || { echo "usage: ${0##*/} SHA256 < vpn-chain.deb" >&2; exit 2; }
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+# Readable by apt's sandbox user, which would otherwise warn and fall back to root.
+chmod 755 "$work"
+deb="$work/vpn-chain.deb"
+cat >"$deb"
+chmod 644 "$deb"
+
+echo "$sha256  $deb" | sha256sum -c --status || { echo "the download does not match its SHA-256" >&2; exit 1; }
+[ "$(dpkg-deb -f "$deb" Package)" = vpn-chain ] || { echo "the download is not the vpn-chain package" >&2; exit 1; }
+
+DEBIAN_FRONTEND=noninteractive apt-get install -y "$deb"

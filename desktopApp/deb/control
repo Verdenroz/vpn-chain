@@ -1,0 +1,14 @@
+Package: vpn-chain
+Version: @VERSION@
+Architecture: amd64
+Maintainer: Harvey Tseng <verde@nroz.dev>
+Installed-Size: @SIZE@
+Depends: libc6 (>= 2.38), zlib1g, libasound2t64 | libasound2, libfreetype6, libx11-6, libxext6, libxi6, libxrender1, libxtst6, libcap2, libcap2-bin, nftables, adduser, systemd, polkitd, pkexec
+Section: net
+Priority: optional
+Homepage: https://github.com/Verdenroz/vpn-chain
+Description: Multi-hop VPN through your own server
+ Chains an optional WireGuard entry hop, a VLESS+REALITY relay on your own
+ server and the internet into one tunnel. Includes the app, the sing-box it
+ drives, a kill switch and the system service that lets it connect without
+ a password prompt.

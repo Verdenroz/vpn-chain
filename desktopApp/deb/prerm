@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+remove)
+    if [ -d /run/systemd/system ]; then
+        systemctl stop vpn-chain-relay.service || true
+    fi
+    # A table left up with nothing to lift it would cut the machine off.
+    /opt/vpn-chain/libexec/vpn-chain-killswitch down || true
+    ;;
+esac
+
+exit 0
