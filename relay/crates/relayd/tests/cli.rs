@@ -13,6 +13,16 @@ fn relayd(args: &[&Path]) -> Output {
         .unwrap()
 }
 
+fn import(args: &[&Path]) -> Output {
+    let locks = tempfile::tempdir().unwrap();
+    let lock = locks.path().join("devices.lock");
+    let all: Vec<&Path> = [Path::new("import"), "--lock".as_ref(), &lock]
+        .into_iter()
+        .chain(args.iter().copied())
+        .collect();
+    relayd(&all)
+}
+
 fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).unwrap()
 }
@@ -23,8 +33,7 @@ fn import_then_render_writes_the_deployed_config_back() {
     let state = dir.path().join("relay.json");
     let config = dir.path().join("config.json");
 
-    let imported = relayd(&[
-        "import".as_ref(),
+    let imported = import(&[
         "--config".as_ref(),
         &fixture("relay-direct.json"),
         "--devices".as_ref(),
@@ -60,8 +69,7 @@ fn devices_json_defaults_to_the_one_beside_the_config() {
     )
     .unwrap();
 
-    let imported = relayd(&[
-        "import".as_ref(),
+    let imported = import(&[
         "--config".as_ref(),
         &dir.path().join("config.json"),
         "--out".as_ref(),
@@ -76,8 +84,7 @@ fn a_refused_import_exits_nonzero_and_writes_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let state = dir.path().join("relay.json");
 
-    let refused = relayd(&[
-        "import".as_ref(),
+    let refused = import(&[
         "--config".as_ref(),
         &fixture("relay-direct.json"),
         "--devices".as_ref(),

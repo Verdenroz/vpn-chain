@@ -1,4 +1,4 @@
-use std::fs::{self, File, OpenOptions, Permissions};
+use std::fs::{self, File, OpenOptions, Permissions, TryLockError};
 use std::io::{self, ErrorKind, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
@@ -37,6 +37,24 @@ pub fn described(error: &serde_json::Error) -> String {
     match error.line() {
         0 => reason.to_owned(),
         line => format!("{reason} at line {line} column {}", error.column()),
+    }
+}
+
+/// Takes `path` with `flock`, as the server scripts do on fd 9, without waiting for it.
+pub fn lock(path: &Path) -> Result<File, Error> {
+    let file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path)
+        .map_err(|error| Error::at(path, error))?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(TryLockError::WouldBlock) => Err(Error::at(
+            path,
+            "held by another tool editing the relay; run again once it finishes",
+        )),
+        Err(TryLockError::Error(error)) => Err(Error::at(path, error)),
     }
 }
 

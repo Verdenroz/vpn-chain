@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use relayd::{Error, Relay, import, secrets_path, write_config};
+use relayd::{DEVICES_LOCK, Error, Relay, import, secrets_path, write_config};
 
-const USAGE: &str = "usage: relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>]
+const USAGE: &str = "usage: relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>] [--lock <file>]
        relayd render --state <state.json> [--secrets <secrets.json>] --out <config.json>";
 
 const EX_USAGE: u8 = 64;
@@ -13,7 +13,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.split_first() {
         Some((command, rest)) if command == "import" => {
-            flags(rest, &["config", "devices", "out", "secrets"]).map(run_import)
+            flags(rest, &["config", "devices", "out", "secrets", "lock"]).map(run_import)
         }
         Some((command, rest)) if command == "render" => {
             flags(rest, &["state", "secrets", "out"]).map(run_render)
@@ -60,7 +60,10 @@ fn run_import(mut flags: HashMap<String, PathBuf>) -> Option<Result<(), Error>> 
     let secrets = flags
         .remove("secrets")
         .unwrap_or_else(|| secrets_path(&out));
-    Some(import(&config, &devices).and_then(|relay| {
+    let lock = flags
+        .remove("lock")
+        .unwrap_or_else(|| PathBuf::from(DEVICES_LOCK));
+    Some(import(&config, &devices, &lock).and_then(|relay| {
         relay.create(&out, &secrets)?;
         let names: Vec<&str> = relay
             .state

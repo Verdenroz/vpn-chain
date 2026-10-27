@@ -90,7 +90,11 @@ struct Peer {
 /// It refuses what `xray-clients.sh` refuses to edit (a client missing from `devices.json`, an
 /// empty short ID list), and any config it could not render back the same, so nothing the relay
 /// serves today is dropped. Every device comes in as a member: none has a management key yet.
-pub fn import(config: &Path, devices: &Path) -> Result<Relay, Error> {
+///
+/// Both files are read under `lock`, the lock the server scripts hold while they edit them, and
+/// import refuses to run while another tool holds it.
+pub fn import(config: &Path, devices: &Path, lock: &Path) -> Result<Relay, Error> {
+    let _held = store::lock(lock)?;
     let tracked: BTreeMap<String, Tracked> =
         store::read_json_if_present(devices)?.unwrap_or_default();
     let config_json: Value = store::read_json(config)?;

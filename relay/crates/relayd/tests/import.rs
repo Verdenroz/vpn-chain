@@ -2,8 +2,8 @@ mod common;
 
 use std::fs;
 
-use common::{assert_no_secret, fixture, read, relay};
-use relayd::{Exit, Relay, import, render};
+use common::{assert_no_secret, fixture, import, read, relay};
+use relayd::{Exit, Relay, render};
 use serde_json::{Value, json};
 
 fn json_fixture(name: &str) -> Value {
@@ -331,4 +331,32 @@ fn a_value_with_an_escaped_quote_stays_out_of_the_error() {
 
     assert!(!error.contains("s3cr"), "{error}");
     assert!(!error.contains("et-value"), "{error}");
+}
+
+#[test]
+fn import_refuses_while_the_scripts_hold_the_lock() {
+    let dir = tempfile::tempdir().unwrap();
+    let lock = dir.path().join("devices.lock");
+    let held = fs::File::create(&lock).unwrap();
+    held.lock().unwrap();
+
+    let error = relayd::import(
+        &fixture("relay-direct.json"),
+        &fixture("relay-direct.devices.json"),
+        &lock,
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert!(
+        error.contains("held by another tool editing the relay"),
+        "{error}"
+    );
+    drop(held);
+    relayd::import(
+        &fixture("relay-direct.json"),
+        &fixture("relay-direct.devices.json"),
+        &lock,
+    )
+    .unwrap();
 }

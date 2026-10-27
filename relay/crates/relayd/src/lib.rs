@@ -11,7 +11,9 @@
 //! stay in the state, which is 0600 too, because each belongs to one device entry.
 //!
 //! [`import`] adopts a relay exactly as `server/deploy-server.sh` and `server/xray-clients.sh`
-//! leave it, and refuses one it could not render back the same.
+//! leave it, and refuses one it could not render back the same. It takes the traffic counters as
+//! `devices.json` last recorded them: what xray counted since the scripts last folded its stats
+//! is not read, and folding them before import is still to be built.
 
 mod error;
 mod import;
@@ -26,7 +28,7 @@ pub use import::import;
 pub use render::{render, write_config};
 pub use secret::Secret;
 pub use state::{
-    Api, Device, Exit, INBOUND_TAG, Inbound, Relay, Role, SCHEMA, Secrets, State, XRAY_VERSION,
-    Xray, secrets_path,
+    Api, DEVICES_LOCK, Device, Exit, INBOUND_TAG, Inbound, Relay, Role, SCHEMA, Secrets, State,
+    XRAY_VERSION, Xray, secrets_path,
 };
 pub use validate::valid_name;

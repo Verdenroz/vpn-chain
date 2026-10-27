@@ -38,6 +38,11 @@ pub fn relay(name: &str) -> Relay {
     .unwrap()
 }
 
+pub fn import(config: &Path, devices: &Path) -> Result<Relay, relayd::Error> {
+    let dir = tempfile::tempdir().unwrap();
+    relayd::import(config, devices, &dir.path().join("devices.lock"))
+}
+
 pub fn assert_no_secret(text: &str) {
     for secret in SECRETS {
         assert!(!text.contains(secret), "{secret} leaked into: {text}");

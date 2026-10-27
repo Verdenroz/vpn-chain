@@ -14,6 +14,9 @@ pub const XRAY_VERSION: &str = "26.3.27";
 
 pub const INBOUND_TAG: &str = "vless-reality-443";
 
+/// The lock `server/lib/xray-common.sh` holds around every edit of the config and `devices.json`.
+pub const DEVICES_LOCK: &str = "/run/lock/vpn-chain-devices.lock";
+
 /// Everything relayd knows about the relay except its private keys, which live in [`Secrets`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
