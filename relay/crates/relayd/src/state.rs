@@ -1,11 +1,10 @@
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, Secret, store};
+use crate::{Error, Secret, store, validate};
 
 /// Bump whenever a persisted shape changes, and keep a migration from the version it leaves.
 pub const SCHEMA: u32 = 1;
@@ -14,9 +13,6 @@ pub const SCHEMA: u32 = 1;
 pub const XRAY_VERSION: &str = "26.3.27";
 
 pub const INBOUND_TAG: &str = "vless-reality-443";
-
-const NAME_MAX: usize = 32;
-const SHORT_ID_MAX: usize = 16;
 
 /// Everything relayd knows about the relay except its private keys, which live in [`Secrets`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -142,26 +138,7 @@ impl Relay {
     }
 
     pub fn validate(&self) -> Result<(), Error> {
-        let state = &self.state;
-        if state.inbound.tag != INBOUND_TAG {
-            return Err(Error::new(format!(
-                "the inbound tag must be {INBOUND_TAG}, the name the server scripts look for"
-            )));
-        }
-        if state.inbound.server_names.is_empty() {
-            return Err(Error::new("the inbound has no server names"));
-        }
-        check_devices(&state.devices)?;
-        check_short_ids(state)?;
-        match (&state.exit, &self.secrets.exit_secret_key) {
-            (Exit::WireGuard { .. }, None) => Err(Error::new(
-                "the WireGuard exit has no private key in secrets",
-            )),
-            (Exit::Direct, Some(_)) => Err(Error::new(
-                "secrets hold an exit key but the exit is direct",
-            )),
-            _ => Ok(()),
-        }
+        validate::relay(self)
     }
 }
 
@@ -179,59 +156,4 @@ fn read_versioned<T: DeserializeOwned>(path: &Path) -> Result<T, Error> {
         )),
         None => Err(Error::at(path, "not a relayd file: no \"v\"")),
     }
-}
-
-fn check_devices(devices: &[Device]) -> Result<(), Error> {
-    let mut names = HashSet::new();
-    let mut uuids = HashSet::new();
-    for device in devices {
-        if !valid_name(&device.name) {
-            return Err(Error::new(format!("invalid device name: {}", device.name)));
-        }
-        if !names.insert(device.name.as_str()) {
-            return Err(Error::new(format!("device listed twice: {}", device.name)));
-        }
-        if device.uuid.expose().is_empty() || !uuids.insert(device.uuid.expose()) {
-            return Err(Error::new(format!(
-                "device {} has an empty or shared UUID",
-                device.name
-            )));
-        }
-    }
-    Ok(())
-}
-
-/// xray refuses an empty short ID list, and each ID is up to 16 hex digits, in pairs.
-fn check_short_ids(state: &State) -> Result<(), Error> {
-    let held = state.devices.iter().map(|device| &device.short_id);
-    let all: Vec<&Secret> = held.chain(&state.spare_short_ids).collect();
-    if all.is_empty() {
-        return Err(Error::new("no short IDs; xray refuses an empty list"));
-    }
-    if !all.iter().all(|id| valid_short_id(id.expose())) {
-        return Err(Error::new(
-            "a short ID is empty or not 2 to 16 hex digits in pairs",
-        ));
-    }
-    let unique: HashSet<&str> = all.iter().map(|id| id.expose()).collect();
-    if unique.len() != all.len() {
-        return Err(Error::new("a short ID is listed twice"));
-    }
-    Ok(())
-}
-
-/// Matches the device-name rule of `server/xray-clients.sh`: `^[a-z0-9][a-z0-9._-]{0,31}$`.
-pub fn valid_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    let lead = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit();
-    name.len() <= NAME_MAX
-        && chars.next().is_some_and(lead)
-        && chars.all(|c| lead(c) || matches!(c, '.' | '_' | '-'))
-}
-
-fn valid_short_id(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= SHORT_ID_MAX
-        && id.len().is_multiple_of(2)
-        && id.chars().all(|c| c.is_ascii_hexdigit())
 }

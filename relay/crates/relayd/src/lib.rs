@@ -19,6 +19,7 @@ mod render;
 mod secret;
 mod state;
 mod store;
+mod validate;
 
 pub use error::Error;
 pub use import::import;
@@ -26,5 +27,6 @@ pub use render::{render, write_config};
 pub use secret::Secret;
 pub use state::{
     Api, Device, Exit, INBOUND_TAG, Inbound, Relay, Role, SCHEMA, Secrets, State, XRAY_VERSION,
-    Xray, secrets_path, valid_name,
+    Xray, secrets_path,
 };
+pub use validate::valid_name;
