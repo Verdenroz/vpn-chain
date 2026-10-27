@@ -28,7 +28,12 @@ impl Host for Systemd {
     }
 
     fn accepts_config(&self, xray: &Path, config: &Path) -> io::Result<bool> {
-        let status = quiet(Command::new(xray).arg("-test").arg("-config").arg(config)).status()?;
+        let status = quiet(
+            Command::new(xray)
+                .args(["-test", "-format", "json", "-config"])
+                .arg(config),
+        )
+        .status()?;
         Ok(status.success())
     }
 }
