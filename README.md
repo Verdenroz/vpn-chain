@@ -4,155 +4,119 @@
 
 <h1 align="center">vpn-chain</h1>
 <p align="center">
-  A layered, censorship-resistant VPN chain for Android and Linux desktop.
+  A censorship-resistant VPN you run on your own server, for Android and Linux.
 </p>
 
 <p align="center">
   <img src="assets/branding/hops-diagram.svg" width="880" alt="Route: you, through the optional WireGuard entry hop, through the VLESS+REALITY relay VPS, exiting directly to the internet, with a dashed single-hop path from you straight to the relay when the entry hop is off">
 </p>
 
-Traffic goes `you → WireGuard entry hop → VLESS+REALITY relay VPS → internet`.
-A network observer sees WireGuard to your entry provider, never a connection to
-your VPS. The entry hop is optional: without it the VPS sees your address, and
-the traffic still looks like HTTPS to your SNI.
+`you → WireGuard entry hop (optional) → your VPS → internet`
 
-## Quick start
+Your traffic leaves from your own VPS and looks like ordinary HTTPS on the way
+there. With the entry hop on, your network sees only a WireGuard connection to
+your VPN provider, and the VPS never sees your real address.
 
-You need a relay VPS first: see [Set up a connection](#set-up-a-connection).
+## Setup
 
-### Linux desktop (x64)
+You need a Debian or Ubuntu VPS you can SSH into as root, with TCP port 443 open.
 
-```
-git clone https://github.com/Verdenroz/vpn-chain && cd vpn-chain
-cli/install-desktop.sh     # latest release, self-updating, adds a menu entry
-cli/setup-desktop.sh       # one time: TUN capability, kill switch, polkit rules
-vpn-chain-gui
-```
-
-The desktop app drives the `sing-box` binary, so install `sing-box` first.
-Details: [docs/desktop-tun.md](docs/desktop-tun.md).
-
-### Android
-
-1. Download `vpn-chain-<version>-android-arm64-v8a.apk` from the
-   [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest)
-   (`x86_64` for an emulator).
-2. Allow installs from your browser or file manager, and install it.
-3. Open the app and import a connection, then tap **Connect**.
-
-Turn on Always-on VPN as the kill switch:
-[docs/android.md](docs/android.md#kill-switch).
-
-### Linux CLI
-
-The CLI exposes a local SOCKS/HTTP proxy at `127.0.0.1:1080`. It needs
-`sing-box`, `envsubst` and the ProtonVPN CLI (it uses ProtonVPN as the entry
-hop).
-
-```
-cli/vpn-chain install    # symlink into ~/.local/bin
-vpn-chain up             # entry hop + relay
-vpn-chain status         # kill switch helper, entry path, exit IP
-vpn-chain down           # stop the relay (add --disconnect-entry to drop the entry app too)
-```
-
-## Set up a connection
-
-1. Deploy the relay. On a fresh Debian or Ubuntu VPS, as root, run
-   `server/deploy-server.sh` from a copy of `server/`. It installs Xray with
-   VLESS+REALITY, switches the kernel to BBR and `fq` when the module is
-   available (the default cubic backs off hard on a lossy long path), and
-   writes the first device's values to `/root/vpn-chain-<name>.env` (`0600`),
-   never to the terminal. Re-running keeps the keys and devices.
-2. Put them in `secrets.env`, outside the repo:
+1. On your computer, copy the server scripts to the VPS and run the setup.
+   Replace `203.0.113.10` with your VPS's address.
 
    ```
-   mkdir -p ~/.config/vpn-chain
-   cp examples/secrets.env.example ~/.config/vpn-chain/secrets.env
-   chmod 600 ~/.config/vpn-chain/secrets.env
+   git clone https://github.com/Verdenroz/vpn-chain && cd vpn-chain
+   scp -r server root@203.0.113.10:
+   ssh root@203.0.113.10 'DEVICE_NAME=laptop bash server/deploy-server.sh'
    ```
 
-3. Optional entry hop: generate a WireGuard config from your provider, a
-   different one for each device, and import it without printing the key:
-   `cli/import-entry-conf.sh ~/Downloads/entry.conf`.
-4. In the app, open **Settings → Connection → Import**. Paste or import
-   `secrets.env`, or paste a WireGuard `.conf`. The app shows a review (the
-   server and entry it would use) before anything is saved. **Use it** switches
-   to the connection; **Save** keeps it for later.
-5. On Android you can scan a QR code from the desktop app instead
-   (**Connection → Show QR**).
+2. Copy this device's connection details down, then delete them from the VPS:
 
-A pasted WireGuard `.conf` becomes a WireGuard-only connection: a plain tunnel
-to that peer, with no relay. **Use as entry hop** attaches it to the active
-connection instead.
+   ```
+   mkdir -p -m 700 ~/.config/vpn-chain
+   scp root@203.0.113.10:vpn-chain-laptop.env ~/.config/vpn-chain/secrets.env
+   ssh root@203.0.113.10 rm vpn-chain-laptop.env
+   ```
 
-Real credentials never live in the repo. The CLI renders an ephemeral config
-from `secrets.env` at run time. The apps keep the profile in DataStore and never
-log credentials. On desktop, `~/.config/vpn-chain` is owner-only (`0700`, files
-`0600`, repaired at start), each rendered config is a private temp file, and the
-app refuses a runtime directory it does not own. Android keeps the profile in
-app-private storage and excludes it from backups and device transfer.
+3. Install the app.
+   - **Linux (x64):** install `sing-box` from your package manager, then:
 
-**One identity per device.** The QR code carries this device's own live
-credentials. To give a phone an identity you can revoke without touching the
-others, create it on the server with `server/devices.sh add`. See
-[docs/devices.md](docs/devices.md).
+     ```
+     cli/install-desktop.sh    # the app, kept up to date, with a menu entry
+     cli/setup-desktop.sh      # once: system-wide tunnel, kill switch, no password prompts
+     ln -s "$PWD/cli/killswitch/vpn-chain-killswitch" ~/.local/bin/
+     ```
 
-## What it does
+   - **Android:** download `vpn-chain-<version>-android-arm64-v8a.apk` from the
+     [latest release](https://github.com/Verdenroz/vpn-chain/releases/latest)
+     and install it.
 
-| Feature | Where | Doc |
-|---|---|---|
-| Saved connections: relay, WireGuard-only, or both chained | Settings → Profiles | [architecture](docs/architecture.md) |
-| Optional entry hop, switchable off without editing the profile | Settings → Routing | [android](docs/android.md), [desktop-tun](docs/desktop-tun.md) |
-| Cloudflare WARP exit, automatic for sites that refuse the VPS | Settings → Routing, Sites | [warp-exit](docs/warp-exit.md) |
-| Use my connection: a tap lets a refused site leave on your own address | Chain prompt, Sites | [warp-exit](docs/warp-exit.md#failing-open) |
-| DNS filtering (threats, or threats + ads) | Settings → DNS | [dns-filtering](docs/dns-filtering.md) |
-| Kill switch: nftables on desktop, Always-on VPN on Android | Settings → Kill switch | [kill-switch](docs/kill-switch.md) |
-| In-app updates | Update banner, Settings → About | [Updating](#updating) |
+4. In the app, open **Settings → Connection → Import** and import
+   `~/.config/vpn-chain/secrets.env`. On Android, scan **Show QR** from the
+   desktop app instead, or paste the file's contents. Tap **Connect**.
 
-## Updating
+5. Optional entry hop: create a WireGuard config at your VPN provider for this
+   device alone, and paste the `.conf` in **Import**, then tap **Use as entry hop**.
 
-The Android app and the managed Linux install check the latest release at start
-and every 24 hours. A banner offers **Update x.y.z**; **Settings → About →
-Check now** looks again.
+To exit through a WireGuard provider instead of the VPS's own address, set the
+`EXIT_WG_*` values listed at the top of `server/deploy-server.sh` and run it
+again. Running it again keeps your keys and devices.
 
-- **Android** installs through the system installer. The first update asks you
-  to allow installs from the app. Keep the app open until the install prompt
-  shows. Debug builds are never offered updates.
-- **Linux desktop** updates the copy `cli/install-desktop.sh` installs under
-  `~/.local/share/vpn-chain`. Builds from source and the `.deb` are never
-  offered updates. The relay keeps running through an update.
-- The CLI and server scripts update with `git pull`.
+## Devices
 
-Release process and signing: [docs/releasing.md](docs/releasing.md).
+Give each phone or computer its own identity, so you can cut one off without
+touching the others. For now you do this from your computer over SSH; it moves
+into the app later.
 
-## Documentation
+```
+export VPN_CHAIN_SSH_KEY=~/.ssh/id_ed25519   # the key you use to log in to the VPS
+server/devices.sh add phone      # writes ~/.config/vpn-chain/devices/phone.env
+server/devices.sh list           # each device, its traffic, when it was last seen
+server/devices.sh revoke phone   # cuts that device off
+```
 
-| Doc | Covers |
+Import `phone.env` on the phone, then delete your copy. **Show QR** shares the
+desktop's own identity, so revoking either device would revoke both. For a lost
+phone, also delete its WireGuard config at your VPN provider.
+
+## What you can set
+
+| Setting | What it does for you |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | Modules, layering, how the two platforms differ |
-| [docs/android.md](docs/android.md) | Android tunnel, kill switch, staying connected |
-| [docs/desktop-tun.md](docs/desktop-tun.md) | Desktop setup: TUN, the relay service, the entry hop |
-| [docs/kill-switch.md](docs/kill-switch.md) | The nftables helper and its design |
-| [docs/dns-filtering.md](docs/dns-filtering.md) | Blocklists and how they are built |
-| [docs/warp-exit.md](docs/warp-exit.md) | WARP tail, automatic detection, failing open |
-| [docs/devices.md](docs/devices.md) | Per-device identities on the relay |
-| [docs/rotate-vless-identity.md](docs/rotate-vless-identity.md) | Rotate the relay credentials |
-| [docs/rotate-exit-key.md](docs/rotate-exit-key.md) | Rotate the server's upstream WireGuard key |
-| [docs/releasing.md](docs/releasing.md) | Tag, sign and publish a release |
+| Settings → Profiles | Keeps several connections: your VPS, a plain WireGuard VPN, or both chained |
+| Settings → Routing → WireGuard entry hop | Hides your address from the VPS; turn it off without deleting it |
+| Settings → Routing → Cloudflare WARP | Sends sites that refuse your VPS through Cloudflare instead (automatic by default) |
+| Sites tab, **Use my connection** | Lets a site that refuses both open on your own address, one site at a time |
+| Settings → DNS | Blocks malware and scam sites, and optionally ads and trackers |
+| Settings → Kill switch | Blocks all traffic while the VPN is down |
+| Settings → Routing → Route all apps (Linux) | Off: only apps set to the proxy `127.0.0.1:1080` use the VPN |
+| Settings → Automation (Android) | Connects on launch, on boot, and again after a drop |
+| Update banner, Settings → About | Installs new releases from inside the app |
 
-## Build from source
+Your connection details stay on your devices: in `~/.config/vpn-chain`
+(owner-only) on Linux, in app-private storage on Android, never in logs or backups.
 
-```
-./gradlew :desktopApp:run                  # desktop app
-./gradlew :androidApp:assembleDebug        # Android debug APK
-./gradlew :desktopApp:installDesktopEntry  # launcher entry for a source build
-```
+## Troubleshooting
 
-Gradle 8.13 must run on JDK 17 to 21. If your default `java` is newer, set
-`org.gradle.java.home=/usr/lib/jvm/java-21-openjdk` in `gradle.properties`, or in
-`~/.gradle/gradle.properties` to keep it machine-local. Versions live in
-`gradle/libs.versions.toml`.
+- **No internet on Linux after the app stopped:** the kill switch stays up until
+  you connect again or press **Disconnect**. `vpn-chain-killswitch down` removes it.
+- **Kill switch shows Off on Linux:** the row says why. Usually the helper lost its
+  permission after a rebuild: run `cli/setup-desktop.sh` again.
+- **Android leaks traffic when the VPN drops:** Android settings → Network &
+  internet → VPN → the gear next to vpn-chain → turn on **Always-on VPN** and
+  **Block connections without VPN**.
+- **Connects but nothing loads:** check that TCP 443 is open on the VPS, then run
+  `server/deploy-server.sh` there again. It installs the Xray version the apps are
+  tested against; Xray 26.10.21 does not work with them.
+- **SSH to the VPS drops during a change:** while you are connected, SSH runs
+  through the VPS, and the change restarts it. Reconnect; `server/devices.sh list`
+  shows whether it applied.
+- **`TUNSETIFF: operation not permitted` on Linux:** a `sing-box` upgrade removed
+  its permission. Run `cli/setup-desktop.sh` again.
+
+## Build from source and contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Third-party data
 
