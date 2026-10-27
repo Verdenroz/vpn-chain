@@ -9,14 +9,19 @@
 //! Private keys sit in a separate 0600 secrets file, and every credential is a [`Secret`] whose
 //! `Debug` hides it, so the state can be printed, logged and diffed. Device UUIDs and short IDs
 //! stay in the state, which is 0600 too, because each belongs to one device entry.
+//!
+//! [`import`] adopts a relay exactly as `server/deploy-server.sh` and `server/xray-clients.sh`
+//! leave it, and refuses one it could not render back the same.
 
 mod error;
+mod import;
 mod render;
 mod secret;
 mod state;
 mod store;
 
 pub use error::Error;
+pub use import::import;
 pub use render::{render, write_config};
 pub use secret::Secret;
 pub use state::{
