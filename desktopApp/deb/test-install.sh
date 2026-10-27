@@ -36,6 +36,22 @@ update="$opt/libexec/vpn-chain-install-update"
 ! "$update" "not-a-hash" </pkg/vpn-chain.deb
 "$update" "$(sha256sum /pkg/vpn-chain.deb | cut -d" " -f1)" </pkg/vpn-chain.deb
 
+etc_unit=/etc/systemd/system/vpn-chain-relay.service
+etc_rules=/etc/polkit-1/rules.d
+mkdir -p "$etc_rules"
+sed "s|^ExecStart=[^ ]*|ExecStart=/usr/local/bin/sing-box|" /usr/lib/systemd/system/vpn-chain-relay.service >"$etc_unit"
+cp /usr/share/polkit-1/rules.d/10-vpn-chain-resolve1.rules "$etc_rules/"
+cp /usr/share/polkit-1/rules.d/10-vpn-chain-systemd.rules "$etc_rules/"
+echo "// local edit" >>"$etc_rules/10-vpn-chain-systemd.rules"
+echo "keep me" >/etc/polkit-1/rules.d/50-unrelated.rules
+apt-get install --reinstall -y /pkg/vpn-chain.deb >/tmp/reinstall.err 2>&1
+[ ! -e "$etc_unit" ]
+[ ! -e "$etc_rules/10-vpn-chain-resolve1.rules" ]
+[ -e "$etc_rules/10-vpn-chain-systemd.rules" ]
+[ "$(grep -c "^vpn-chain: " /tmp/reinstall.err)" = 1 ]
+grep -q "vpn-chain: $etc_rules/10-vpn-chain-systemd.rules" /tmp/reinstall.err
+[ "$(cat /etc/polkit-1/rules.d/50-unrelated.rules)" = "keep me" ]
+
 apt-get remove -y -qq vpn-chain >/dev/null
 [ ! -e "$opt/bin/vpn-chain" ]
 [ ! -e /usr/lib/systemd/system/vpn-chain-relay.service ]
@@ -45,6 +61,9 @@ getent passwd sing-box
 apt-get purge -y -qq vpn-chain >/dev/null
 ! getent passwd sing-box
 ! getent group vpn-chain
+[ -e "$etc_rules/10-vpn-chain-systemd.rules" ]
+[ -e /etc/polkit-1/rules.d/50-unrelated.rules ]
+rm "$etc_rules/10-vpn-chain-systemd.rules" /etc/polkit-1/rules.d/50-unrelated.rules
 leftover="$(find /opt /usr/bin /run/vpn-chain /var/lib/vpn-chain /etc/tmpfiles.d /usr/share/polkit-1 /usr/share/applications \
     /usr/share/icons /usr/share/doc/vpn-chain /usr/lib/systemd/system /usr/lib/tmpfiles.d \
     \( -iname "*vpn-chain*" -o -path "/opt/*" \) 2>/dev/null || true)"

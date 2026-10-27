@@ -15,8 +15,37 @@ desktop_user() {
     fi
 }
 
+# SHA-256 of each unit (ExecStart program blanked) and polkit rules file that
+# cli/setup-desktop.sh has installed under /etc. Only an exact match is removed.
+setup_unit="33645df92313bb7dbc08871a136d0ecbe79d490f527457a5745662ae8a359426 5226c451083bb2818f0c2e2d66d974b02028836d10803ddf62513fee3573c395"
+setup_resolve1="e9344ecd9d25a6309ce1ba962f81bf4520e3209f4e21c31caf2a67265d0a790e be7ea5850cb5023557f5a71c57f96d2b2a3ad14b1a9246c71c4c7e22eb1f2a69"
+setup_systemd="45484a4f4b8974444b5685bf41427659e807872be36585f2a5fdcf1335a4dfe2 d5e338716ad5fbfec5b4089886712ec115e9f8634c4f827b0e8ea9e1dd800d9c"
+
+# remove_setup_copy FILE DIGESTS [blank-exec]
+remove_setup_copy() {
+    [ -e "$1" ] || [ -L "$1" ] || return 0
+    if [ -f "$1" ] && [ ! -L "$1" ]; then
+        if [ -n "${3:-}" ]; then
+            digest="$(sed 's|^ExecStart=[^ ]*|ExecStart=@|' "$1" | sha256sum | cut -d' ' -f1)"
+        else
+            digest="$(sha256sum "$1" | cut -d' ' -f1)"
+        fi
+        case " $2 " in
+        *" $digest "*)
+            rm -f "$1"
+            return 0
+            ;;
+        esac
+    fi
+    echo "vpn-chain: $1 overrides the packaged copy and differs from what cli/setup-desktop.sh installs; left in place" >&2
+}
+
 case "$1" in
 configure)
+    remove_setup_copy /etc/systemd/system/vpn-chain-relay.service "$setup_unit" blank
+    remove_setup_copy /etc/polkit-1/rules.d/10-vpn-chain-resolve1.rules "$setup_resolve1"
+    remove_setup_copy /etc/polkit-1/rules.d/10-vpn-chain-systemd.rules "$setup_systemd"
+
     getent group vpn-chain >/dev/null || addgroup --system --quiet vpn-chain
     if ! getent passwd sing-box >/dev/null; then
         adduser --system --quiet --no-create-home --home /nonexistent --shell /usr/sbin/nologin sing-box
