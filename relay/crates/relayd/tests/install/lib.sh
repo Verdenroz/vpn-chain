@@ -94,7 +94,7 @@ relay_up() {
     CONTAINERS+=("$name")
     docker run -d --name "$name" "${extra[@]}" --network "$NET" --ip "$ip" --dns "$(addr 60)" \
         --cap-add SYS_ADMIN --cap-add NET_ADMIN --cgroupns=private \
-        --tmpfs /run --tmpfs /run/lock --tmpfs /tmp \
+        --tmpfs /run --tmpfs /run/lock --tmpfs /tmp:exec \
         -v "$HERE:/opt/live:ro" -v "$BUILD:/opt/build:ro" -v "$ROOT:/repo:ro" \
         "$IMG" bash -c 'mount -o remount,rw /sys/fs/cgroup && exec /sbin/init' >/dev/null
     docker network connect "$PRIV" "$name"
@@ -106,6 +106,33 @@ relay_up() {
     done
     echo "$name never booted" >&2
     return 1
+}
+
+RELEASE_URL=http://127.0.0.1:8000
+
+# release_pack: the release job's tarball of the built binaries and its checksum, in /release
+# on the relay, beside the setup.sh a user would download.
+# shellcheck disable=SC2016 # expands in the container
+release_pack() {
+    g bash -c 'set -e; mkdir -p /release; cd /release; cp /repo/relay/packaging/setup.sh .
+        case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; esac
+        asset="vpn-chain-relay-linux-$arch.tar.gz"
+        tar -czf "$asset" -C /opt/build relayd relay-jobs relay-privileged
+        sha256sum "$asset" >"$asset.sha256"'
+}
+
+# release_up: pack the release and serve it on the relay's loopback.
+release_up() {
+    release_pack
+    docker exec -d "$RELAY_C" sh -c 'cd /release && exec python3 -m http.server 8000 --bind 127.0.0.1'
+    sleep 1
+}
+
+# setup_install ARG...: what a user runs, `curl ... | sudo bash`, against the served release.
+# shellcheck disable=SC2016 # expands in the container
+setup_install() {
+    g env VPN_CHAIN_BASE_URL="$RELEASE_URL" bash -o pipefail -c \
+        'curl -fsSL "$VPN_CHAIN_BASE_URL/setup.sh" | bash -s -- "$@"' _ "$@"
 }
 
 # link_field FILE FIELD: one decoded parameter of the pairing link in FILE.
