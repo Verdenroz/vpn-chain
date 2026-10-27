@@ -66,7 +66,7 @@ ship. `KNOWN_BAD=1` also requires Xray v26.10.21 with sing-box 1.14.3 to fail.
 
 ### Relay agent
 
-`relay/` is a Cargo workspace: `relayd` and the xray API client it drives.
+`relay/` is a Cargo workspace: `relayd`, the job runner and the xray API client.
 
 ```
 cd relay
@@ -78,13 +78,24 @@ crates/xray-api/tests/fetch-bins.sh && cargo test -p xray-api --locked --test li
 
 The live tests run the client against a real Xray and the apps' sing-box.
 
+`relayd install` and `setup.sh` are tested in Docker containers that run systemd as PID 1,
+never privileged. The first builds the static binaries for the host's CPU, which needs
+`rustup target add $(uname -m)-unknown-linux-musl`.
+
+```
+relay/crates/relayd/tests/install/run.sh debian    # or ubuntu
+relay/crates/relayd/tests/install/setup-test.sh
+```
+
 ## Bump Xray or sing-box
 
 The apps and the relay must agree on REALITY, and a new pair can break it with
 nothing in the unit tests noticing. Bump only with `matrix.sh` green.
 
-- **Xray:** `XRAY_VERSION` and both SHA-256 values in `server/lib/pins.sh`, and the
-  pin in `relay/crates/xray-api/tests/fetch-bins.sh`.
+- **Xray:** `XRAY_VERSION` and both SHA-256 values in `server/lib/pins.sh`, the pin in
+  `relay/crates/xray-api/tests/fetch-bins.sh`, `XRAY_VERSION` in `relay/crates/relayd/src/state.rs`
+  and `RELEASES` in `relay/crates/relayd/src/install/pinned.rs`. A test compares the last two
+  with `pins.sh`.
 - **sing-box:** `libbox` in `gradle/libs.versions.toml` (Android),
   `SINGBOX_VERSIONS_DEFAULT` and its SHA-256 values in `server/lib/pins.sh` (the
   `.deb` bundles the `libbox` version, checked against that SHA-256), the
@@ -141,6 +152,22 @@ keytool -genkeypair -v -keystore release.jks -alias vpn-chain \
 Whoever can push a `v*` tag can ship an update to every installed copy. Protect
 `v*` tags with a ruleset, and require reviewers on the `release` environment,
 which GitHub otherwise creates unprotected on the first release.
+
+### Relay signing
+
+`setup.sh` runs a download only after checking its minisign signature against the key
+pinned in `relay/packaging/setup.sh`, and the release job signs with the matching secret.
+Make the pair once, on a machine you trust, and keep the secret key: lose it and every
+published `setup.sh` points at a key that can no longer sign.
+
+```
+minisign -G -W -p relay-release.pub -s relay-release.key
+```
+
+Put the second line of `relay-release.pub` in `PUBLIC_KEY` in `relay/packaging/setup.sh`,
+and store the whole secret key file as the repository secret `RELAY_MINISIGN_KEY`. The
+release fails without it. `-W` leaves the key unencrypted so CI can sign without a
+password, which makes the repository secret the only protection it has.
 
 ## Commits and pull requests
 
