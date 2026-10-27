@@ -10,6 +10,14 @@ private const val KEY = "pubKeyPUBKEYpubKeyPUBKEYpubKeyPUBKEYpubKeyP"
 private const val TOKEN = "tokenTOKENtokenTOKENtokenTOKENtokenTOKENtok"
 private const val UUID = "11111111-1111-4111-8111-111111111111"
 
+// Printed by relayd's `pairing::issue` over its test fixture; the tokens are spent.
+private const val RELAYD_V4 =
+    "vpnchain://pair?v=1&h=203.0.113.7&p=443&sni=www.samsung.com&pbk=mJZadK8WS3D6oFxqlXypqkrdiBeHBIYIvLY2GjDo0nA" +
+        "&sid=a1b2c3d4e5f60718&id=22222222-2222-4222-8222-222222222222&n=shared&t=51gzd43gfZOirOMQOIBRlhJ4ZuBsBSjydPoC5keYlKk&e=1793124468"
+private const val RELAYD_V6 =
+    "vpnchain://pair?v=1&h=%5B2001%3Adb8%3A%3A1%5D&p=443&sni=www.samsung.com&pbk=mJZadK8WS3D6oFxqlXypqkrdiBeHBIYIvLY2GjDo0nA" +
+        "&sid=a1b2c3d4e5f60718&id=22222222-2222-4222-8222-222222222222&n=shared&t=Duf6mcrbuZ-iAz9aZPGdgSzCYezTmUtK7oDKvspmcyw&e=1793124468"
+
 internal val LINK = PairingLink(
     host = "203.0.113.10",
     port = 443,
@@ -126,5 +134,20 @@ class PairingLinkTest {
     fun `a pasted link is recognised before it is parsed`() {
         assertTrue(PairingLink.looksLikeLink("\n  vpnchain://pair?v=9"))
         assertFalse(PairingLink.looksLikeLink("VPS_IP=203.0.113.10"))
+    }
+
+    @Test
+    fun `links printed by relayd pair parse`() {
+        val v4 = PairingLink.parse(RELAYD_V4).getOrThrow()
+        val v6 = PairingLink.parse(RELAYD_V6).getOrThrow()
+
+        assertEquals("203.0.113.7", v4.host)
+        assertEquals("2001:db8::1", v6.host)
+        assertEquals(listOf("shared", 443, "www.samsung.com"), listOf(v4.deviceName, v4.port, v4.sni))
+        assertEquals("a1b2c3d4e5f60718", v4.shortId)
+        assertEquals("22222222-2222-4222-8222-222222222222", v4.uuid)
+        assertEquals(1_793_124_468, v4.expires)
+        assertEquals(RELAYD_V4, v4.format())
+        assertEquals(RELAYD_V6, v6.format())
     }
 }
