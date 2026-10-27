@@ -1,6 +1,7 @@
-# Checks the Rust workspace under relay/ (relayd and the xray API client), which
-# the Gradle build does not touch. The live job runs the xray API client and relayd's
-# device operations against a dockerised Xray and the sing-box clients the apps ship.
+# Checks the Rust workspace under relay/ (relayd, the xray API client and the job
+# runner), which the Gradle build does not touch. The live job runs the xray API client
+# and relayd's device operations against a dockerised Xray and the sing-box clients the
+# apps ship. The jobs-live job runs the job runner under systemd in a container.
 name: relay
 
 on:
@@ -41,3 +42,14 @@ jobs:
       - run: crates/live-harness/fetch-bins.sh
       - run: cargo test -p xray-api --locked --test live -- --ignored
       - run: cargo test -p relayd --locked --test live -- --ignored
+
+  jobs-live:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - run: crates/relay-jobs/tests/live/run.sh
