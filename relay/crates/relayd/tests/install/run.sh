@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Boots a fresh Debian or Ubuntu VPS in a container with systemd as PID 1, runs the real
-# `relayd install` on it, and drives the relay it made with the sing-box clients the apps ship:
-#   a) a fresh install prints one pairing link, leaves no copy of it, and is quiet when run again
+# Boots a fresh Debian or Ubuntu VPS in a container with systemd as PID 1, installs on it the
+# way a user does (setup.sh with a release served on loopback), and drives the relay it made
+# with the sing-box clients the apps ship:
+#   a) a download that fails its checksum installs nothing; a fresh install prints one pairing link, leaves no copy of it, and is quiet when run again
 #   b) the link connects; enrolling with a P-256 key works once, a used token gets 401, an
 #      expired one 410, and the old identity is refused afterwards
 #   c) the nft rules stop a name that rebinds to loopback, keep the agent and the internet
@@ -40,8 +41,18 @@ case "$DISTRO" in
     debian) g bash -c 'install -d -m700 /root/.ssh && echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test" >/root/.ssh/authorized_keys' ;;
 esac
 
-step "a) a fresh install"
-g /opt/build/relayd install --host "$(addr 10)" --sni dest.test >"$W/out" 2>"$W/err"
+step "a) a download that does not match its checksum installs nothing"
+release_up
+g bash -c 'cd /release && printf "%064d  %s\n" 0 vpn-chain-relay-linux-*.tar.gz >bad && mv bad vpn-chain-relay-linux-*.tar.gz.sha256'
+no setup_install --host "$(addr 10)" --sni dest.test >/dev/null 2>"$W/err-sum"
+grep -q 'does not match its checksum' "$W/err-sum"
+no g test -e $STATE_DIR/relay.json
+no g test -e /usr/local/bin/relayd
+release_pack
+pass "setup.sh aborts on a wrong checksum before installing anything"
+
+step "a) a fresh install through setup.sh"
+setup_install --host "$(addr 10)" --sni dest.test >"$W/out" 2>"$W/err"
 eq "$(grep -c 'vpnchain://pair' "$W/out")" 1
 grep -q '█' "$W/out"
 eq "$(grep -c 'vpnchain://' "$W/err" || true)" 0
@@ -231,7 +242,8 @@ touch /var/log/xray/error.log /var/log/xray/access.log && chown -R nobody /var/l
     eq "$(through "$label-before-2" "http://$(addr 50)/")" public
     pass "$label: the deploy-server.sh relay serves two devices before the adoption"
 
-    g /opt/build/relayd install --host "$ip" "$@" >"$W/out-$label" 2>"$W/err-$label"
+    release_up
+    setup_install --host "$ip" "$@" >"$W/out-$label" 2>"$W/err-$label"
     grep -q 'adopting' "$W/err-$label"
     eq "$(link_field "$W/out-$label" n)" "$paired"
     eq "$(link_field "$W/out-$label" pbk)" "$pbk"
