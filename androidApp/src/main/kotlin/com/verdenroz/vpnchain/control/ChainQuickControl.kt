@@ -9,7 +9,11 @@ import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.model.TunnelState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -25,6 +29,7 @@ object ChainQuickControl : KoinComponent {
     private val profileRepository: ProfileRepository by inject()
     private val connectChain: ConnectChainUseCase by inject()
     private val disconnectChain: DisconnectChainUseCase by inject()
+    private val connectScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     sealed interface Outcome {
         /** The toggle ran (or started) in the background; no UI needed. */
@@ -45,7 +50,8 @@ object ChainQuickControl : KoinComponent {
             VpnService.prepare(context) != null ->
                 Outcome.OpenApp(openAppIntent(context, MainActivity.ACTION_CONNECT))
             else -> {
-                connectChain()
+                // connect waits for the tunnel, which outlasts a widget callback's time budget.
+                connectScope.launch { connectChain() }
                 Outcome.Handled
             }
         }

@@ -45,7 +45,8 @@ open class BootReceiver : BroadcastReceiver(), KoinComponent {
                 // Without prior consent the controller would only report a
                 // permission error, so don't start a service to produce one.
                 if (VpnService.prepare(context) != null) return@launch
-                connectChain()
+                // connect waits for the tunnel, which outlasts the goAsync budget.
+                launch { connectChain() }
             } finally {
                 pending.finish()
             }
