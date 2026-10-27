@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use relay_jobs::{Jobs, Layout};
-use relayd::agent::{Audit, Service, Verifier, serve as serve_agent};
+use relayd::agent::{Audit, Enroll, Service, Verifier, serve as serve_agent};
 use relayd::{Error, Relay, Role, Systemctl, XrayLive, add_key, secrets_path};
 
 use crate::args::Args;
@@ -27,6 +27,7 @@ fn run(target: Target, audit: Option<PathBuf>, jobs: Option<PathBuf>) -> Result<
         Error::new("this relay has no stats API, so its devices cannot be changed live")
     })?;
     let audit = audit.unwrap_or_else(|| target.state.with_file_name("audit.jsonl"));
+    let enroll = Enroll::beside(&target.state);
     let service = Service {
         state: target.state,
         secrets: target.secrets,
@@ -40,6 +41,7 @@ fn run(target: Target, audit: Option<PathBuf>, jobs: Option<PathBuf>) -> Result<
         jobs: jobs.map(|dir| Jobs::new(Layout::new(dir))),
         audit: Audit::open(&audit)?,
         verifier: Verifier::default(),
+        enroll,
     };
     serve_agent(Arc::new(service), relay.state.agent.port)
 }

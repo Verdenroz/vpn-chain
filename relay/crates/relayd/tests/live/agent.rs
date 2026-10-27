@@ -10,7 +10,7 @@ use live_harness::{
     LOOPBACK_HOST, LOOPBACK6_HOST, PRIVATE_HOST, SING_BOX, Tunnel, roundtrip_to, wait_for_port,
 };
 use p256::ecdsa::SigningKey;
-use relayd::agent::{Audit, Service, Verifier, serve_on};
+use relayd::agent::{Audit, Enroll, Service, Verifier, serve_on};
 use relayd::{AGENT_HOST, Role, XrayLive, add_key};
 use serde_json::{Value, json};
 use tokio::net::{TcpListener, TcpStream};
@@ -55,6 +55,7 @@ impl Agent {
             .unwrap();
         }
         let service = Service {
+            enroll: Enroll::beside(&site.state),
             state: site.state.clone(),
             secrets: site.secrets.clone(),
             config: site.config.clone(),

@@ -14,7 +14,7 @@ use common::{
 };
 use p256::ecdsa::SigningKey;
 use relay_jobs::{Jobs, Layout};
-use relayd::agent::{Audit, Service, Verifier, serve_on};
+use relayd::agent::{Audit, Enroll, Service, Verifier, serve_on};
 use relayd::{Placement, Relay, Role, secrets_path, write_config};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
@@ -70,6 +70,7 @@ impl Rig {
         let restart = Arc::new(FakeRestart::default());
         let service = Service {
             secrets: secrets_path(&state),
+            enroll: Enroll::beside(&state),
             state,
             config,
             lock: dir.path().join("devices.lock"),
