@@ -1,4 +1,6 @@
-# Checks the relayd workspace under relay/, which the Gradle build does not touch.
+# Checks the Rust workspace under relay/ (relayd and the xray API client), which
+# the Gradle build does not touch. The live job runs the xray API client against
+# a dockerised Xray and the sing-box clients the apps ship.
 name: relay
 
 on:
@@ -11,16 +13,30 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: relay
+
 jobs:
   check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: relay
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       # Installs the toolchain rust-toolchain.toml pins, with rustfmt and clippy.
       - run: rustup toolchain install
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+
+  live:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - run: crates/xray-api/tests/fetch-bins.sh
+      - run: cargo test -p xray-api --locked --test live -- --ignored
