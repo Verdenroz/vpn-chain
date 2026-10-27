@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-use crate::render::{AGENT_TAG, API_TAG, EXIT_TAG};
+use crate::render::{AGENT_TAG, API_TAG, EXIT_TAG, resolves_names};
 use crate::{
     AGENT_PORT, Agent, Api, Device, Error, Exit, INBOUND_TAG, Inbound, Relay, Role, SCHEMA,
     SECRETS_SCHEMA, Secret, Secrets, State, XRAY_VERSION, Xray, render, store,
@@ -291,6 +291,9 @@ fn refuse_unmodelled(config: &Value, relay: &Relay) -> Result<(), Error> {
     if section::<Value>(config, "outbounds", AGENT_TAG)?.is_none() {
         without_agent(&mut rendered);
     }
+    if resolves_names(relay) && config.pointer("/routing/domainStrategy") == Some(&json!("AsIs")) {
+        without_name_resolution(&mut rendered);
+    }
     match difference(&normalize(config), &normalize(&rendered), "") {
         None => Ok(()),
         Some(path) => Err(Error::new(format!(
@@ -306,6 +309,26 @@ fn without_agent(config: &mut Value) {
     }
     if let Some(rules) = config["routing"]["rules"].as_array_mut() {
         rules.retain(|rule| rule["outboundTag"] != AGENT_TAG);
+    }
+}
+
+/// A relay deployed before names were resolved ahead of the private-address rule, which
+/// rendering turns on.
+fn without_name_resolution(config: &mut Value) {
+    if let Some(object) = config.as_object_mut() {
+        object.remove("dns");
+    }
+    config["routing"]["domainStrategy"] = json!("AsIs");
+    if let Some(direct) = config["outbounds"]
+        .as_array_mut()
+        .and_then(|outbounds| {
+            outbounds
+                .iter_mut()
+                .find(|outbound| outbound["tag"] == "direct")
+        })
+        .and_then(Value::as_object_mut)
+    {
+        direct.remove("settings");
     }
 }
 
