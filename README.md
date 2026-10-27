@@ -68,15 +68,17 @@ same way; add `--device laptop` to get a code for a device it already has.
 ## Devices
 
 Give each phone or computer its own code, so you can cut one off without touching
-the others. On the VPS:
+the others. On the device you paired first, open **Settings → Devices**:
 
-```
-sudo relayd pair --new phone       # prints a code for a new device; scan or paste it there
-sudo relayd device list            # each device, its traffic, when it was last seen
-sudo relayd device revoke phone    # cuts that device off
-```
+- **Add device** asks for a name and shows a code. Scan it with the app on the new
+  device, or send it the link. It works once, for 15 minutes.
+- **Cut off** stops a device connecting right away.
+- **New code** signs a device out until it scans a fresh code, for a phone you got
+  back or a code that ran out.
 
-For a lost phone, also delete its WireGuard config at your VPN provider.
+For a lost phone, also delete its WireGuard config at your VPN provider. The same
+things work on the VPS if you ever lose the app: `sudo relayd pair --new phone`,
+`sudo relayd device list` and `sudo relayd device revoke phone`.
 
 ## What you can set
 
