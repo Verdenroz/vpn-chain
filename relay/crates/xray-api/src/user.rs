@@ -1,16 +1,15 @@
 use std::fmt;
 use std::str::FromStr;
 
-use prost::Message;
+use prost::{Message, Name};
 use uuid::Uuid;
 
 use crate::Error;
+use crate::handler::typed;
 use crate::proto::xray::common::protocol::User;
-use crate::proto::xray::common::serial::TypedMessage;
 use crate::proto::xray::proxy::vless::Account;
 
 const VISION: &str = "xtls-rprx-vision";
-const ACCOUNT_TYPE: &str = "xray.proxy.vless.Account";
 
 /// A VLESS user's UUID. It authenticates the device, so `Debug` and
 /// `Display` redact it.
@@ -66,17 +65,14 @@ impl VlessUser {
         User {
             level: self.level,
             email: self.email,
-            account: Some(TypedMessage {
-                r#type: ACCOUNT_TYPE.to_owned(),
-                value: account.encode_to_vec(),
-            }),
+            account: Some(typed(&account)),
         }
     }
 
     pub(crate) fn from_proto(user: User) -> Result<Self, Error> {
         let id = user
             .account
-            .filter(|account| account.r#type == ACCOUNT_TYPE)
+            .filter(|account| account.r#type == Account::full_name())
             .and_then(|account| Account::decode(account.value.as_slice()).ok())
             .and_then(|account| account.id.parse().ok());
         match id {

@@ -9,6 +9,9 @@ use crate::{Error, VlessUser, XrayApi};
 impl XrayApi {
     /// Adds `user` to the inbound tagged `inbound`. Takes effect for new
     /// connections at once; xray keeps it only until it restarts.
+    ///
+    /// A [`Error::Timeout`] may arrive after xray applied the change, so a
+    /// retry can see [`Error::UserExists`].
     pub async fn add_user(&self, inbound: &str, user: VlessUser) -> Result<(), Error> {
         let email = user.email.clone();
         let operation = AddUserOperation {
@@ -24,7 +27,8 @@ impl XrayApi {
             })
     }
 
-    /// Removes the user named `email` from the inbound tagged `inbound`.
+    /// Removes the user named `email` from the inbound tagged `inbound`. New
+    /// connections are refused at once, but connections already open stay up.
     pub async fn remove_user(&self, inbound: &str, email: &str) -> Result<(), Error> {
         let operation = RemoveUserOperation {
             email: email.to_owned(),
@@ -66,7 +70,7 @@ impl XrayApi {
     }
 }
 
-fn typed<M: Message + Name>(message: &M) -> TypedMessage {
+pub(crate) fn typed<M: Message + Name>(message: &M) -> TypedMessage {
     TypedMessage {
         r#type: M::full_name(),
         value: message.encode_to_vec(),

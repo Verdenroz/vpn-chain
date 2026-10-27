@@ -3,8 +3,7 @@ use std::collections::BTreeMap;
 use crate::proto::xray::app::stats::command::{QueryStatsRequest, Stat};
 use crate::{Error, XrayApi};
 
-/// The pattern that selects every user's counters.
-pub const ALL_USERS: &str = "user>>>";
+const USER: &str = "user>>>";
 
 /// Bytes one user moved through the relay since the counters were last reset.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -14,18 +13,21 @@ pub struct Traffic {
 }
 
 impl XrayApi {
-    /// Per-user traffic keyed by email, from the counters whose names contain
-    /// `pattern`. With `reset`, xray zeroes each counter as it reads it, so
-    /// the caller owns the only copy of those bytes and must persist them.
+    /// Traffic keyed by email, for the user named `email` or for every user.
+    ///
+    /// With `reset`, xray zeroes each counter as it reads it, so the caller
+    /// owns the only copy of those bytes. A timeout or dropped response after
+    /// xray has read them loses them.
     pub async fn user_traffic(
         &self,
-        pattern: &str,
+        email: Option<&str>,
         reset: bool,
     ) -> Result<BTreeMap<String, Traffic>, Error> {
-        let request = QueryStatsRequest {
-            pattern: pattern.to_owned(),
-            reset,
+        let pattern = match email {
+            Some(email) => format!("{USER}{email}>>>"),
+            None => USER.to_owned(),
         };
+        let request = QueryStatsRequest { pattern, reset };
         let response = self.within(self.stats.clone().query_stats(request)).await?;
         Ok(fold(response.stat))
     }
@@ -35,7 +37,7 @@ fn fold(stats: Vec<Stat>) -> BTreeMap<String, Traffic> {
     stats.into_iter().fold(BTreeMap::new(), |mut users, stat| {
         let counter = stat
             .name
-            .strip_prefix("user>>>")
+            .strip_prefix(USER)
             .and_then(|rest| rest.rsplit_once(">>>traffic>>>"));
         let bytes = u64::try_from(stat.value).unwrap_or_default();
         match counter {
@@ -93,10 +95,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn user_traffic_passes_pattern_and_reset() {
+    async fn every_users_traffic_is_read_and_reset_in_one_query() {
         let xray = FakeXray::start(Reply::Ok).await;
         xray.set_stats(vec![stat("user>>>laptop>>>traffic>>>uplink", 5)]);
-        let users = xray.api().user_traffic(ALL_USERS, true).await.unwrap();
+        let users = xray.api().user_traffic(None, true).await.unwrap();
 
         let request = xray.last_query().unwrap();
         assert_eq!(request.pattern, "user>>>");
@@ -105,9 +107,16 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn one_users_pattern_stops_at_the_email() {
+        let xray = FakeXray::start(Reply::Ok).await;
+        xray.api().user_traffic(Some("phone"), false).await.unwrap();
+        assert_eq!(xray.last_query().unwrap().pattern, "user>>>phone>>>");
+    }
+
+    #[tokio::test]
     async fn slow_stats_time_out() {
         let xray = FakeXray::start(Reply::Stall).await;
-        let error = xray.api().user_traffic(ALL_USERS, false).await.unwrap_err();
+        let error = xray.api().user_traffic(None, false).await.unwrap_err();
         assert!(matches!(error, Error::Timeout(_)));
     }
 }

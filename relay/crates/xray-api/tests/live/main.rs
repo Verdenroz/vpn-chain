@@ -106,7 +106,7 @@ async fn user_traffic_counts_an_added_users_bytes_and_reset_zeroes_them() {
 
     for version in SING_BOX {
         let device = Device::new(&format!("phone-{version}"), &relay.pool[0]);
-        let pattern = format!("user>>>{}>>>", device.user.email);
+        let email = Some(device.user.email.as_str());
         relay
             .api
             .add_user(INBOUND, device.user.clone())
@@ -115,9 +115,9 @@ async fn user_traffic_counts_an_added_users_bytes_and_reset_zeroes_them() {
         let proxy = relay.client(&device, version).await;
         roundtrip(proxy, target, &payload).await.unwrap();
 
-        let counted = relay.api.user_traffic(&pattern, false).await.unwrap();
-        let read = relay.api.user_traffic(&pattern, true).await.unwrap();
-        let after_reset = relay.api.user_traffic(&pattern, false).await.unwrap();
+        let counted = relay.api.user_traffic(email, false).await.unwrap();
+        let read = relay.api.user_traffic(email, true).await.unwrap();
+        let after_reset = relay.api.user_traffic(email, false).await.unwrap();
 
         let traffic = counted[&device.user.email];
         assert!(

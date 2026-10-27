@@ -24,7 +24,7 @@ use tonic::transport::{Channel, Endpoint};
 use tonic::{Response, Status};
 
 pub use error::Error;
-pub use stats::{ALL_USERS, Traffic};
+pub use stats::Traffic;
 pub use user::{UserId, VlessUser};
 
 use proto::xray::app::proxyman::command::handler_service_client::HandlerServiceClient;
