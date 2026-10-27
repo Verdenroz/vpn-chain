@@ -29,7 +29,9 @@ stays open either way.
    curl -fsSL https://github.com/Verdenroz/vpn-chain/releases/latest/download/setup.sh | sudo bash
    ```
 
-   It checks that the download is ours, sets up your relay, and prints a QR code
+   It checks that the download is ours, asks for a name for the first device and
+   an optional entry-hop `.conf` from your VPN provider (you can press Enter to
+   skip both), sets up your relay, and prints a QR code
    and a link. They work once, for 24 hours. If they run out, run the same command
    again: it prints a new code until the first device is set up. If you ever lose
    every device that manages the relay, `sudo relayd pair` on the VPS prints a code

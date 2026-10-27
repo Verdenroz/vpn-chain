@@ -135,6 +135,22 @@ setup_install() {
         'curl -fsSL "$VPN_CHAIN_BASE_URL/setup.sh" | bash -s -- "$@"' _ "$@"
 }
 
+# tty_install LABEL [PATTERN=FILE]... -- ARG...: setup_install on a terminal. Each FILE in the VPS
+# is typed once its PATTERN shows. The install's stdout and stderr, and everything the terminal
+# showed, come back as $W/out-LABEL, $W/err-LABEL and $W/tty-LABEL.
+# shellcheck disable=SC2016 # expands in the container
+tty_install() {
+    local label="$1" answers=()
+    shift
+    while [ "$1" != -- ]; do answers+=("$1"); shift; done
+    shift
+    g env VPN_CHAIN_BASE_URL="$RELEASE_URL" python3 -I /opt/live/pty-drive.py /root/tty.log "${answers[@]}" -- \
+        bash -o pipefail -c 'curl -fsSL "$VPN_CHAIN_BASE_URL/setup.sh" | bash -s -- "$@" >/root/out 2>/root/err' _ "$@"
+    docker cp "$RELAY_C:/root/out" "$W/out-$label"
+    docker cp "$RELAY_C:/root/err" "$W/err-$label"
+    docker cp "$RELAY_C:/root/tty.log" "$W/tty-$label"
+}
+
 # link_field FILE FIELD: one decoded parameter of the pairing link in FILE.
 link_field() {
     python3 -I - "$1" "$2" <<'EOF'
