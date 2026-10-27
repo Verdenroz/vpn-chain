@@ -2,7 +2,9 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::{Device, Error, Relay, SCHEMA, Secret, store};
+use crate::{Device, Error, Relay, Secret, store};
+
+const SCHEMA: u32 = 1;
 
 /// What a device needs to dial the relay besides the REALITY public key, which the relay's
 /// admin already holds. Written 0600 to a path the admin names.

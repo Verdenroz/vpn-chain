@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use common::{SECRETS, assert_no_secret, fixture, read, relay};
-use relayd::{Exit, Relay, Secret, secrets_path};
+use relayd::{AGENT_PORT, Exit, Relay, Secret, secrets_path};
 use serde_json::Value;
 
 fn scratch() -> (tempfile::TempDir, PathBuf) {
@@ -101,9 +101,58 @@ fn secrets_left_without_a_state_are_replaced() {
 #[test]
 fn an_unknown_schema_version_is_refused() {
     let (_dir, path) = scratch();
-    write_state(&path, |state| state["v"] = 2.into());
+    write_state(&path, |state| state["v"] = 3.into());
 
-    assert!(load_error(&path).contains("written by schema v2; this relayd reads v1"));
+    assert!(load_error(&path).contains("written by schema v3; this relayd reads v2"));
+}
+
+#[test]
+fn a_v1_state_migrates_with_the_default_agent_port_and_no_keys() {
+    let (_dir, path) = scratch();
+    write_state(&path, |state| {
+        let state = state.as_object_mut().unwrap();
+        state.insert("v".to_owned(), 1.into());
+        state.remove("agent");
+        state.remove("keys");
+    });
+
+    let migrated = Relay::load(&path, &secrets_path(&path)).unwrap();
+
+    assert_eq!(migrated, relay("relay-direct"));
+    assert_eq!(migrated.state.agent.port, AGENT_PORT);
+    assert!(migrated.state.keys.is_empty());
+}
+
+#[test]
+fn a_saved_migrated_state_is_the_current_schema() {
+    let (_dir, path) = scratch();
+    write_state(&path, |state| {
+        let state = state.as_object_mut().unwrap();
+        state.insert("v".to_owned(), 1.into());
+        state.remove("agent");
+        state.remove("keys");
+    });
+
+    Relay::load(&path, &secrets_path(&path))
+        .unwrap()
+        .save_state(&path)
+        .unwrap();
+
+    let saved: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(saved["v"], 2);
+}
+
+#[test]
+fn an_agent_port_that_collides_is_refused() {
+    for port in [0, 443, 10085] {
+        let (_dir, path) = scratch();
+        write_state(&path, |state| state["agent"]["port"] = port.into());
+
+        assert!(
+            load_error(&path).contains("the agent port must be"),
+            "{port}"
+        );
+    }
 }
 
 #[test]

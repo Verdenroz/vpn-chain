@@ -3,7 +3,9 @@ pub mod fakes;
 
 use std::path::{Path, PathBuf};
 
-use relayd::Relay;
+use p256::ecdsa::SigningKey;
+use p256::pkcs8::EncodePublicKey;
+use relayd::{Key, Relay, Role};
 
 /// Every credential in the fixtures, none of which may reach a `Debug` or error string.
 pub const SECRETS: [&str; 12] = [
@@ -48,4 +50,28 @@ pub fn assert_no_secret(text: &str) {
     for secret in SECRETS {
         assert!(!text.contains(secret), "{secret} leaked into: {text}");
     }
+}
+
+/// A signing key that is the same on every run, distinct per `seed`.
+pub fn signer(seed: u8) -> SigningKey {
+    SigningKey::from_bytes(&[seed; 32].into()).unwrap()
+}
+
+pub fn public_der(signer: &SigningKey) -> Vec<u8> {
+    signer
+        .verifying_key()
+        .to_public_key_der()
+        .unwrap()
+        .as_bytes()
+        .to_vec()
+}
+
+pub fn key_for(device: &str, role: Role, signer: &SigningKey) -> Key {
+    Key::new(
+        device,
+        role,
+        &public_der(signer),
+        "2026-10-27T00:00:00Z".to_owned(),
+    )
+    .unwrap()
 }

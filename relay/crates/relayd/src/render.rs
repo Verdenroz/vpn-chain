@@ -1,8 +1,9 @@
 use serde_json::{Value, json};
 
-use crate::{Exit, Relay};
+use crate::{AGENT_HOST, Exit, Relay};
 
 pub(crate) const API_TAG: &str = "api";
+pub(crate) const AGENT_TAG: &str = "agent";
 pub(crate) const EXIT_TAG: &str = "exit-wg";
 const DIRECT_TAG: &str = "direct";
 const BLOCK_TAG: &str = "block";
@@ -89,6 +90,11 @@ fn outbounds(relay: &Relay) -> Value {
     let fixed = [
         json!({ "tag": DIRECT_TAG, "protocol": "freedom" }),
         json!({ "tag": BLOCK_TAG, "protocol": "blackhole" }),
+        json!({
+            "tag": AGENT_TAG,
+            "protocol": "freedom",
+            "settings": { "redirect": format!("127.0.0.1:{}", relay.state.agent.port) },
+        }),
     ];
     let exit = match &relay.state.exit {
         Exit::Direct => None,
@@ -125,13 +131,19 @@ fn exit_key(relay: &Relay) -> &str {
         .expose()
 }
 
-/// xray has no `final` outbound, so the exit is forced by a catch-all rule at the end.
+/// xray has no `final` outbound, so the exit is forced by a catch-all rule at the end. The agent
+/// rule precedes the private-address block, the only thing that would otherwise stop it.
 fn routing(relay: &Relay) -> Value {
     let state = &relay.state;
     let api = state
         .api
         .as_ref()
         .map(|_| json!({ "type": "field", "inboundTag": [API_TAG], "outboundTag": API_TAG }));
+    let agent = json!({
+        "type": "field",
+        "domain": [format!("full:{AGENT_HOST}")],
+        "outboundTag": AGENT_TAG,
+    });
     let (exit_dns, final_tag) = match &state.exit {
         Exit::Direct => (None, DIRECT_TAG),
         Exit::WireGuard { dns, .. } => (
@@ -141,6 +153,7 @@ fn routing(relay: &Relay) -> Value {
     };
     let rules: Vec<Value> = api
         .into_iter()
+        .chain([agent])
         .chain(exit_dns)
         .chain([
             json!({ "type": "field", "ip": ["geoip:private"], "outboundTag": BLOCK_TAG }),
