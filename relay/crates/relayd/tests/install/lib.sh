@@ -4,7 +4,9 @@
 # fresh VPSes, and sing-box clients that dial them. Sourced; the caller sets HERE, RELAY, ROOT,
 # DISTRO and SUBNET (the first three octets of the lab's public-style network).
 
-PRIV_SUBNET="198.19.${SUBNET##*.}"
+# xray counts the documentation ranges as private, so the lab's public-style side cannot use
+# them. 11.253.x is unrouted outside the lab's bridge; PRIV_SUBNET is what the relay must refuse.
+addr() { echo "$SUBNET.$1"; }
 NET="vpnchain-install-$DISTRO-$$"
 PRIV="$NET-priv"
 UP="$NET-up"
@@ -66,7 +68,7 @@ g() { docker exec "$RELAY_C" "$@"; }
 lab_up() {
     local caddy=caddy:2.10-alpine upstream
     upstream="$(docker run --rm "$TEST_IMG" sed -n 's/^nameserver //p' /etc/resolv.conf | head -1)"
-    docker network create --subnet "$SUBNET.0/24" "$NET" >/dev/null
+    docker network create --subnet "$(addr 0)/24" "$NET" >/dev/null
     docker network create --subnet "$PRIV_SUBNET.0/24" "$PRIV" >/dev/null
     docker network create "$UP" >/dev/null
     printf '{\n\tlocal_certs\n\tauto_https disable_redirects\n}\ndest.test {\n\trespond "dest"\n}\n' >"$W/dest.caddy"
@@ -74,12 +76,12 @@ lab_up() {
     printf ':80 {\n\trespond "private"\n}\n' >"$W/priv.caddy"
     docker run -d --name "$NET-dest" --network "$NET" --network-alias dest.test \
         -v "$W/dest.caddy:/etc/caddy/Caddyfile:ro" "$caddy" >/dev/null
-    docker run -d --name "$NET-pub" --network "$NET" --ip "$SUBNET.50" --network-alias public.test \
+    docker run -d --name "$NET-pub" --network "$NET" --ip "$(addr 50)" --network-alias public.test \
         -v "$W/pub.caddy:/etc/caddy/Caddyfile:ro" "$caddy" >/dev/null
     docker run -d --name "$NET-priv" --network "$PRIV" --ip "$PRIV_SUBNET.50" \
         -v "$W/priv.caddy:/etc/caddy/Caddyfile:ro" "$caddy" >/dev/null
-    docker run -d --name "$NET-dns" --network "$NET" --ip "$SUBNET.60" \
-        -v "$HERE/dns.py:/dns.py:ro" "$TEST_IMG" python3 /dns.py "$SUBNET.50" "$upstream" >/dev/null
+    docker run -d --name "$NET-dns" --network "$NET" --ip "$(addr 60)" \
+        -v "$HERE/dns.py:/dns.py:ro" "$TEST_IMG" python3 /dns.py "$(addr 50)" "$upstream" >/dev/null
     docker network connect --gw-priority 100 "$UP" "$NET-dns"
     CONTAINERS+=("$NET-dest" "$NET-pub" "$NET-priv" "$NET-dns")
 }
@@ -90,7 +92,7 @@ relay_up() {
     local name="$1" ip="$2"
     read -ra extra <<<"${RELAY_JOBS_DOCKER_EXTRA:-}"
     CONTAINERS+=("$name")
-    docker run -d --name "$name" "${extra[@]}" --network "$NET" --ip "$ip" --dns "$SUBNET.60" \
+    docker run -d --name "$name" "${extra[@]}" --network "$NET" --ip "$ip" --dns "$(addr 60)" \
         --cap-add SYS_ADMIN --cap-add NET_ADMIN --cgroupns=private \
         --tmpfs /run --tmpfs /run/lock --tmpfs /tmp \
         -v "$HERE:/opt/live:ro" -v "$BUILD:/opt/build:ro" -v "$ROOT:/repo:ro" \

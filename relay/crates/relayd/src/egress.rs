@@ -38,9 +38,9 @@ pub fn rules(agent_port: u16, resolv_conf: &Path) -> Result<String, Error> {
 /// machine's loopback and private networks, except the agent and the resolvers.
 ///
 /// xray dials whatever a client names, so a name that resolves to a private address after the
-/// routing rules ran would otherwise reach services that trust local callers. A loopback
-/// resolver takes every port, since a stub such as Docker's sits behind a port redirect;
-/// other resolvers take port 53. Replies on a connection someone opened to xray, such as
+/// routing rules ran would otherwise reach services that trust local callers. Every resolver
+/// takes DNS only, matched on the destination port the caller asked for, since a stub such as
+/// Docker's sits behind a port redirect, and no other port of a loopback stub is open. Replies on a connection someone opened to xray, such as
 /// relayd's to its API, pass: only connections xray starts are limited.
 pub fn ruleset(agent_port: u16, resolvers: &[IpAddr]) -> String {
     let allowed: Vec<String> = resolvers.iter().map(|address| allow(*address)).collect();
@@ -64,11 +64,12 @@ pub fn ruleset(agent_port: u16, resolvers: &[IpAddr]) -> String {
 
 fn allow(address: IpAddr) -> String {
     let family = if address.is_ipv4() { "ip" } else { "ip6" };
-    if address.is_loopback() {
-        format!("\t\t{family} daddr {address} accept\n")
+    let port = if address.is_loopback() {
+        "ct original proto-dst"
     } else {
-        format!("\t\t{family} daddr {address} meta l4proto {{ tcp, udp }} th dport 53 accept\n")
-    }
+        "th dport"
+    };
+    format!("\t\t{family} daddr {address} meta l4proto {{ tcp, udp }} {port} 53 accept\n")
 }
 
 /// Loads `ruleset` into the kernel, replacing the table it names.
