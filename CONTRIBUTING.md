@@ -153,21 +153,13 @@ Whoever can push a `v*` tag can ship an update to every installed copy. Protect
 `v*` tags with a ruleset, and require reviewers on the `release` environment,
 which GitHub otherwise creates unprotected on the first release.
 
-### Relay signing
+### Relay downloads
 
-`setup.sh` runs a download only after checking its minisign signature against the key
-pinned in `relay/packaging/setup.sh`, and the release job signs with the matching secret.
-Make the pair once, on a machine you trust, and keep the secret key: lose it and every
-published `setup.sh` points at a key that can no longer sign.
-
-```
-minisign -G -W -p relay-release.pub -s relay-release.key
-```
-
-Put the second line of `relay-release.pub` in `PUBLIC_KEY` in `relay/packaging/setup.sh`,
-and store the whole secret key file as the repository secret `RELAY_MINISIGN_KEY`. The
-release fails without it. `-W` leaves the key unencrypted so CI can sign without a
-password, which makes the repository secret the only protection it has.
+`setup.sh` runs a download only after `sha256sum -c` passes against the `.sha256` file
+the release job publishes beside it. That catches a broken download, not a hostile
+release: `setup.sh` comes from the same release, so anyone who can replace the tarball
+can replace both. Signing earns its place once the app updates the relay itself, since
+the app can carry the key on a separate channel.
 
 ## Commits and pull requests
 

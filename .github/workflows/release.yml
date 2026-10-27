@@ -4,15 +4,13 @@
 #     signed with another key cannot update an installed one.
 #   - Desktop: the Linux .deb, built and tested by deb.yml.
 #   - Relay: static relayd, relay-jobs and relay-privileged for amd64 and arm64
-#     (musl), signed with minisign, plus setup.sh, which pins the public key.
+#     (musl), each with a SHA-256 file that setup.sh checks, plus setup.sh.
 #   - manifest.json: sizes + SHA-256 of the APKs and the .deb, which the apps'
 #     in-app updater reads from the latest release.
 #
 # Required secrets for stable Android signing across releases:
 #   ANDROID_KEYSTORE_B64       base64 of the .jks  (base64 -w0 release.jks)
 #   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
-# Required secret for the relay release (CONTRIBUTING.md has the steps):
-#   RELAY_MINISIGN_KEY         the contents of the minisign secret key file
 name: release
 
 on:
@@ -128,22 +126,13 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Sign the relay release and add setup.sh
-        env:
-          MINISIGN_KEY: ${{ secrets.RELAY_MINISIGN_KEY }}
+      - name: Checksum the relay release and add setup.sh
+        working-directory: dist
         run: |
-          if [ -z "$MINISIGN_KEY" ]; then
-            echo "::error::RELAY_MINISIGN_KEY is not set; setup.sh would have nothing to verify against"
-            exit 1
-          fi
-          sudo apt-get install -y --no-install-recommends minisign
-          key="$RUNNER_TEMP/minisign.key"
-          (umask 077 && printf '%s\n' "$MINISIGN_KEY" > "$key")
-          for tarball in dist/vpn-chain-relay-linux-*.tar.gz; do
-            minisign -S -s "$key" -m "$tarball"
+          for tarball in vpn-chain-relay-linux-*.tar.gz; do
+            sha256sum "$tarball" > "$tarball.sha256"
           done
-          rm -f "$key"
-          cp relay/packaging/setup.sh dist/setup.sh
+          cp ../relay/packaging/setup.sh setup.sh
       - name: Write update manifest
         run: .github/scripts/release-manifest.sh "${GITHUB_REF_NAME#v}" dist
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
