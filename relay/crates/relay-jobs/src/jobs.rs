@@ -39,7 +39,10 @@ impl Jobs {
             request.line().as_bytes(),
             FILE_MODE,
             None,
-        )?;
+        )
+        .inspect_err(|_| {
+            let _ = std::fs::remove_file(store::job_path(&self.layout, &id));
+        })?;
         Ok(id)
     }
 

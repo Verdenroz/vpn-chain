@@ -69,9 +69,14 @@ impl<'a, H: Host> Runner<'a, H> {
         let text =
             String::from_utf8(bytes).map_err(|_| Error::at(path, "a request is plain text"))?;
         let request = Request::parse(&text)?;
-        let job = store::read_job(self.layout, &request.id)?;
-        if job.state != JobState::Queued || job.kind != request.kind {
-            return Err(Error::new("the job record does not match the request"));
+        let mut job = store::read_job(self.layout, &request.id)?;
+        if job.state != JobState::Queued {
+            return Err(Error::new("the job is not queued"));
+        }
+        if job.kind != request.kind {
+            let reason = "the request does not match the job";
+            self.mark(&mut job, JobState::Failed, Some(reason))?;
+            return Err(Error::new(reason));
         }
         self.run(job)
     }
@@ -87,6 +92,7 @@ impl<'a, H: Host> Runner<'a, H> {
                 Ok(snapshot) => Some(snapshot),
                 Err(error) => {
                     eprintln!("relay-privileged: snapshot: {error}");
+                    drop_pending(pending.as_deref());
                     return self.mark(
                         &mut job,
                         JobState::Failed,
@@ -96,11 +102,13 @@ impl<'a, H: Host> Runner<'a, H> {
             },
             false => None,
         };
-        if let Err(error) = self.apply(&job.kind, pending) {
+        if let Err(error) = self.apply(&job.kind, pending.as_deref()) {
             eprintln!("relay-privileged: apply: {error}");
-            let reason = match self.roll_back(snapshot) {
-                Ok(()) => "the change failed and was rolled back",
-                Err(_) => "the change failed and the rollback failed",
+            drop_pending(pending.as_deref());
+            let reason = match (snapshot.is_some(), self.roll_back(snapshot)) {
+                (false, _) => "the restart failed",
+                (true, Ok(())) => "the change failed and was rolled back",
+                (true, Err(_)) => "the change failed and the rollback failed",
             };
             return self.mark(&mut job, JobState::Failed, Some(reason));
         }
@@ -142,11 +150,11 @@ impl<'a, H: Host> Runner<'a, H> {
         }
     }
 
-    fn apply(&self, kind: &JobKind, pending: Option<PathBuf>) -> Result<(), Error> {
+    fn apply(&self, kind: &JobKind, pending: Option<&Path>) -> Result<(), Error> {
         match (kind, pending) {
             (JobKind::SwapXray { version }, _) => files::point_current(self.layout, version)?,
             (JobKind::ApplyConfig, Some(pending)) => {
-                files::place_config(self.layout, &pending)?;
+                files::place_config(self.layout, pending)?;
                 let _ = fs::remove_file(self.layout.staged_config());
             }
             _ => {}
@@ -165,7 +173,9 @@ impl<'a, H: Host> Runner<'a, H> {
             return Ok(());
         };
         let restored = snapshot.restore(self.layout).and_then(|()| self.restart());
-        snapshot.discard();
+        if restored.is_ok() {
+            snapshot.discard();
+        }
         restored
     }
 
@@ -203,9 +213,11 @@ impl<'a, H: Host> Runner<'a, H> {
     }
 
     /// A runner that died or lost power mid-job leaves it running or awaiting confirm. Nobody
-    /// confirmed it, so it is rolled back like any other unconfirmed change.
+    /// confirmed it, so it is rolled back like any other unconfirmed change. A failed rollback
+    /// keeps its snapshot and is tried again here.
     fn recover(&self) -> Result<(), Error> {
         let jobs = self.layout.jobs();
+        let mut unrecorded = 0;
         for entry in fs::read_dir(&jobs)
             .map_err(|error| Error::at(&jobs, error))?
             .flatten()
@@ -221,16 +233,28 @@ impl<'a, H: Host> Runner<'a, H> {
             let Ok(mut job) = store::read_job(self.layout, &id) else {
                 continue;
             };
-            if !matches!(job.state, JobState::Running | JobState::AwaitingConfirm) {
+            let snapshot = Snapshot::find(self.layout, &id);
+            let stuck = match job.state {
+                JobState::Running | JobState::AwaitingConfirm => true,
+                JobState::Failed => snapshot.is_some(),
+                _ => false,
+            };
+            if !stuck {
                 continue;
             }
-            let (state, reason) = match self.roll_back(Snapshot::find(self.layout, &id)) {
+            let (state, reason) = match self.roll_back(snapshot) {
                 Ok(()) => (JobState::RolledBack, "the runner stopped before a confirm"),
                 Err(_) => (JobState::Failed, "the rollback failed"),
             };
-            self.mark(&mut job, state, Some(reason))?;
+            if let Err(error) = self.mark(&mut job, state, Some(reason)) {
+                eprintln!("relay-privileged: recovery: {error}");
+                unrecorded += 1;
+            }
         }
-        Ok(())
+        match unrecorded {
+            0 => Ok(()),
+            _ => Err(Error::new("a recovered job could not be recorded")),
+        }
     }
 
     fn mark(&self, job: &mut Job, state: JobState, reason: Option<&str>) -> Result<(), Error> {
@@ -241,5 +265,11 @@ impl<'a, H: Host> Runner<'a, H> {
             job.confirm_by = None;
         }
         store::write_job(self.layout, job)
+    }
+}
+
+fn drop_pending(pending: Option<&Path>) {
+    if let Some(pending) = pending {
+        let _ = fs::remove_file(pending);
     }
 }
