@@ -42,6 +42,10 @@ struct Reply {
 
 impl Rig {
     fn start(jobs: bool, spares: usize) -> Self {
+        Self::start_with_xray(jobs, spares, "true")
+    }
+
+    fn start_with_xray(jobs: bool, spares: usize, xray: &str) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let state = dir.path().join("relay.json");
         let mut json: Value = serde_json::from_str(&read("relay-direct.state.json")).unwrap();
@@ -78,7 +82,7 @@ impl Rig {
             state,
             config,
             lock: dir.path().join("devices.lock"),
-            xray: PathBuf::from("true"),
+            xray: PathBuf::from(xray),
             group: "relayd-test-no-such-group".to_owned(),
             spares: SPARES,
             live: live.clone(),
@@ -104,6 +108,10 @@ impl Rig {
             restart,
             counter: AtomicU64::new(0),
         }
+    }
+
+    fn config(&self) -> String {
+        fs::read_to_string(self.dir.path().join("config.json")).unwrap()
     }
 
     fn relay(&self) -> Relay {
@@ -544,4 +552,147 @@ fn the_audit_log_is_private_and_holds_who_did_what_and_no_credentials() {
         fs::metadata(path).unwrap().permissions().mode() & 0o777,
         0o600
     );
+}
+
+const WG_CONF: &str = "[Interface]\nPrivateKey = kPwG0r8sXv1zB3dF5hJ7lN9pR2tV4xZ6bD8fH0jL2nM=\nAddress = 10.2.0.2/32\nDNS = 10.2.0.1\n\n[Peer]\nPublicKey = pEeRpUbLiCkEyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\nAllowedIPs = 0.0.0.0/0\nEndpoint = 203.0.113.9:51820\n";
+
+fn set_wireguard(conf: &str) -> String {
+    json!({ "kind": "wireguard", "conf": conf }).to_string()
+}
+
+#[test]
+fn an_admin_reads_the_exit_without_any_key() {
+    let rig = Rig::start(false, SPARES);
+    let direct = rig.admin("GET", "/v1/exit", "");
+    rig.admin("PUT", "/v1/exit", &set_wireguard(WG_CONF));
+
+    let wireguard = rig.admin("GET", "/v1/exit", "");
+
+    assert_eq!(direct.body, json!({ "kind": "direct" }));
+    assert_eq!(
+        wireguard.body,
+        json!({ "kind": "wireguard", "endpoint": "203.0.113.9:51820" })
+    );
+}
+
+#[test]
+fn a_member_and_a_stranger_cannot_read_or_change_the_exit() {
+    let rig = Rig::start(false, SPARES);
+
+    let replies = [
+        rig.member("GET", "/v1/exit", ""),
+        rig.member("PUT", "/v1/exit", &set_wireguard(WG_CONF)),
+        rig.send("GET", "/v1/exit", "", &[]),
+    ];
+
+    let statuses: Vec<u16> = replies.iter().map(|reply| reply.status).collect();
+    assert_eq!(statuses, [403, 403, 401]);
+    assert_eq!(rig.relay().state.exit, relayd::Exit::Direct);
+    assert_eq!(rig.restart.count(), 0);
+}
+
+#[test]
+fn a_wireguard_exit_is_stored_rendered_and_restarted_with_its_key_kept_in_secrets() {
+    let rig = Rig::start(false, SPARES);
+
+    let reply = rig.admin("PUT", "/v1/exit", &set_wireguard(WG_CONF));
+
+    assert_eq!(reply.status, 200);
+    assert_no_secret(&reply.body.to_string());
+    let relay = rig.relay();
+    assert!(matches!(relay.state.exit, relayd::Exit::WireGuard { .. }));
+    assert_eq!(
+        relay.secrets.exit_secret_key.unwrap().expose(),
+        "kPwG0r8sXv1zB3dF5hJ7lN9pR2tV4xZ6bD8fH0jL2nM="
+    );
+    let state = fs::read_to_string(rig.dir.path().join("relay.json")).unwrap();
+    assert!(!state.contains("kPwG0r8"));
+    let config: Value = serde_json::from_str(&rig.config()).unwrap();
+    assert_eq!(config["routing"]["domainStrategy"], "AsIs");
+    assert_eq!(rig.restart.count(), 1);
+}
+
+#[test]
+fn changing_the_exit_with_a_job_runner_returns_a_job_to_confirm() {
+    let rig = Rig::start(true, SPARES);
+
+    let reply = rig.admin("PUT", "/v1/exit", &set_wireguard(WG_CONF));
+
+    assert_eq!(reply.status, 202);
+    let id = reply.body["job"].as_str().unwrap();
+    let job = rig.admin("GET", &format!("/v1/jobs/{id}"), "");
+    assert_eq!(job.body["kind"], "restart-xray");
+    assert_eq!(rig.restart.count(), 0);
+}
+
+#[test]
+fn going_back_to_direct_drops_the_key_and_the_tunnel() {
+    let rig = Rig::start(false, SPARES);
+    rig.admin("PUT", "/v1/exit", &set_wireguard(WG_CONF));
+
+    let reply = rig.admin("PUT", "/v1/exit", r#"{"kind":"direct"}"#);
+
+    assert_eq!(reply.status, 200);
+    let relay = rig.relay();
+    assert_eq!(relay.state.exit, relayd::Exit::Direct);
+    assert!(relay.secrets.exit_secret_key.is_none());
+    let config: Value = serde_json::from_str(&rig.config()).unwrap();
+    assert_eq!(config["routing"]["domainStrategy"], "IPOnDemand");
+    assert!(!rig.config().contains("exit-wg"));
+}
+
+#[test]
+fn a_bad_exit_request_is_refused_before_anything_changes_and_echoes_no_key() {
+    let rig = Rig::start(false, SPARES);
+    let before = fs::read_to_string(rig.dir.path().join("relay.json")).unwrap();
+    let no_endpoint = WG_CONF.replace("Endpoint", "Endpont");
+    let short_key = WG_CONF.replace("kPwG0r8sXv1zB3dF5hJ7lN9pR2tV4xZ6bD8fH0jL2nM=", "c2hvcnQ=");
+    let bodies = [
+        "not json".to_owned(),
+        r#"{"kind":"vpn"}"#.to_owned(),
+        r#"{"kind":"wireguard"}"#.to_owned(),
+        set_wireguard(&no_endpoint),
+        set_wireguard(&short_key),
+    ];
+
+    for body in bodies {
+        let reply = rig.admin("PUT", "/v1/exit", &body);
+
+        assert_eq!(reply.status, 400, "{body}");
+        assert_no_secret(&reply.body.to_string());
+    }
+    assert_eq!(
+        fs::read_to_string(rig.dir.path().join("relay.json")).unwrap(),
+        before
+    );
+    assert_eq!(rig.restart.count(), 0);
+}
+
+#[test]
+fn an_exit_xray_rejects_leaves_the_state_secrets_and_config_as_they_were() {
+    let rig = Rig::start_with_xray(false, SPARES, "false");
+    let config = rig.config();
+
+    let reply = rig.admin("PUT", "/v1/exit", &set_wireguard(WG_CONF));
+
+    assert_eq!(reply.status, 500);
+    assert_no_secret(&reply.body.to_string());
+    let relay = rig.relay();
+    assert_eq!(relay.state.exit, relayd::Exit::Direct);
+    assert!(relay.secrets.exit_secret_key.is_none());
+    assert_eq!(rig.config(), config);
+    assert_eq!(rig.restart.count(), 0);
+}
+
+#[test]
+fn the_audit_log_names_an_exit_change_and_holds_no_key() {
+    let rig = Rig::start(false, SPARES);
+    rig.admin("PUT", "/v1/exit", &set_wireguard(WG_CONF));
+    rig.member("PUT", "/v1/exit", &set_wireguard(WG_CONF));
+
+    let log = rig.audit_text();
+
+    assert_no_secret(&log);
+    assert!(log.contains(r#""action":"exit.set","target":"wireguard","result":"ok""#));
+    assert!(log.contains(r#""action":"exit.set","target":"wireguard","result":"forbidden""#));
 }

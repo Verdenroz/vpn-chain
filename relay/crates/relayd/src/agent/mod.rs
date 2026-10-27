@@ -17,6 +17,7 @@
 //! | `DELETE /devices/{name}` | admin, for a device other than its own |
 //! | `POST /devices/{name}/rekey` | admin, or the member whose device it is |
 //! | `POST /devices/{name}/pair` | admin, for a device other than its own |
+//! | `GET /exit`, `PUT /exit` | admin |
 //! | `POST /jobs`, `GET /jobs/{id}`, `POST /jobs/{id}/confirm`, `GET /audit` | admin |
 //! | `POST /enroll` | a pairing token |
 //!

@@ -17,7 +17,8 @@ use super::guard::{BODY_LIMIT, authenticate};
 use super::reply::ApiError;
 use super::{Principal, Service};
 use crate::clock::seconds;
-use crate::{Error, Role, TOKEN_TTL, pairing, valid_name};
+use crate::install::wireguard;
+use crate::{Error, Exit, Role, TOKEN_TTL, pairing, valid_name};
 
 type Outcome = Result<Response, ApiError>;
 
@@ -32,6 +33,7 @@ pub fn router(service: Arc<Service>) -> Router {
         .route("/v1/devices/{name}/rekey", post(rekey_device))
         .route("/v1/devices/{name}/pair", post(pair_device))
         .route("/v1/pool/refill", post(refill_pool))
+        .route("/v1/exit", get(read_exit).put(set_exit))
         .route("/v1/jobs", post(submit_job))
         .route("/v1/jobs/{id}", get(read_job))
         .route("/v1/jobs/{id}/confirm", post(confirm_job))
@@ -60,6 +62,14 @@ struct AddDevice {
 #[serde(deny_unknown_fields)]
 struct Rename {
     name: String,
+}
+
+/// The `conf` holds a WireGuard private key, so this has no `Debug`.
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
+enum SetExit {
+    Direct,
+    Wireguard { conf: String },
 }
 
 /// One request being served: who asked, what for, and the audit entry it leaves.
@@ -308,6 +318,50 @@ async fn refill_pool(
         })
         .await?;
     Ok(queued(job, json!({ "added": added })))
+}
+
+async fn read_exit(
+    State(service): State<Arc<Service>>,
+    Extension(who): Extension<Principal>,
+) -> Outcome {
+    let call = Call::new(service, who, "exit.read", None).quiet();
+    let admin = call.is_admin();
+    let exit = call
+        .run(admin, |service, _| Ok(service.load()?.state.exit))
+        .await?;
+    let reply = match exit {
+        Exit::Direct => json!({ "kind": "direct" }),
+        Exit::WireGuard { endpoint, .. } => json!({ "kind": "wireguard", "endpoint": endpoint }),
+    };
+    Ok(Json(reply).into_response())
+}
+
+async fn set_exit(
+    State(service): State<Arc<Service>>,
+    Extension(who): Extension<Principal>,
+    body: Bytes,
+) -> Outcome {
+    let request = parsed::<SetExit>(&body);
+    let kind = match &request {
+        Ok(SetExit::Direct) => Some("direct".to_owned()),
+        Ok(SetExit::Wireguard { .. }) => Some("wireguard".to_owned()),
+        Err(_) => None,
+    };
+    let call = Call::new(service, who, "exit.set", kind);
+    let admin = call.is_admin();
+    let ((), job) = call
+        .run(admin, move |service, _| {
+            let (exit, key) = match request? {
+                SetExit::Direct => (Exit::Direct, None),
+                SetExit::Wireguard { conf } => {
+                    let (exit, key) = wireguard::parse(&conf)?;
+                    (exit, Some(key))
+                }
+            };
+            service.operate(|manager| manager.set_exit(exit, key))
+        })
+        .await?;
+    Ok(queued(job, json!({})))
 }
 
 async fn submit_job(
