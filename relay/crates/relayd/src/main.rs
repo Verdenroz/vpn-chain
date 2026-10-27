@@ -1,5 +1,7 @@
 mod args;
 mod device_cmd;
+mod serve_cmd;
+mod target;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -10,6 +12,7 @@ use relayd::{
 };
 
 use args::Args;
+use target::XRAY_GROUP;
 
 const USAGE: &str = "usage: relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>]
        relayd adopt --config <config.json> [--devices <devices.json>] --state <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>] [--xray <path>] [--group <name>] [--restart]
@@ -20,10 +23,11 @@ const USAGE: &str = "usage: relayd import --config <config.json> [--devices <dev
        relayd device rekey <name> --out <identity.json> <target>
        relayd device revoke <name> [--force] <target>
        relayd maintenance refill-pool <target>
+       relayd keys add <device> --public-key <file> [--role member|admin] --state <state.json> [--secrets <secrets.json>] [--lock <file>]
+       relayd serve [--audit <audit.jsonl>] [--jobs <state dir>] <target>
 target: --state <state.json> --config <config.json> [--secrets <secrets.json>] [--lock <file>] [--xray <path>] [--group <name>] [--spares <n>]";
 
 const EX_USAGE: u8 = 64;
-const XRAY_GROUP: &str = "xray";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -34,6 +38,8 @@ fn main() -> ExitCode {
         ["render", rest @ ..] => run_render(rest),
         ["device", rest @ ..] => device_cmd::device(rest),
         ["maintenance", rest @ ..] => device_cmd::maintenance(rest),
+        ["keys", rest @ ..] => serve_cmd::keys(rest),
+        ["serve", rest @ ..] => serve_cmd::serve(rest),
         _ => None,
     };
     match result {

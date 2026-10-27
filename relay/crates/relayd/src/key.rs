@@ -1,3 +1,6 @@
+use std::path::Path;
+use std::time::Duration;
+
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use p256::ecdsa::VerifyingKey;
@@ -5,7 +8,7 @@ use p256::pkcs8::{DecodePublicKey, EncodePublicKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{Error, Role};
+use crate::{Error, Relay, Role, State, now, store};
 
 const ID_BYTES: usize = 8;
 
@@ -79,4 +82,46 @@ fn id_of(der: &[u8]) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect()
+}
+
+/// Lets the key `public_key` (PEM or DER) manage the relay as `role`, from the device `device`.
+/// It takes the devices lock like every other change to the state, and fails if it stays held
+/// for `lock_wait`.
+pub fn add_key(
+    state: &Path,
+    secrets: &Path,
+    lock: &Path,
+    lock_wait: Duration,
+    device: &str,
+    role: Role,
+    public_key: &[u8],
+) -> Result<Key, Error> {
+    let _held = store::lock_within(lock, lock_wait)?;
+    let relay = Relay::load(state, secrets)?;
+    if !relay.state.devices.iter().any(|held| held.name == device) {
+        return Err(Error::missing(format!("no device named {device}")));
+    }
+    let key = Key::new(device, role, public_key, now())?;
+    if relay.state.keys.iter().any(|held| held.id == key.id) {
+        return Err(Error::conflict(format!(
+            "management key {} is already added",
+            key.id
+        )));
+    }
+    let keys = relay
+        .state
+        .keys
+        .iter()
+        .cloned()
+        .chain([key.clone()])
+        .collect();
+    Relay {
+        state: State {
+            keys,
+            ..relay.state
+        },
+        secrets: relay.secrets,
+    }
+    .save_state(state)?;
+    Ok(key)
 }
