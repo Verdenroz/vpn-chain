@@ -149,3 +149,10 @@ GPL-3.0-or-later; the bundled sing-box is GPL-3.
 detection uses it to tell a site's registrable domain from a shared host's
 tenants. To update it, replace the file with a fresh copy from
 https://publicsuffix.org/list/public_suffix_list.dat.
+
+`core/geoip/src/commonMain/composeResources/files/geoip_ranges.bin` and
+`geoip_cities.tsv` are compiled from the
+[DB-IP Lite city database](https://db-ip.com/db/download/ip-to-city-lite),
+under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+IP Geolocation by [DB-IP](https://db-ip.com). The map uses them to place each
+hop at its city, offline. To rebuild, see `core/geoip/tools/build_geoip.py`.

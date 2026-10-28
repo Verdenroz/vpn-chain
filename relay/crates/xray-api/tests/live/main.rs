@@ -4,7 +4,7 @@
 
 mod relay;
 
-use live_harness::{Tunnel, echo_server, roundtrip};
+use live_harness::{Tunnel, echo_server, roundtrip, roundtrip_until};
 use xray_api::{Error, Traffic};
 
 use relay::{Device, INBOUND, Relay, SING_BOX};
@@ -29,7 +29,7 @@ async fn added_user_with_a_pooled_short_id_connects_while_xray_keeps_running() {
             .add_user(INBOUND, device.user.clone())
             .await
             .unwrap();
-        roundtrip(proxy, target, b"ping")
+        roundtrip_until(proxy, "127.0.0.1", target, b"ping")
             .await
             .unwrap_or_else(|e| panic!("sing-box {version}: {e}"));
     }
@@ -50,7 +50,9 @@ async fn removed_user_is_refused_on_new_connections() {
             .await
             .unwrap();
         let proxy = relay.client(&device, version).await;
-        roundtrip(proxy, target, b"ping").await.unwrap();
+        roundtrip_until(proxy, "127.0.0.1", target, b"ping")
+            .await
+            .unwrap();
 
         relay
             .api
@@ -112,7 +114,9 @@ async fn user_traffic_counts_an_added_users_bytes_and_reset_zeroes_them() {
             .await
             .unwrap();
         let proxy = relay.client(&device, version).await;
-        roundtrip(proxy, target, &payload).await.unwrap();
+        roundtrip_until(proxy, "127.0.0.1", target, &payload)
+            .await
+            .unwrap();
 
         let counted = relay.api.user_traffic(email, false).await.unwrap();
         let read = relay.api.user_traffic(email, true).await.unwrap();
@@ -148,7 +152,9 @@ async fn api_added_user_is_gone_after_xray_restarts() {
     for version in SING_BOX {
         let added = relay.client(&device, version).await;
         let seed = relay.client(&relay.seed, version).await;
-        roundtrip(added, target, b"ping").await.unwrap();
+        roundtrip_until(added, "127.0.0.1", target, b"ping")
+            .await
+            .unwrap();
         proxies.push((version, added, seed));
     }
 
@@ -161,7 +167,7 @@ async fn api_added_user_is_gone_after_xray_restarts() {
             roundtrip(added, target, b"ping").await.is_err(),
             "sing-box {version}"
         );
-        roundtrip(seed, target, b"ping")
+        roundtrip_until(seed, "127.0.0.1", target, b"ping")
             .await
             .unwrap_or_else(|e| panic!("sing-box {version}: {e}"));
     }

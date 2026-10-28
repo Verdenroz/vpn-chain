@@ -32,6 +32,8 @@ data class ChainHop(
     val carrying: Boolean,
     /** What carries traffic into this hop — always configuration, never measured. */
     val via: String? = null,
+    /** Who runs the hop, when the profile says so. */
+    val provider: String? = null,
 )
 
 /**

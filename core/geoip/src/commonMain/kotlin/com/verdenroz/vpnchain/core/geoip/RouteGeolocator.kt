@@ -4,7 +4,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Country-level location lookup for a chain hop's host or IP. */
+/** City-level location lookup for a chain hop's host or IP. */
 interface RouteGeolocator {
     suspend fun locate(hostOrIp: String): HopLocation?
 }
@@ -16,9 +16,15 @@ class DefaultRouteGeolocator : RouteGeolocator {
 
     override suspend fun locate(hostOrIp: String): HopLocation? {
         val ip = parseIpv4(hostOrIp) ?: parseIpv4(resolveHost(hostOrIp) ?: return null) ?: return null
-        val code = ensureIndex().countryCodeFor(ip)
-        val geo = COUNTRY_GEO[code] ?: return null
-        return HopLocation(countryCode = code, countryName = geo.name, lat = geo.lat, lon = geo.lon)
+        val hit = ensureIndex().lookup(ip)
+        val geo = COUNTRY_GEO[hit.countryCode] ?: return null
+        return HopLocation(
+            countryCode = hit.countryCode,
+            countryName = geo.name,
+            lat = hit.city?.lat ?: geo.lat,
+            lon = hit.city?.lon ?: geo.lon,
+            city = hit.city?.name,
+        )
     }
 
     /** A hop configured by hostname needs the resolver, which a tunnel still

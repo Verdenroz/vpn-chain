@@ -5,7 +5,8 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use live_harness::{
-    Lab, PUBLIC_HOST, SNI, echo_server, echo_server_on, roundtrip_to, short_id, wait_for_port,
+    Lab, PUBLIC_HOST, SNI, echo_server, echo_server_on, roundtrip_to, roundtrip_until, short_id,
+    wait_for_port,
 };
 use relayd::{
     Agent, Api, Device, Error, Exit, INBOUND_TAG, Inbound, Manager, Placement, Relay, Restart,
@@ -226,10 +227,16 @@ impl Site {
             .is_ok()
     }
 
+    pub fn connects(&self, proxy: u16) -> bool {
+        self.rt
+            .block_on(roundtrip_until(proxy, PUBLIC_HOST, self.echo, b"ping"))
+            .is_ok()
+    }
+
     pub fn push(&self, proxy: u16, bytes: usize) {
         let payload = vec![7; bytes];
         self.rt
-            .block_on(roundtrip_to(proxy, PUBLIC_HOST, self.echo, &payload))
+            .block_on(roundtrip_until(proxy, PUBLIC_HOST, self.echo, &payload))
             .unwrap();
     }
 
