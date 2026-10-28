@@ -190,7 +190,7 @@ private fun HopInfoRow(hop: ChainHop) {
     val colors = VpnChainTheme.colors
     InfoRow(
         label = stringResource(hop.role.labelRes()),
-        value = hop.location?.countryName ?: stringResource(Res.string.chain_hop_unresolved),
+        value = hop.location?.let { hopRowValue(it, hop.provider) } ?: stringResource(Res.string.chain_hop_unresolved),
         marker = when (hop.role) {
             HopRole.Exit -> RowMarker(if (hop.carrying) colors.route else colors.idleRoute, filled = true)
             HopRole.Origin, HopRole.Entry -> RowMarker(colors.ring, filled = false)
