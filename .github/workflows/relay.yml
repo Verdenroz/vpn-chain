@@ -31,7 +31,7 @@ jobs:
       - run: cargo test --workspace --locked
 
   live:
-    if: github.event_name == 'pull_request'
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -43,7 +43,7 @@ jobs:
       - run: cargo test -p relayd --locked --test live -- --ignored
 
   jobs-live:
-    if: github.event_name == 'pull_request'
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -56,7 +56,7 @@ jobs:
           RELAY_JOBS_DOCKER_EXTRA: --security-opt apparmor=unconfined
 
   install-live:
-    if: github.event_name == 'pull_request'
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:

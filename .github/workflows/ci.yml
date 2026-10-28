@@ -3,12 +3,13 @@ name: ci
 
 on:
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,7 +28,7 @@ jobs:
           persist-credentials: false
       - id: diff
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: |
           files="$(git diff --name-only "$BASE"...HEAD)"
           printf '%s\n' "$files"
