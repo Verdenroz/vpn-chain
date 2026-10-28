@@ -7,9 +7,11 @@ import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.domain.ChainRoute
+import com.verdenroz.vpnchain.core.domain.ChainSupervisor
 import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.ObserveChainRouteUseCase
+import com.verdenroz.vpnchain.core.domain.ReconnectState
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.LearnedRoute
 import com.verdenroz.vpnchain.core.model.LearnedSite
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
@@ -34,6 +37,7 @@ data class ChainUiState(
     val route: ChainRoute = ChainRoute(),
     val connectedSinceMillis: Long? = null,
     val blockedSite: BlockedSite? = null,
+    val cutOff: Boolean = false,
 )
 
 /** A site that refuses the chain and could go over the user's own connection; [host] is for display. */
@@ -62,9 +66,10 @@ class ChainViewModel(
     private val disconnectChain: DisconnectChainUseCase,
     observeChainRoute: ObserveChainRouteUseCase,
     chainRepository: ChainRepository,
-    profileRepository: ProfileRepository,
+    private val profileRepository: ProfileRepository,
     settingsRepository: SettingsRepository,
     private val learnedSites: LearnedSitesRepository,
+    supervisor: ChainSupervisor,
 ) : ViewModel() {
 
     private val dismissed = MutableStateFlow(emptySet<String>())
@@ -76,7 +81,11 @@ class ChainViewModel(
             // Seeded empty because the route is measured: waiting for the first
             // probe would show a live tunnel as an unconfigured one.
             observeChainRoute().onStart { emit(ChainRoute()) },
-            chainRepository.stats.map { it.connectedSinceMillis }.distinctUntilChanged(),
+            combine(
+                chainRepository.stats.map { it.connectedSinceMillis }.distinctUntilChanged(),
+                supervisor.state.map { it == ReconnectState.CutOff },
+                ::Pair,
+            ),
             combine(
                 learnedSites.sites,
                 settingsRepository.settings,
@@ -84,13 +93,14 @@ class ChainViewModel(
                 dismissed,
                 ::blockedSite,
             ),
-        ) { status, hasProfile, route, connectedSince, blockedSite ->
+        ) { status, hasProfile, route, (connectedSince, cutOff), blockedSite ->
             ChainUiState(
                 status = status,
                 hasProfile = hasProfile,
                 route = route,
                 connectedSinceMillis = connectedSince,
                 blockedSite = blockedSite,
+                cutOff = cutOff,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -101,6 +111,12 @@ class ChainViewModel(
     fun connect() = viewModelScope.launch { connectChain() }
 
     fun disconnect() = viewModelScope.launch { disconnectChain() }
+
+    fun removeConnection() = viewModelScope.launch {
+        val id = profileRepository.activeProfileId.first() ?: return@launch
+        disconnectChain()
+        profileRepository.delete(id)
+    }
 
     fun sendDirect(domain: String) = viewModelScope.launch { learnedSites.allowDirect(domain) }
 

@@ -16,6 +16,7 @@ import com.verdenroz.vpnchain.core.ui.shouldUseDarkTheme
 import com.verdenroz.vpnchain.feature.chain.navigation.CHAIN_ROUTE
 import com.verdenroz.vpnchain.feature.chain.navigation.chainScreen
 import com.verdenroz.vpnchain.feature.logs.navigation.logsScreen
+import com.verdenroz.vpnchain.feature.settings.ImportRequest
 import com.verdenroz.vpnchain.feature.settings.QrScanRequest
 import com.verdenroz.vpnchain.feature.settings.navigation.settingsScreen
 import com.verdenroz.vpnchain.feature.sites.navigation.sitesScreen
@@ -49,7 +50,13 @@ fun VpnChainApp(appViewModel: AppViewModel = koinViewModel()) {
                 startDestination = CHAIN_ROUTE,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                chainScreen(onOpenSettings = { onSelect(TopLevelDestination.SETTINGS) })
+                chainScreen(
+                    onOpenSettings = { onSelect(TopLevelDestination.SETTINGS) },
+                    onPairAgain = {
+                        ImportRequest.request()
+                        onSelect(TopLevelDestination.SETTINGS)
+                    },
+                )
                 sitesScreen()
                 logsScreen()
                 settingsScreen()

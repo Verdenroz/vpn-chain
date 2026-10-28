@@ -38,6 +38,7 @@ import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.chain.generated.resources.Res
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_change
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_connect
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_cut_off
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_disconnect
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_empty_state_title
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_evidence_configured
@@ -58,6 +59,8 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switc
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_none
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_protected
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_open_settings
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_pair_again
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_remove_connection
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_ip
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_kill_switch
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_row_placeholder
@@ -78,6 +81,8 @@ internal fun ChainDetails(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
+    onPairAgain: () -> Unit,
+    onRemove: () -> Unit,
     fillHeight: Boolean = false,
 ) {
     Column(if (fillHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
@@ -85,7 +90,21 @@ internal fun ChainDetails(
             Readouts(uiState)
         }
         Spacer(Modifier.height(16.dp))
-        if (uiState.hasProfile) {
+        if (uiState.cutOff) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionButton(
+                    stringResource(Res.string.chain_remove_connection),
+                    onClick = onRemove,
+                    modifier = Modifier.weight(1f),
+                )
+                ActionButton(
+                    stringResource(Res.string.chain_pair_again),
+                    onClick = onPairAgain,
+                    modifier = Modifier.weight(1f),
+                    tone = ActionTone.Primary,
+                )
+            }
+        } else if (uiState.hasProfile) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionButton(
                     stringResource(Res.string.chain_change),
@@ -126,7 +145,7 @@ private fun Readouts(uiState: ChainUiState) {
         val since = uiState.connectedSinceMillis
         if (connected && since != null) UptimeText(since)
     }
-    Notices(status, connected)
+    Notices(status, connected, uiState.cutOff)
 
     Spacer(Modifier.height(12.dp))
     uiState.route.hops.forEach { hop -> HopInfoRow(hop) }
@@ -212,9 +231,9 @@ private fun KillSwitchRow(status: ChainStatus) {
 
 /** Error and kill-switch reasons carry commands to run, so they stay selectable. */
 @Composable
-private fun Notices(status: ChainStatus, connected: Boolean) {
+private fun Notices(status: ChainStatus, connected: Boolean, cutOff: Boolean) {
     val colors = VpnChainTheme.colors
-    val detail = status.detail?.asString()
+    val detail = if (cutOff) stringResource(Res.string.chain_cut_off) else status.detail?.asString()
     val hint = if (connected && status.killSwitch != KillSwitchState.Active) {
         stringResource(
             when (status.killSwitch) {

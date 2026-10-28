@@ -1,10 +1,12 @@
 package com.verdenroz.vpnchain.feature.chain
 
 import com.verdenroz.vpnchain.core.data.ChainRepository
+import com.verdenroz.vpnchain.core.data.ConnectivityRepository
 import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.OriginRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
+import com.verdenroz.vpnchain.core.domain.ChainSupervisor
 import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.ObserveChainRouteUseCase
@@ -24,9 +26,12 @@ import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
+import com.verdenroz.vpnchain.core.relay.RelayHandshake
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -118,6 +123,7 @@ private fun chainViewModel(learned: LearnedSitesRepository): ChainViewModel {
         profileRepository = profiles,
         settingsRepository = settings,
         learnedSites = learned,
+        supervisor = ChainSupervisor(chain, profiles, settings, StubConnectivity(), StubHandshake(), { 0L }),
     )
 }
 
@@ -204,4 +210,13 @@ private class StubGeolocator : RouteGeolocator {
 
 private class StubProbe : NetworkProbe {
     override suspend fun samplePublicIp(): PublicIpSample? = null
+}
+
+private class StubConnectivity : ConnectivityRepository {
+    override val online = flowOf(true)
+    override val linkChanges = emptyFlow<Unit>()
+}
+
+private class StubHandshake : RelayHandshake {
+    override suspend fun completes(host: String, port: Int, sni: String) = true
 }

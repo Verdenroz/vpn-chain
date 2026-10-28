@@ -250,6 +250,13 @@ fun SettingsScreen(
     // Import is the primary path for a fresh install; once a profile exists it
     // collapses back to a summary so re-importing is a deliberate action.
     var importExpanded by remember(hasProfile) { mutableStateOf(!hasProfile) }
+    val importRequested by ImportRequest.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(importRequested) {
+        if (importRequested) {
+            ImportRequest.consume()
+            importExpanded = true
+        }
+    }
     var formExpanded by remember { mutableStateOf(false) }
     var qrExpanded by remember { mutableStateOf(false) }
 
