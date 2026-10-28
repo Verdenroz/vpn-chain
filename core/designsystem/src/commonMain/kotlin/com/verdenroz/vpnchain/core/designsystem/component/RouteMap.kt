@@ -12,8 +12,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -99,7 +101,7 @@ fun RouteMap(
                         }
                     }
 
-                    val points = nodes.map { it to project(it) }
+                    val points = nodes.zip(spread(nodes.map(::project), DOT_GAP.toPx()))
                     points.zipWithNext { (_, from), (to, at) ->
                         val towardExit = to.kind == NodeKind.Exit
                         drawLeg(
@@ -121,12 +123,9 @@ fun RouteMap(
                     }
 
                     val placed = mutableListOf<Rect>()
-                    val named = mutableSetOf<String>()
                     points.sortedByDescending { (node, _) -> node.kind == NodeKind.Exit }.forEach { (node, at) ->
-                        if (named.add(node.label)) {
-                            val style = if (node.kind == NodeKind.Exit) exitLabelStyle else labelStyle
-                            placed += drawLabel(node.label, at, measurer, style, placed)
-                        }
+                        val style = if (node.kind == NodeKind.Exit) exitLabelStyle else labelStyle
+                        placed += drawLabel(node.label, at, measurer, style, colors.background, placed)
                     }
                 }
             }
@@ -198,6 +197,7 @@ private fun DrawScope.drawLabel(
     at: Offset,
     measurer: TextMeasurer,
     style: TextStyle,
+    chip: Color,
     occupied: List<Rect>,
 ): Rect {
     val layout = measurer.measure(text, style)
@@ -211,14 +211,22 @@ private fun DrawScope.drawLabel(
         Offset(at.x - w - gap, at.y - h / 2f),
     ).map { Rect(it.x, it.y, it.x + w, it.y + h) }
     val chosen = candidates.firstOrNull { r -> occupied.none { it.overlaps(r) } } ?: candidates.first()
+    val pad = 3.dp.toPx()
+    drawRoundRect(
+        chip.copy(alpha = 0.8f),
+        topLeft = chosen.topLeft - Offset(pad, 0f),
+        size = Size(w + 2 * pad, h),
+        cornerRadius = CornerRadius(4.dp.toPx()),
+    )
     drawText(layout, topLeft = chosen.topLeft)
     return chosen
 }
 
 private const val CAMERA_MS = 450
+private val DOT_GAP = 30.dp
 private const val SIDE_PAD = 0.18f
 private const val VERTICAL_PAD = 0.28f
-private const val MIN_SPAN = 50f
+private const val MIN_SPAN = 24f
 private const val MAX_SPAN = 360f
 
 // Inhabited latitudes; the polar caps are cropped so the map has no hard bottom edge.

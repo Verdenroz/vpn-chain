@@ -37,6 +37,21 @@ class RouteMapFitTest {
 
     @Test
     fun singleNodeStopsAtTheMinimumSpan() {
-        assertEquals(50f, fit(listOf(frankfurt), aspect = 1f).spanLon)
+        assertEquals(24f, fit(listOf(frankfurt), aspect = 1f).spanLon)
+    }
+
+    @Test
+    fun routeInsideOneCountryFramesJustThatRoute() {
+        val camera = fit(listOf(node(40.7, -74.0, NodeKind.Origin), node(25.8, -80.2, NodeKind.Entry)), aspect = 1.5f)
+        assertFalse(camera.wrapped)
+        assertTrue(camera.spanLon < 80f)
+        assertEquals((40.7f + 25.8f) / 2f, camera.centerLat, 0.01f)
+        assertEquals((-74.0f + -80.2f) / 2f, camera.centerLon, 0.01f)
+    }
+
+    @Test
+    fun hopsInOneCityStopAtTheMinimumSpan() {
+        val city = node(40.7, -74.0, NodeKind.Origin)
+        assertEquals(24f, fit(listOf(city, city.copy(kind = NodeKind.Entry)), aspect = 1.5f).spanLon)
     }
 }
