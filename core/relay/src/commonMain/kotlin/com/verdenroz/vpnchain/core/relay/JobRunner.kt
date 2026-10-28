@@ -6,11 +6,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 
-/**
- * Starts [request] and follows it to a terminal state; see [awaitJob].
- *
- * @return the job in the terminal state it reached.
- */
+/** Starts [request] and follows it to a terminal state; see [awaitJob]. */
 suspend fun RelayAgent.runJob(
     request: JobRequest,
     reconnect: suspend () -> Unit,

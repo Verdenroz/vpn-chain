@@ -9,10 +9,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * Covers the engine boot plus the service's readiness check, which gives up after
- * five probes of up to seven seconds with a pause between them.
- */
+/** Covers the engine boot plus the service's readiness check (five probes of up to seven seconds). */
 val CONNECT_TIMEOUT: Duration = 60.seconds
 
 /** A start or restart that did not end in [TunnelState.Connected]; [state] is Connecting when it timed out. */

@@ -49,7 +49,7 @@ data class ChainProfile(
     val localProxyPort: Int = DEFAULT_LOCAL_PROXY_PORT,
     /** The id the relay knows this device's management key by; null until the device has enrolled. */
     val managementKeyId: String? = null,
-    /** Whether that key is the relay's admin; false for a member and before enrolling. */
+    /** Whether that key is the relay's admin; false for a member or before enrolling. */
     val managementAdmin: Boolean = false,
     /** The name the relay gives this device; null until the device has enrolled. */
     val managementDevice: String? = null,

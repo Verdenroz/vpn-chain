@@ -8,7 +8,6 @@ import com.verdenroz.vpnchain.core.relay.createAgentTransport
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
-/** Binds the platform [com.verdenroz.vpnchain.core.relay.ManagementKey]. */
 expect val relayPlatformModule: Module
 
 /** The agent client needs a [com.verdenroz.vpnchain.core.relay.ProbeSource], which the data layer binds. */
