@@ -2,13 +2,17 @@ package com.verdenroz.vpnchain.core.geoip
 
 import com.verdenroz.vpnchain.core.geoip.generated.resources.Res
 
-private const val RECORD_SIZE = 6 // 4-byte big-endian start IP + 2-byte ASCII country code
+private const val RECORD_SIZE = 8 // 4-byte start IP, 2-byte ASCII country code, 2-byte city id (0 = none)
 
-/** Binary search over a sorted (startIp, countryCode) table — see `licenses/ATTRIBUTION.txt`. */
-internal class IpRangeIndex private constructor(private val data: ByteArray) {
+internal class IndexedCity(val name: String, val lat: Double, val lon: Double)
+
+internal class RangeHit(val countryCode: String, val city: IndexedCity?)
+
+/** Binary search over a sorted (startIp, countryCode, city) table — see `licenses/ATTRIBUTION.txt`. */
+internal class IpRangeIndex(private val data: ByteArray, private val cities: List<IndexedCity>) {
     private val recordCount = data.size / RECORD_SIZE
 
-    fun countryCodeFor(ip: Long): String {
+    fun lookup(ip: Long): RangeHit {
         var lo = 0
         var hi = recordCount - 1
         var match = 0
@@ -21,7 +25,9 @@ internal class IpRangeIndex private constructor(private val data: ByteArray) {
                 hi = mid - 1
             }
         }
-        return countryCodeAt(match)
+        val offset = match * RECORD_SIZE + 4
+        val cityId = (data[offset + 2].toInt() and 0xFF shl 8) or (data[offset + 3].toInt() and 0xFF)
+        return RangeHit(data.decodeToString(offset, offset + 2), cities.getOrNull(cityId - 1))
     }
 
     private fun startIpAt(index: Int): Long {
@@ -32,15 +38,17 @@ internal class IpRangeIndex private constructor(private val data: ByteArray) {
             (data[offset + 3].toLong() and 0xFF)
     }
 
-    private fun countryCodeAt(index: Int): String {
-        val offset = index * RECORD_SIZE + 4
-        return data.decodeToString(offset, offset + 2)
-    }
-
     companion object {
-        suspend fun load(): IpRangeIndex = IpRangeIndex(Res.readBytes("files/geoip_ranges.bin"))
+        suspend fun load(): IpRangeIndex =
+            IpRangeIndex(Res.readBytes("files/geoip_ranges.bin"), parseCities(Res.readBytes("files/geoip_cities.tsv")))
     }
 }
+
+internal fun parseCities(tsv: ByteArray): List<IndexedCity> =
+    tsv.decodeToString().lineSequence().filter(String::isNotEmpty).map { line ->
+        val (lat, lon, name) = line.split('\t')
+        IndexedCity(name, lat.toDouble(), lon.toDouble())
+    }.toList()
 
 /** Parses a dotted-decimal IPv4 string; returns null for anything else (including hostnames). */
 internal fun parseIpv4(value: String): Long? {

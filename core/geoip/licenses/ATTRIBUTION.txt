@@ -1,10 +1,12 @@
 # Data sources
 
-`geoip_ranges.bin` — IPv4 range → country-code table, compiled from the
-[DB-IP Lite country database](https://db-ip.com/db/download/ip-to-country-lite)
-(2026-07 edition), licensed under
+`geoip_ranges.bin` and `geoip_cities.tsv` — IPv4 range → country and city
+table, compiled from the
+[DB-IP Lite city database](https://db-ip.com/db/download/ip-to-city-lite)
+(2026-10 edition), licensed under
 [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
 Attribution: IP Geolocation by [DB-IP](https://db-ip.com).
+`tools/build_geoip.py` rebuilds both from the pinned, checksummed download.
 
 `CountryGeo.kt` centroids — computed from
 [Natural Earth](https://www.naturalearthdata.com/) 1:110m Admin 0 Countries
