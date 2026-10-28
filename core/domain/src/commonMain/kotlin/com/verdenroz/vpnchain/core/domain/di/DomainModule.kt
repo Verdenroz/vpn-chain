@@ -40,6 +40,7 @@ val domainModule = module {
             profiles = get(),
             settings = get(),
             network = get(),
+            now = ::currentTimeMillis,
         )
     }
 }

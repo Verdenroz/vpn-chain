@@ -1,10 +1,12 @@
 package com.verdenroz.vpnchain.feature.chain
 
 import com.verdenroz.vpnchain.core.data.ChainRepository
+import com.verdenroz.vpnchain.core.data.ConnectivityRepository
 import com.verdenroz.vpnchain.core.data.LearnedSitesRepository
 import com.verdenroz.vpnchain.core.data.OriginRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
+import com.verdenroz.vpnchain.core.domain.ChainSupervisor
 import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.ObserveChainRouteUseCase
@@ -27,6 +29,7 @@ import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -106,11 +109,17 @@ private fun offered(domain: String, learnedAtMillis: Long) =
 
 private val RELAY = ChainProfile(vpsIp = "203.0.113.10", vlessUuid = "uuid", realityPublicKey = "pubkey", shortId = "ab12")
 
-private fun chainViewModel(learned: LearnedSitesRepository): ChainViewModel {
-    val chain = StubChain()
-    val profiles = StubProfiles()
-    val settings = StubSettings()
-    return ChainViewModel(
+private fun chainViewModel(learned: LearnedSitesRepository): ChainViewModel = ChainRig(learned).viewModel
+
+internal class ChainRig(
+    learned: LearnedSitesRepository,
+    val chain: StubChain = StubChain(),
+    val profiles: StubProfiles = StubProfiles(),
+    val settings: StubSettings = StubSettings(),
+) {
+    val supervisor = ChainSupervisor(chain, profiles, settings, StubConnectivity(), { 0L })
+
+    val viewModel = ChainViewModel(
         connectChain = ConnectChainUseCase(chain),
         disconnectChain = DisconnectChainUseCase(chain),
         observeChainRoute = ObserveChainRouteUseCase(profiles, settings, chain, StubOrigin(), StubGeolocator(), StubProbe()),
@@ -118,10 +127,11 @@ private fun chainViewModel(learned: LearnedSitesRepository): ChainViewModel {
         profileRepository = profiles,
         settingsRepository = settings,
         learnedSites = learned,
+        supervisor = supervisor,
     )
 }
 
-private class FakeLearned(vararg initial: LearnedSite) : LearnedSitesRepository {
+internal class FakeLearned(vararg initial: LearnedSite) : LearnedSitesRepository {
     val calls = mutableListOf<String>()
     override val sites = MutableStateFlow(initial.toList())
     override suspend fun isSuppressed(domain: String) = false
@@ -145,27 +155,42 @@ private class FakeLearned(vararg initial: LearnedSite) : LearnedSitesRepository 
     }
 }
 
-private class StubChain : ChainRepository {
+internal class StubChain : ChainRepository {
     override val status = MutableStateFlow(ChainStatus())
     override val connectionIntent = MutableStateFlow(false)
     override val stats = MutableStateFlow(SessionStats())
     override val killSwitchGuidanceSupported = false
     override val alwaysOnDetected = MutableStateFlow(false)
     override fun openSystemVpnSettings() = Unit
-    override suspend fun connect() = Result.success(Unit)
-    override suspend fun reconnect() = Result.success(Unit)
-    override suspend fun disconnect() = Unit
+    var reconnectFails = false
+    var disconnects = 0
+    var connects = 0
+    override suspend fun connect(): Result<Unit> {
+        connects++
+        return Result.success(Unit)
+    }
+    override suspend fun reconnect(): Result<Unit> {
+        if (!reconnectFails) return Result.success(Unit)
+        status.value = status.value.copy(carriedNothing = true)
+        return Result.failure(IllegalStateException("silent"))
+    }
+    override suspend fun disconnect() {
+        disconnects++
+    }
     override suspend fun release() = Unit
 }
 
-private class StubProfiles : ProfileRepository {
+internal class StubProfiles : ProfileRepository {
     override val profiles = MutableStateFlow(listOf(SavedProfile("r", "relay", relay = RELAY)))
     override val profile = MutableStateFlow<SavedProfile?>(profiles.value.first())
     override val activeProfileId = MutableStateFlow<String?>("r")
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = Unit
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = "x"
     override suspend fun rename(id: String, name: String) = Unit
-    override suspend fun delete(id: String) = Unit
+    val deleted = mutableListOf<String>()
+    override suspend fun delete(id: String) {
+        deleted += id
+    }
     override suspend fun setActive(id: String) = Unit
     override suspend fun clear() = Unit
     override suspend fun importFromSecretsEnv(text: String, activate: Boolean) = Result.failure<ChainProfile>(IllegalStateException())
@@ -173,7 +198,7 @@ private class StubProfiles : ProfileRepository {
         Result.failure<WireGuardEntry>(IllegalStateException())
 }
 
-private class StubSettings : SettingsRepository {
+internal class StubSettings : SettingsRepository {
     override val settings = MutableStateFlow(UserSettings(warpMode = WarpMode.Automatic))
     override val autostartSupported = false
     override suspend fun setAutoStartOnLogin(enabled: Boolean) = Result.success(Unit)
@@ -182,7 +207,9 @@ private class StubSettings : SettingsRepository {
     override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
     override suspend fun setAllowLocalNetworks(enabled: Boolean) = Unit
     override suspend fun setDnsFilter(filter: DnsFilter) = Unit
-    override suspend fun setEntryHopEnabled(enabled: Boolean) = Unit
+    override suspend fun setEntryHopEnabled(enabled: Boolean) {
+        settings.value = settings.value.copy(entryHopEnabled = enabled)
+    }
     override suspend fun setWarpMode(mode: WarpMode) = Unit
     override suspend fun setLearnBlockedSites(enabled: Boolean) = Unit
     override suspend fun setFailOpen(enabled: Boolean) = Unit
@@ -193,15 +220,20 @@ private class StubSettings : SettingsRepository {
     override suspend fun setCloseToTray(enabled: Boolean) = Unit
 }
 
-private class StubOrigin : OriginRepository {
+internal class StubOrigin : OriginRepository {
     override val lastKnownOriginIp = MutableStateFlow<String?>(null)
     override suspend fun record(ip: String) = Unit
 }
 
-private class StubGeolocator : RouteGeolocator {
+internal class StubGeolocator : RouteGeolocator {
     override suspend fun locate(hostOrIp: String): HopLocation? = null
 }
 
-private class StubProbe : NetworkProbe {
+internal class StubProbe : NetworkProbe {
     override suspend fun samplePublicIp(): PublicIpSample? = null
+}
+
+internal class StubConnectivity : ConnectivityRepository {
+    override val online = MutableStateFlow(true)
+    override val linkChanges = MutableSharedFlow<Unit>()
 }

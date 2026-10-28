@@ -9,8 +9,8 @@ const val CHAIN_ROUTE = "chain"
 
 fun NavController.navigateToChain() = navigate(CHAIN_ROUTE)
 
-fun NavGraphBuilder.chainScreen(onOpenSettings: () -> Unit) {
+fun NavGraphBuilder.chainScreen(onOpenSettings: () -> Unit, onPairAgain: () -> Unit) {
     composable(CHAIN_ROUTE) {
-        ChainRoute(onOpenSettings = onOpenSettings)
+        ChainRoute(onOpenSettings = onOpenSettings, onPairAgain = onPairAgain)
     }
 }

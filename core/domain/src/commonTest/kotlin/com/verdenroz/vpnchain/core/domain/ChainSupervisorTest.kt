@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -292,6 +293,89 @@ class ChainSupervisorTest {
     }
 
     @Test
+    fun `slows down to a steady interval once attempts keep carrying nothing`() = runTest {
+        val world = silentWorld()
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(SILENT_RETRIES_MS)
+        assertEquals(ReconnectState.CutOff, world.supervisor.state.value)
+        val attempts = world.chain.reconnectCalls
+        advanceTimeBy(CUT_OFF_RETRY_MS * 3 + SETTLE_MS)
+
+        assertEquals(3, attempts)
+        assertEquals(attempts + 3, world.chain.reconnectCalls, "one retry per slow interval")
+        assertEquals(ReconnectState.CutOff, world.supervisor.state.value)
+        assertEquals(0, world.chain.releaseCalls, "the tunnel stays held while retries continue")
+    }
+
+    @Test
+    fun `a success after the cut-off state clears it`() = runTest {
+        val world = silentWorld()
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(SILENT_RETRIES_MS)
+        assertEquals(ReconnectState.CutOff, world.supervisor.state.value)
+
+        world.chain.reconnectKeepsFailing = false
+        advanceTimeBy(CUT_OFF_RETRY_MS + SETTLE_MS)
+
+        assertEquals(ReconnectState.Idle, world.supervisor.state.value)
+        assertEquals(TunnelState.Connected, world.chain.currentState())
+    }
+
+    @Test
+    fun `keeps reconnecting while the link is down`() = runTest {
+        val world = silentWorld()
+        world.network.reachable.value = false
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(OFFLINE_WAIT_CAP_MS * 8)
+
+        assertTrue(world.chain.reconnectCalls > 3, "an outage has to keep retrying")
+        assertNotEquals(ReconnectState.CutOff, world.supervisor.state.value)
+    }
+
+    @Test
+    fun `a recovery before the last attempt leaves no cut-off behind`() = runTest {
+        val world = silentWorld()
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(ReconnectPolicy.delayForAttemptMillis(1) + ReconnectPolicy.delayForAttemptMillis(2) + SETTLE_MS)
+        assertEquals(2, world.chain.reconnectCalls)
+        world.chain.reconnectKeepsFailing = false
+        advanceTimeBy(ReconnectPolicy.delayForAttemptMillis(3) + SETTLE_MS)
+
+        assertEquals(ReconnectState.Idle, world.supervisor.state.value)
+
+        world.chain.reconnectKeepsFailing = true
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(ReconnectPolicy.delayForAttemptMillis(1) + ReconnectPolicy.delayForAttemptMillis(2) + SETTLE_MS)
+        assertNotEquals(ReconnectState.CutOff, world.supervisor.state.value, "the count starts over after a recovery")
+    }
+
+    @Test
+    fun `a cut-off clears when the connection is replaced`() = runTest {
+        val world = silentWorld()
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(SILENT_RETRIES_MS)
+        assertEquals(ReconnectState.CutOff, world.supervisor.state.value)
+
+        world.profiles.stored.value = null
+        advanceTimeBy(SETTLE_MS)
+
+        assertEquals(ReconnectState.Idle, world.supervisor.state.value)
+    }
+
+    @Test
     fun `leaves a connecting tunnel alone`() = runTest {
         val world = SupervisorWorld(this, initialState = TunnelState.Connected)
         world.chain.connectionIntent.value = true
@@ -321,6 +405,20 @@ class ChainSupervisorTest {
 
 }
 
+/** Long enough for three silent attempts and the backoffs between them. */
+private val SILENT_RETRIES_MS = ReconnectPolicy.delayForAttemptMillis(1) +
+    ReconnectPolicy.delayForAttemptMillis(2) +
+    ReconnectPolicy.delayForAttemptMillis(3) +
+    SETTLE_MS
+
+private fun TestScope.silentWorld(): SupervisorWorld {
+    val world = SupervisorWorld(this, initialState = TunnelState.Connected)
+    world.chain.connectionIntent.value = true
+    world.chain.reconnectKeepsFailing = true
+    world.chain.failsSilently = true
+    return world
+}
+
 /** Long enough for a switch to tear down one relay and dial the next. */
 private const val SWITCH_MS = 5_000L
 
@@ -329,6 +427,9 @@ private const val SETTLE_MS = 100L
 
 /** Mirrors ChainSupervisor's own cap on waiting for a link. */
 private const val OFFLINE_WAIT_CAP_MS = 5 * 60 * 1000L
+
+/** Mirrors ChainSupervisor's own slow retry interval. */
+private const val CUT_OFF_RETRY_MS = 2 * 60 * 1000L
 
 private fun settings(
     autoConnectOnLaunch: Boolean = false,
@@ -358,11 +459,12 @@ private class SupervisorWorld(
     val settingsRepo = FakeSettingsRepository(settings)
     val network = FakeConnectivity()
 
-    private val supervisor = ChainSupervisor(
+    val supervisor = ChainSupervisor(
         chain = chain,
         profiles = profiles,
         settings = settingsRepo,
         network = network,
+        now = { scope.testScheduler.currentTime },
     )
 
     /** backgroundScope so the supervisor's endless retry loop is torn down with the test. */
@@ -384,6 +486,9 @@ private class FakeChainRepository(initialState: TunnelState) : ChainRepository {
     var reconnectCalls = 0
     var releaseCalls = 0
     var reconnectKeepsFailing = false
+    var failsSilently = false
+
+    fun currentState() = statusFlow.value.state
 
     fun emit(state: TunnelState) {
         statusFlow.value = statusFlow.value.copy(state = state)
@@ -401,6 +506,7 @@ private class FakeChainRepository(initialState: TunnelState) : ChainRepository {
         if (reconnectKeepsFailing) {
             // A failed attempt leaves the tunnel where it was: still down, and
             // with no new status emission for the supervisor to react to.
+            statusFlow.value = statusFlow.value.copy(state = TunnelState.Error, carriedNothing = failsSilently)
             return Result.failure(IllegalStateException("still down"))
         }
         emit(TunnelState.Connected)

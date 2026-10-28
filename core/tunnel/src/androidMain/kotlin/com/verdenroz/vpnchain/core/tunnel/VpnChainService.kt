@@ -342,7 +342,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
             delay(READINESS_RETRY_MS)
         }
         if (!owns(gen) || TunnelBridge.status.value.state != TunnelState.Connecting) return
-        dropEngine(gen, UiText.Resource(Res.string.tunnel_error_no_traffic))
+        dropEngine(gen, UiText.Resource(Res.string.tunnel_error_no_traffic), carriedNothing = true)
     }
 
     /**
@@ -393,7 +393,7 @@ class VpnChainService : VpnService(), CommandServerHandler {
             if (carries) return
             if (!owns(gen) || TunnelBridge.status.value.state != TunnelState.Connected) return
             TunnelBridge.log("chain stopped carrying traffic, rebuilding it")
-            dropEngine(gen, UiText.Resource(Res.string.tunnel_error_stopped_carrying))
+            dropEngine(gen, UiText.Resource(Res.string.tunnel_error_stopped_carrying), carriedNothing = true)
         }
     }
 
@@ -403,14 +403,14 @@ class VpnChainService : VpnService(), CommandServerHandler {
      * read as the user having asked for it. The foreground notification stays —
      * see the class comment for why the service must not stop itself here.
      */
-    private suspend fun dropEngine(gen: Int, detail: UiText) =
-        lifecycleLock.withLock { dropEngineLocked(gen, detail) }
+    private suspend fun dropEngine(gen: Int, detail: UiText, carriedNothing: Boolean = false) =
+        lifecycleLock.withLock { dropEngineLocked(gen, detail, carriedNothing) }
 
     /** [dropEngine] for callers already holding [lifecycleLock] — it is not reentrant. */
-    private fun dropEngineLocked(gen: Int, detail: UiText) {
+    private fun dropEngineLocked(gen: Int, detail: UiText, carriedNothing: Boolean = false) {
         if (!owns(gen)) return
         cleanup()
-        TunnelBridge.setState(TunnelState.Error, detail)
+        TunnelBridge.setState(TunnelState.Error, detail, carriedNothing)
         updateNotification(getString(R.string.tunnel_notification_reconnecting))
     }
 

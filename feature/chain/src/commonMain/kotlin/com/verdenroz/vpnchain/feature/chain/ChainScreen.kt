@@ -37,6 +37,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun ChainRoute(
     onOpenSettings: () -> Unit,
+    onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ChainViewModel = koinViewModel(),
 ) {
@@ -46,6 +47,9 @@ fun ChainRoute(
         onConnect = viewModel::connect,
         onDisconnect = viewModel::disconnect,
         onOpenSettings = onOpenSettings,
+        onPairAgain = onPairAgain,
+        onConnectWithoutEntryHop = viewModel::connectWithoutEntryHop,
+        onRemove = viewModel::removeConnection,
         onUseMyConnection = viewModel::sendDirect,
         onDismissBlocked = viewModel::dismissBlocked,
         modifier = modifier,
@@ -58,6 +62,9 @@ fun ChainScreen(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
+    onPairAgain: () -> Unit,
+    onConnectWithoutEntryHop: () -> Unit,
+    onRemove: () -> Unit,
     onUseMyConnection: (String) -> Unit,
     onDismissBlocked: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -78,7 +85,7 @@ fun ChainScreen(
                     uiState.blockedSite?.let { site ->
                         BlockedSitePrompt(site, onDismissBlocked, onUseMyConnection, Modifier.padding(bottom = 16.dp))
                     }
-                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, fillHeight = true)
+                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, onPairAgain, onConnectWithoutEntryHop, onRemove, fillHeight = true)
                 }
             }
         } else {
@@ -90,7 +97,7 @@ fun ChainScreen(
                         BlockedSitePrompt(site, onDismissBlocked, onUseMyConnection, Modifier.padding(bottom = 12.dp))
                     }
                     InfoCard(Modifier.weight(1f, fill = false).fillMaxWidth()) {
-                        ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings)
+                        ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, onPairAgain, onConnectWithoutEntryHop, onRemove)
                     }
                 }
             }

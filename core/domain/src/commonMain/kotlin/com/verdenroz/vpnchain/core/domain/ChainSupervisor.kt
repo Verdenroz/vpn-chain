@@ -27,6 +27,9 @@ sealed interface ReconnectState {
     data object Idle : ReconnectState
     data class Waiting(val attempt: Int, val delayMillis: Long) : ReconnectState
     data class Retrying(val attempt: Int) : ReconnectState
+
+    /** Repeated attempts on a usable link carried nothing: the relay is down or has cut this device off. Retries slow down. */
+    data object CutOff : ReconnectState
 }
 
 /**
@@ -42,14 +45,25 @@ class ChainSupervisor(
     private val profiles: ProfileRepository,
     private val settings: SettingsRepository,
     private val network: ConnectivityRepository,
+    private val now: () -> Long,
 ) {
 
     private val _state = MutableStateFlow<ReconnectState>(ReconnectState.Idle)
     val state: StateFlow<ReconnectState> = _state.asStateFlow()
 
+    private val silentAttempts = ArrayDeque<Long>()
+
     suspend fun run(): Unit = coroutineScope {
         launch { connectOnLaunch() }
         launch { superviseDrops() }
+        launch { clearCutOffOnNewProfile() }
+    }
+
+    private suspend fun clearCutOffOnNewProfile() {
+        profiles.profile.distinctUntilChanged().collect {
+            silentAttempts.clear()
+            _state.value = ReconnectState.Idle
+        }
     }
 
     private suspend fun connectOnLaunch() {
@@ -71,6 +85,7 @@ class ChainSupervisor(
                 when (state) {
                     TunnelState.Connected -> {
                         attempt = 0
+                        silentAttempts.clear()
                         _state.value = ReconnectState.Idle
                     }
 
@@ -80,17 +95,19 @@ class ChainSupervisor(
                         // distinctUntilChanged would never re-emit.
                         while (shouldReconnect()) {
                             attempt++
-                            val wait = ReconnectPolicy.delayForAttemptMillis(attempt)
-                            _state.value = ReconnectState.Waiting(attempt, wait)
+                            val slow = silentAttempts.size >= CUT_OFF_ATTEMPTS
+                            val wait = if (slow) CUT_OFF_RETRY_MS else ReconnectPolicy.delayForAttemptMillis(attempt)
+                            _state.value = if (slow) ReconnectState.CutOff else ReconnectState.Waiting(attempt, wait)
                             awaitBackoffOrNetworkReturn(wait)
                             awaitUsableLink()
                             // Re-checked after the wait: the user can disconnect
                             // during a backoff, and that has to win.
                             if (!shouldReconnect()) break
-                            _state.value = ReconnectState.Retrying(attempt)
+                            if (!slow) _state.value = ReconnectState.Retrying(attempt)
                             // Not cancellable: reaching Connecting re-emits and
                             // would otherwise cancel the very attempt in flight.
-                            withContext(NonCancellable) { chain.reconnect() }
+                            val result = withContext(NonCancellable) { chain.reconnect() }
+                            if (isCutOff(result)) _state.value = ReconnectState.CutOff
                         }
                         _state.value = ReconnectState.Idle
                         // A drop nobody is going to retry must not leave the
@@ -109,6 +126,26 @@ class ChainSupervisor(
         chain.connectionIntent.first() &&
             settings.settings.first().autoReconnect &&
             profiles.profile.first() != null
+
+    /**
+     * Whether consecutive attempts on a usable link all ended with the chain
+     * carrying nothing. A relay that dropped this identity looks like its decoy
+     * site, and a relay that is down fails the same way, so this slows retries
+     * instead of stopping them. Any other outcome, or a link that is down,
+     * restarts the count.
+     */
+    private suspend fun isCutOff(result: Result<Unit>): Boolean {
+        if (result.isSuccess || !chain.status.first().carriedNothing || !network.online.first()) {
+            silentAttempts.clear()
+            return false
+        }
+        if (silentAttempts.size < CUT_OFF_ATTEMPTS) {
+            val at = now()
+            silentAttempts.addLast(at)
+            while (at - silentAttempts.first() > CUT_OFF_WINDOW_MS) silentAttempts.removeFirst()
+        }
+        return silentAttempts.size >= CUT_OFF_ATTEMPTS
+    }
 
     /**
      * Holds an attempt back until there is a link to dial on.
@@ -145,5 +182,10 @@ class ChainSupervisor(
 
     private companion object {
         const val OFFLINE_WAIT_CAP_MS = 5 * 60 * 1000L
+        const val CUT_OFF_ATTEMPTS = 3
+        const val CUT_OFF_RETRY_MS = 2 * 60 * 1000L
+
+        // One attempt can spend half a minute in its readiness check.
+        const val CUT_OFF_WINDOW_MS = 5 * 60 * 1000L
     }
 }

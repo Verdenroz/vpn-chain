@@ -35,4 +35,9 @@
     <string name="chain_change">Change</string>
     <string name="chain_connect">Connect</string>
     <string name="chain_disconnect">Disconnect</string>
+    <string name="chain_cut_off">Nothing gets through your relay. It may be down, or this device was cut off. Still trying every few minutes.</string>
+    <string name="chain_cut_off_entry_hop">Nothing gets through. Your entry hop may have expired, your relay may be down, or this device was cut off. Still trying every few minutes.</string>
+    <string name="chain_connect_without_entry_hop">Connect without entry hop</string>
+    <string name="chain_pair_again">Pair again</string>
+    <string name="chain_remove_connection">Remove this connection</string>
 </resources>
