@@ -25,7 +25,6 @@ class EngineHandler(
     private val disconnect: DisconnectChainUseCase,
     private val switchProfile: SwitchProfileUseCase,
     private val settings: Flow<UserSettings>,
-    private val cutOff: Flow<Boolean>,
     private val onShow: () -> Unit,
 ) {
 
@@ -89,9 +88,9 @@ class EngineHandler(
 
     // Mirrors ChainSupervisor's own test for whether a drop gets redialled.
     private fun status(): Flow<EngineStatus> =
-        combine(chain.status, summaries(), chain.connectionIntent, settings, cutOff) { status, summaries, intent, settings, cutOff ->
+        combine(chain.status, summaries(), chain.connectionIntent, settings) { status, summaries, intent, settings ->
             val active = summaries.firstOrNull { it.active }
-            status.toWire(active, willRetry = intent && settings.autoReconnect && active != null && !cutOff)
+            status.toWire(active, willRetry = intent && settings.autoReconnect && active != null)
         }
 
     // Entries are kept by reference across ring updates, so identity finds where the last batch ended.

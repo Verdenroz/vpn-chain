@@ -28,7 +28,7 @@ sealed interface ReconnectState {
     data class Waiting(val attempt: Int, val delayMillis: Long) : ReconnectState
     data class Retrying(val attempt: Int) : ReconnectState
 
-    /** The relay answers but the chain carries nothing for this device, so retries have stopped. */
+    /** Repeated attempts on a usable link carried nothing: the relay is down or has cut this device off. Retries slow down. */
     data object CutOff : ReconnectState
 }
 
@@ -61,7 +61,8 @@ class ChainSupervisor(
 
     private suspend fun clearCutOffOnNewProfile() {
         profiles.profile.distinctUntilChanged().collect {
-            if (_state.value == ReconnectState.CutOff) _state.value = ReconnectState.Idle
+            silentAttempts.clear()
+            _state.value = ReconnectState.Idle
         }
     }
 
@@ -94,23 +95,21 @@ class ChainSupervisor(
                         // distinctUntilChanged would never re-emit.
                         while (shouldReconnect()) {
                             attempt++
-                            val wait = ReconnectPolicy.delayForAttemptMillis(attempt)
-                            _state.value = ReconnectState.Waiting(attempt, wait)
+                            val slow = silentAttempts.size >= CUT_OFF_ATTEMPTS
+                            val wait = if (slow) CUT_OFF_RETRY_MS else ReconnectPolicy.delayForAttemptMillis(attempt)
+                            _state.value = if (slow) ReconnectState.CutOff else ReconnectState.Waiting(attempt, wait)
                             awaitBackoffOrNetworkReturn(wait)
                             awaitUsableLink()
                             // Re-checked after the wait: the user can disconnect
                             // during a backoff, and that has to win.
                             if (!shouldReconnect()) break
-                            _state.value = ReconnectState.Retrying(attempt)
+                            if (!slow) _state.value = ReconnectState.Retrying(attempt)
                             // Not cancellable: reaching Connecting re-emits and
                             // would otherwise cancel the very attempt in flight.
                             val result = withContext(NonCancellable) { chain.reconnect() }
-                            if (isCutOff(result)) {
-                                _state.value = ReconnectState.CutOff
-                                break
-                            }
+                            if (isCutOff(result)) _state.value = ReconnectState.CutOff
                         }
-                        if (_state.value != ReconnectState.CutOff) _state.value = ReconnectState.Idle
+                        _state.value = ReconnectState.Idle
                         // A drop nobody is going to retry must not leave the
                         // platform tunnel held: Android keeps its VpnService in
                         // the foreground across a drop precisely so a retry can
@@ -118,33 +117,33 @@ class ChainSupervisor(
                         if (state == TunnelState.Error && !shouldReconnect()) chain.release()
                     }
 
-                    TunnelState.Connecting -> {
-                        if (_state.value == ReconnectState.CutOff) _state.value = ReconnectState.Idle
-                    }
+                    TunnelState.Connecting -> Unit
                 }
             }
     }
 
     private suspend fun shouldReconnect(): Boolean =
-        _state.value != ReconnectState.CutOff &&
-            chain.connectionIntent.first() &&
+        chain.connectionIntent.first() &&
             settings.settings.first().autoReconnect &&
             profiles.profile.first() != null
 
     /**
      * Whether consecutive attempts on a usable link all ended with the chain
      * carrying nothing. A relay that dropped this identity looks like its decoy
-     * site, so the dial works and nothing flows. Any other outcome, or a link
-     * that is down, restarts the count.
+     * site, and a relay that is down fails the same way, so this slows retries
+     * instead of stopping them. Any other outcome, or a link that is down,
+     * restarts the count.
      */
     private suspend fun isCutOff(result: Result<Unit>): Boolean {
         if (result.isSuccess || !chain.status.first().carriedNothing || !network.online.first()) {
             silentAttempts.clear()
             return false
         }
-        val at = now()
-        silentAttempts.addLast(at)
-        while (at - silentAttempts.first() > CUT_OFF_WINDOW_MS) silentAttempts.removeFirst()
+        if (silentAttempts.size < CUT_OFF_ATTEMPTS) {
+            val at = now()
+            silentAttempts.addLast(at)
+            while (at - silentAttempts.first() > CUT_OFF_WINDOW_MS) silentAttempts.removeFirst()
+        }
         return silentAttempts.size >= CUT_OFF_ATTEMPTS
     }
 
@@ -184,6 +183,7 @@ class ChainSupervisor(
     private companion object {
         const val OFFLINE_WAIT_CAP_MS = 5 * 60 * 1000L
         const val CUT_OFF_ATTEMPTS = 3
+        const val CUT_OFF_RETRY_MS = 2 * 60 * 1000L
 
         // One attempt can spend half a minute in its readiness check.
         const val CUT_OFF_WINDOW_MS = 5 * 60 * 1000L

@@ -293,20 +293,37 @@ class ChainSupervisorTest {
     }
 
     @Test
-    fun `stops retrying once the relay answers but the chain carries nothing`() = runTest {
+    fun `slows down to a steady interval once attempts keep carrying nothing`() = runTest {
         val world = silentWorld()
         world.run()
         advanceTimeBy(SETTLE_MS)
 
         world.chain.emit(TunnelState.Error)
         advanceTimeBy(SILENT_RETRIES_MS)
-        val attempts = world.chain.reconnectCalls
-        advanceTimeBy(ReconnectPolicy.MAX_DELAY_MS * 4)
-
         assertEquals(ReconnectState.CutOff, world.supervisor.state.value)
+        val attempts = world.chain.reconnectCalls
+        advanceTimeBy(CUT_OFF_RETRY_MS * 3 + SETTLE_MS)
+
         assertEquals(3, attempts)
-        assertEquals(attempts, world.chain.reconnectCalls, "a cut-off device has to stop dialling")
-        assertEquals(1, world.chain.releaseCalls, "the held tunnel is let go with the loop")
+        assertEquals(attempts + 3, world.chain.reconnectCalls, "one retry per slow interval")
+        assertEquals(ReconnectState.CutOff, world.supervisor.state.value)
+        assertEquals(0, world.chain.releaseCalls, "the tunnel stays held while retries continue")
+    }
+
+    @Test
+    fun `a success after the cut-off state clears it`() = runTest {
+        val world = silentWorld()
+        world.run()
+        advanceTimeBy(SETTLE_MS)
+        world.chain.emit(TunnelState.Error)
+        advanceTimeBy(SILENT_RETRIES_MS)
+        assertEquals(ReconnectState.CutOff, world.supervisor.state.value)
+
+        world.chain.reconnectKeepsFailing = false
+        advanceTimeBy(CUT_OFF_RETRY_MS + SETTLE_MS)
+
+        assertEquals(ReconnectState.Idle, world.supervisor.state.value)
+        assertEquals(TunnelState.Connected, world.chain.currentState())
     }
 
     @Test
@@ -341,21 +358,6 @@ class ChainSupervisorTest {
         world.chain.emit(TunnelState.Error)
         advanceTimeBy(ReconnectPolicy.delayForAttemptMillis(1) + ReconnectPolicy.delayForAttemptMillis(2) + SETTLE_MS)
         assertNotEquals(ReconnectState.CutOff, world.supervisor.state.value, "the count starts over after a recovery")
-    }
-
-    @Test
-    fun `a cut-off clears when the user connects again`() = runTest {
-        val world = silentWorld()
-        world.run()
-        advanceTimeBy(SETTLE_MS)
-        world.chain.emit(TunnelState.Error)
-        advanceTimeBy(SILENT_RETRIES_MS)
-        assertEquals(ReconnectState.CutOff, world.supervisor.state.value)
-
-        world.chain.emit(TunnelState.Connecting)
-        advanceTimeBy(SETTLE_MS)
-
-        assertEquals(ReconnectState.Idle, world.supervisor.state.value)
     }
 
     @Test
@@ -426,6 +428,9 @@ private const val SETTLE_MS = 100L
 /** Mirrors ChainSupervisor's own cap on waiting for a link. */
 private const val OFFLINE_WAIT_CAP_MS = 5 * 60 * 1000L
 
+/** Mirrors ChainSupervisor's own slow retry interval. */
+private const val CUT_OFF_RETRY_MS = 2 * 60 * 1000L
+
 private fun settings(
     autoConnectOnLaunch: Boolean = false,
     autoReconnect: Boolean = true,
@@ -482,6 +487,8 @@ private class FakeChainRepository(initialState: TunnelState) : ChainRepository {
     var releaseCalls = 0
     var reconnectKeepsFailing = false
     var failsSilently = false
+
+    fun currentState() = statusFlow.value.state
 
     fun emit(state: TunnelState) {
         statusFlow.value = statusFlow.value.copy(state = state)

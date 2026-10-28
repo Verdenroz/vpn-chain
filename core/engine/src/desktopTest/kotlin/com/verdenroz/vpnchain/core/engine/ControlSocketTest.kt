@@ -289,15 +289,6 @@ class ControlSocketTest {
     }
 
     @Test
-    fun `an error the supervisor gave up on is final`() {
-        chain.status.value = chain.status.value.copy(state = TunnelState.Error)
-        chain.connectionIntent.value = true
-        serve(handler = handlerOver(chain, profiles, logs, cutOff = MutableStateFlow(true)))
-        val status = client().use { assertIs<Reply.Status>(it.call(Request.Status)).status }
-        assertFalse(status.willRetry)
-    }
-
-    @Test
     fun `an error with auto-reconnect off is final`() {
         chain.status.value = chain.status.value.copy(state = TunnelState.Error)
         chain.connectionIntent.value = true

@@ -3,8 +3,6 @@ package com.verdenroz.vpnchain.core.engine.di
 import com.verdenroz.vpnchain.core.common.appVersion
 import com.verdenroz.vpnchain.core.common.di.applicationScopeQualifier
 import com.verdenroz.vpnchain.core.data.SettingsRepository
-import com.verdenroz.vpnchain.core.domain.ChainSupervisor
-import com.verdenroz.vpnchain.core.domain.ReconnectState
 import com.verdenroz.vpnchain.core.domain.di.startEngine
 import com.verdenroz.vpnchain.core.engine.ControlServer
 import com.verdenroz.vpnchain.core.engine.EngineHandler
@@ -14,7 +12,6 @@ import com.verdenroz.vpnchain.core.engine.WindowRequests
 import com.verdenroz.vpnchain.core.logging.Logger
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.map
 import org.koin.core.Koin
 import org.koin.dsl.module
 
@@ -30,7 +27,6 @@ val controlServerModule = module {
             disconnect = get(),
             switchProfile = get(),
             settings = get<SettingsRepository>().settings,
-            cutOff = get<ChainSupervisor>().state.map { it == ReconnectState.CutOff },
             onShow = get<WindowRequests>()::request,
         )
     }
