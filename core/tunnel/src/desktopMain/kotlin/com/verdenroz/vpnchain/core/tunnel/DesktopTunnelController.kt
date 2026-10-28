@@ -692,6 +692,7 @@ class DesktopTunnelController(
         _status.value = ChainStatus(
             state = TunnelState.Error,
             detail = UiText.Resource(Res.string.tunnel_error_no_traffic),
+            carriedNothing = true,
         )
     }
 
@@ -933,6 +934,7 @@ class DesktopTunnelController(
         _status.value = ChainStatus(
             state = TunnelState.Error,
             detail = UiText.Resource(Res.string.tunnel_error_stopped_carrying),
+            carriedNothing = true,
         )
     }
 

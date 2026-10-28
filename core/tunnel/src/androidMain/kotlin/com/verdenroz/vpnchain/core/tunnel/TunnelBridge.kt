@@ -99,9 +99,9 @@ internal object TunnelBridge {
     }
 
     // replacement here would silently reset kill-switch status on every state change.
-    fun setState(state: TunnelState, detail: UiText? = null) {
+    fun setState(state: TunnelState, detail: UiText? = null, carriedNothing: Boolean = false) {
         val wasConnected = status.value.state == TunnelState.Connected
-        status.update { it.copy(state = state, detail = detail) }
+        status.update { it.copy(state = state, detail = detail, carriedNothing = carriedNothing) }
         if (state == TunnelState.Connected && !wasConnected) {
             stats.value = SessionStats(connectedSinceMillis = System.currentTimeMillis())
         } else if (state != TunnelState.Connected) {

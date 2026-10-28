@@ -44,4 +44,6 @@ data class ChainStatus(
     val killSwitch: KillSwitchState = KillSwitchState.Disabled,
     val exitIp: String? = null,
     val detail: UiText? = null,
+    /** An Error because the engine ran but the chain carried nothing, not because it failed to start. */
+    val carriedNothing: Boolean = false,
 )
