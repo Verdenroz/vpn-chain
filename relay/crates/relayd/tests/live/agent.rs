@@ -189,7 +189,7 @@ fn nothing_on_the_relay_answers_through_the_tunnel_by_address_or_by_name() {
         let headers = agent.headers(&agent.admin, "GET", "/v1/relay", "");
         let signed = http_request(AGENT_HOST, "GET", "/v1/relay", "", &headers);
         assert_eq!(to_agent(&site, proxy, &signed).unwrap().0, 200);
-        assert!(site.works(proxy), "a public name, sing-box {version}");
+        assert!(site.connects(proxy), "a public name, sing-box {version}");
         assert!(
             echoes(&site, proxy, &public, site.echo),
             "a public address, sing-box {version}"
@@ -283,7 +283,7 @@ fn a_signed_add_over_the_tunnel_creates_a_device_that_then_connects() {
             short_id: reply["identity"]["shortId"].as_str().unwrap().to_owned(),
         };
         assert!(
-            site.works(site.client(&phone, version)),
+            site.connects(site.client(&phone, version)),
             "sing-box {version}"
         );
     }
