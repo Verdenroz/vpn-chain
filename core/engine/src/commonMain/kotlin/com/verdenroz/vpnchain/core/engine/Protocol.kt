@@ -58,6 +58,11 @@ sealed interface Request {
     @SerialName("logs")
     data class Logs(val limit: Int? = null) : Request
 
+    /** Asks the engine's window to come forward. */
+    @Serializable
+    @SerialName("show")
+    data object Show : Request
+
     @Serializable
     @SerialName("subscribe")
     data class Subscribe(val topic: Topic) : Request

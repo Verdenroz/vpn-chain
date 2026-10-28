@@ -8,6 +8,7 @@ import com.verdenroz.vpnchain.core.engine.ControlServer
 import com.verdenroz.vpnchain.core.engine.EngineHandler
 import com.verdenroz.vpnchain.core.engine.EngineLock
 import com.verdenroz.vpnchain.core.engine.EnginePaths
+import com.verdenroz.vpnchain.core.engine.WindowRequests
 import com.verdenroz.vpnchain.core.logging.Logger
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +17,7 @@ import org.koin.dsl.module
 
 val controlServerModule = module {
     single { EnginePaths.system() }
+    single { WindowRequests() }
     single {
         EngineHandler(
             chain = get(),
@@ -25,6 +27,7 @@ val controlServerModule = module {
             disconnect = get(),
             switchProfile = get(),
             settings = get<SettingsRepository>().settings,
+            onShow = get<WindowRequests>()::request,
         )
     }
     single {
@@ -39,30 +42,16 @@ val controlServerModule = module {
 }
 
 /**
- * Starts the engine in this process and serves the control socket for it when
- * this process wins the engine lock. The lock only decides who serves the
- * socket: a second GUI that loses it still runs its own engine, DataStore
- * included, until the GUI becomes a client of a running engine.
+ * Starts the engine in this process and serves the control socket for it.
+ * [lock] comes from `claimOrHandOff`; the server holds it until it stops.
  */
-fun startHostedEngine(koin: Koin) {
-    val paths = koin.get<EnginePaths>()
-    val logger = koin.get<Logger>()
-    val lock = try {
-        EngineLock.tryAcquire(paths.lock)
-    } catch (e: IOException) {
-        logger.e(TAG, "cannot open ${paths.lock}", e)
-        null
-    }
+fun startHostedEngine(koin: Koin, lock: EngineLock) {
     startEngine(koin)
-    if (lock == null) {
-        logger.w(TAG, "another vpn-chain engine holds ${paths.lock}; not serving ${paths.socket}")
-        return
-    }
     try {
         if (koin.get<ControlServer>().start(lock) == null) lock.close()
     } catch (e: IOException) {
         lock.close()
-        logger.e(TAG, "cannot serve ${paths.socket}", e)
+        koin.get<Logger>().e(TAG, "cannot serve ${koin.get<EnginePaths>().socket}", e)
     }
 }
 
