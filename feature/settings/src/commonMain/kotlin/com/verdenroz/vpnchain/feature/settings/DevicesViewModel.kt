@@ -45,7 +45,10 @@ sealed interface DevicesBoard {
 
 /** The one question or result the card puts in front of the list. */
 sealed interface DevicesStep {
-    data class Naming(val error: UiText? = null) : DevicesStep
+    data class Naming(val error: UiText? = null, val name: String = "") : DevicesStep
+
+    /** Asks for the WireGuard conf the new device [name] will use, or to skip it. */
+    data class EntryHop(val name: String, val error: UiText? = null) : DevicesStep
     data class Renaming(val name: String, val error: UiText? = null) : DevicesStep
     data class ConfirmCutOff(val name: String) : DevicesStep
     data class ConfirmNewCode(val name: String) : DevicesStep
@@ -73,13 +76,15 @@ data class DevicesUiState(
 
 /**
  * Lists the relay's devices and changes them. A pairing code lives only in [DevicesUiState.step]
- * and is dropped as soon as the step is, so it is never saved or logged.
+ * and is dropped as soon as the step is, so it is never saved or logged. An entry hop conf
+ * waits in [entryHop] and is dropped when the add ends.
  */
 class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
 
     private val _state = MutableStateFlow(DevicesUiState())
     val state: StateFlow<DevicesUiState> = _state.asStateFlow()
     private var noticeTimer: Job? = null
+    private var entryHop: String? = null
 
     init {
         viewModelScope.launch {
@@ -96,6 +101,7 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
     fun askNewCode(name: String) = open(DevicesStep.ConfirmNewCode(name))
 
     fun dismiss() {
+        entryHop = null
         _state.update { it.copy(step = null, error = null) }
         viewModelScope.launch { refresh() }
     }
@@ -107,17 +113,39 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
 
     fun add(name: String) {
         if (!isDeviceName(name)) return rejectName(UiText.Resource(Res.string.devices_name_invalid))
-        val board = _state.value.board
-        if (board is DevicesBoard.Ready && board.poolEmpty) {
-            _state.update { it.copy(step = DevicesStep.ConfirmRestart(name), error = null) }
-        } else {
-            act { addNow(name) }
+        open(DevicesStep.EntryHop(name))
+    }
+
+    /** Adds the device the open step names, with [conf] as its entry hop unless that is blank. */
+    fun submitEntryHop(conf: String) {
+        val name = (_state.value.step as? DevicesStep.EntryHop)?.name ?: return
+        val trimmed = conf.trim().ifEmpty { null }
+        if (trimmed == null) {
+            entryHop = null
+            if (poolEmpty()) askRestart(name) else act { addNow(name) }
+            return
+        }
+        act {
+            val problem = devices.checkEntryHop(trimmed).exceptionOrNull()
+            if (problem != null) return@act rejectEntryHop(name, problem)
+            entryHop = trimmed
+            if (poolEmpty()) askRestart(name) else addNow(name)
         }
     }
 
     fun restartAndAdd() {
         val then = (_state.value.step as? DevicesStep.ConfirmRestart)?.then ?: return
         act { devices.refillPool().fold(onSuccess = { addNow(then) }, onFailure = ::fail) }
+    }
+
+    private fun poolEmpty() = (_state.value.board as? DevicesBoard.Ready)?.poolEmpty == true
+
+    private fun askRestart(name: String) = _state.update { it.copy(step = DevicesStep.ConfirmRestart(name), error = null) }
+
+    private fun rejectEntryHop(name: String, failure: Throwable) {
+        val why = (failure as? DevicesFailed)?.takeIf { it.reason == DevicesFailed.Reason.Refused }?.message
+        val error = why?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.devices_action_failed)
+        _state.update { it.copy(step = DevicesStep.EntryHop(name, error)) }
     }
 
     fun rename(name: String, to: String) {
@@ -161,12 +189,15 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
     }
 
     private suspend fun addNow(name: String) {
-        devices.add(name).fold(
-            onSuccess = { showCode(name, it) },
+        devices.add(name, entryHop).fold(
+            onSuccess = { entryHop = null; showCode(name, it) },
             onFailure = {
                 when ((it as? DevicesFailed)?.reason) {
-                    DevicesFailed.Reason.PoolEmpty -> _state.update { state -> state.copy(step = DevicesStep.ConfirmRestart(name)) }
-                    DevicesFailed.Reason.NameTaken -> rejectName(UiText.Resource(Res.string.devices_name_taken))
+                    DevicesFailed.Reason.PoolEmpty -> askRestart(name)
+                    DevicesFailed.Reason.NameTaken -> {
+                        entryHop = null
+                        open(DevicesStep.Naming(UiText.Resource(Res.string.devices_name_taken), name))
+                    }
                     else -> fail(it)
                 }
             },
@@ -196,6 +227,7 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
     }
 
     private fun fail(failure: Throwable) {
+        entryHop = null
         val text = (failure as? DevicesFailed)?.takeIf { it.reason == DevicesFailed.Reason.Refused }?.message
         _state.update { it.copy(step = null, error = text?.let(UiText::Dynamic) ?: UiText.Resource(Res.string.devices_action_failed)) }
     }

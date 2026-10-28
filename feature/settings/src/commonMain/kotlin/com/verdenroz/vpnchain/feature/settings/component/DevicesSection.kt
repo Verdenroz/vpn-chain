@@ -53,6 +53,9 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_confi
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_copy_link
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_cut_off
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_dismiss_notice
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_entry_hop_intro
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_entry_hop_label
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_entry_hop_note
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_done
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_last_seen
@@ -71,6 +74,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_role_
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_role_member
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_save_name
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_share_link
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_skip
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_show_code
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_this_device
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_traffic
@@ -81,6 +85,7 @@ import org.jetbrains.compose.resources.stringResource
 
 internal class DevicesActions(
     val onAdd: (String) -> Unit,
+    val onSubmitEntryHop: (String) -> Unit,
     val onRename: (String, String) -> Unit,
     val onRestartAndAdd: () -> Unit,
     val onCutOff: () -> Unit,
@@ -210,13 +215,14 @@ private fun readable(seen: String) = seen.take(16).replace('T', ' ') + " UTC"
 private fun StepPanel(step: DevicesStep, busy: Boolean, actions: DevicesActions) {
     when (step) {
         is DevicesStep.Naming -> NameForm(
-            initial = "",
+            initial = step.name,
             error = step.error,
             submit = stringResource(Res.string.devices_show_code),
             busy = busy,
             onSubmit = actions.onAdd,
             onCancel = actions.onDismiss,
         )
+        is DevicesStep.EntryHop -> EntryHopForm(step, busy, actions.onSubmitEntryHop, actions.onDismiss)
         is DevicesStep.Renaming -> NameForm(
             initial = step.name,
             error = step.error,
@@ -278,6 +284,41 @@ private fun NameForm(
                 enabled = name.isNotEmpty() && !busy,
                 tone = ActionTone.Primary,
             )
+            ActionButton(compact = true, text = stringResource(Res.string.devices_cancel), onClick = onCancel, enabled = !busy)
+        }
+    }
+}
+
+@Composable
+private fun EntryHopForm(step: DevicesStep.EntryHop, busy: Boolean, onSubmit: (String) -> Unit, onCancel: () -> Unit) {
+    val colors = VpnChainTheme.colors
+    var conf by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxWidth()) {
+        Text(stringResource(Res.string.devices_entry_hop_intro, step.name), style = MaterialTheme.typography.bodyMedium, color = colors.ink)
+        Spacer(Modifier.height(6.dp))
+        Text(stringResource(Res.string.devices_entry_hop_note), style = MaterialTheme.typography.bodySmall, color = colors.inkMuted)
+        Spacer(Modifier.height(10.dp))
+        ValueField(
+            label = stringResource(Res.string.devices_entry_hop_label),
+            value = conf,
+            sensitive = true,
+            minLines = 5,
+            onValueChange = { conf = it },
+        )
+        step.error?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(it.asString(), style = MaterialTheme.typography.bodySmall, color = colors.unprotectedText)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ActionButton(
+                compact = true,
+                text = stringResource(Res.string.devices_show_code),
+                onClick = { onSubmit(conf) },
+                enabled = conf.isNotBlank() && !busy,
+                tone = ActionTone.Primary,
+            )
+            ActionButton(compact = true, text = stringResource(Res.string.devices_skip), onClick = { onSubmit("") }, enabled = !busy)
             ActionButton(compact = true, text = stringResource(Res.string.devices_cancel), onClick = onCancel, enabled = !busy)
         }
     }

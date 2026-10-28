@@ -36,6 +36,7 @@ import kotlin.time.Duration.Companion.seconds
 
 private val LAPTOP = AgentDevice("laptop", DeviceRole.Admin, added = "2026-10-01T00:00:00Z", up = 1_000, down = 2_000, seen = "2026-10-26T07:33:20Z")
 private val PHONE = AgentDevice("phone", DeviceRole.Member, added = "2026-10-02T00:00:00Z", up = 0, down = 0)
+private const val CONF = "[Interface]\nPrivateKey = FAKEKEY"
 private val CODE = PairingCode("vpnchain://pair?v=1&t=SECRETTOKEN", expires = 2_000)
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -95,6 +96,7 @@ class DevicesViewModelTest {
 
         model.startAdd()
         model.add("tablet")
+        model.submitEntryHop("")
 
         val step = assertIs<DevicesStep.ShowCode>(model.state.value.step)
         assertEquals(CODE, step.code)
@@ -103,9 +105,82 @@ class DevicesViewModelTest {
     }
 
     @Test
+    fun `a name moves on to the entry hop question and sends nothing yet`() {
+        val model = viewModel()
+        model.startAdd()
+
+        model.add("tablet")
+
+        assertEquals(DevicesStep.EntryHop("tablet"), model.state.value.step)
+        assertEquals(listOf("load"), log)
+    }
+
+    @Test
+    fun `an entry hop is checked and sent with the device`() {
+        val model = viewModel()
+        model.add("tablet")
+
+        model.submitEntryHop("  $CONF\n")
+
+        assertIs<DevicesStep.ShowCode>(model.state.value.step)
+        assertEquals(listOf("load", "check", "add:tablet:entry", "load"), log)
+        assertFalse("PrivateKey" in model.state.value.toString())
+    }
+
+    @Test
+    fun `an entry hop the app refuses keeps the question open with the reason and adds nothing`() {
+        relay.checkResult = Result.failure(DevicesFailed(DevicesFailed.Reason.Refused, "Config has no peer."))
+        val model = viewModel()
+        model.add("tablet")
+
+        model.submitEntryHop(CONF)
+
+        assertEquals(DevicesStep.EntryHop("tablet", UiText.Dynamic("Config has no peer.")), model.state.value.step)
+        assertFalse(model.state.value.busy)
+        assertFalse("add:tablet" in log)
+    }
+
+    @Test
+    fun `skipping the entry hop adds the device without one or a check`() {
+        val model = viewModel()
+        model.add("tablet")
+
+        model.submitEntryHop("   ")
+
+        assertEquals(listOf("load", "add:tablet", "load"), log)
+    }
+
+    @Test
+    fun `an entry hop survives the relay restart an empty pool needs`() {
+        relay.board = Result.success(DeviceBoard(listOf(LAPTOP), self = "laptop", admin = true, poolEmpty = true))
+        val model = viewModel()
+        model.add("tablet")
+
+        model.submitEntryHop(CONF)
+        assertEquals(DevicesStep.ConfirmRestart("tablet"), model.state.value.step)
+        model.restartAndAdd()
+
+        assertTrue("add:tablet:entry" in log)
+    }
+
+    @Test
+    fun `a taken name goes back to the name form with what was typed`() {
+        relay.addResult = Result.failure(DevicesFailed(DevicesFailed.Reason.NameTaken))
+        val model = viewModel()
+        model.add("phone")
+
+        model.submitEntryHop(CONF)
+
+        val step = assertIs<DevicesStep.Naming>(model.state.value.step)
+        assertEquals("phone", step.name)
+        assertIs<UiText.Resource>(step.error)
+    }
+
+    @Test
     fun `closing the code drops it`() {
         val model = viewModel()
         model.add("tablet")
+        model.submitEntryHop("")
 
         model.dismiss()
 
@@ -131,6 +206,7 @@ class DevicesViewModelTest {
         model.startAdd()
 
         model.add("phone")
+        model.submitEntryHop("")
 
         assertIs<UiText.Resource>(assertIs<DevicesStep.Naming>(model.state.value.step).error)
     }
@@ -141,6 +217,7 @@ class DevicesViewModelTest {
         val model = viewModel()
 
         model.add("tablet")
+        model.submitEntryHop("")
 
         assertEquals(DevicesStep.ConfirmRestart("tablet"), model.state.value.step)
         assertEquals(listOf("load"), log)
@@ -156,6 +233,7 @@ class DevicesViewModelTest {
         relay.board = Result.success(DeviceBoard(listOf(LAPTOP), self = "laptop", admin = true, poolEmpty = true))
         val model = viewModel()
         model.add("tablet")
+        model.submitEntryHop("")
 
         model.dismiss()
 
@@ -169,6 +247,7 @@ class DevicesViewModelTest {
         relay.refillResult = Result.failure(DevicesFailed(DevicesFailed.Reason.Failed))
         val model = viewModel()
         model.add("tablet")
+        model.submitEntryHop("")
 
         model.restartAndAdd()
 
@@ -217,6 +296,7 @@ class DevicesViewModelTest {
     fun `an expired code is replaced from the code panel`() {
         val model = viewModel()
         model.add("tablet")
+        model.submitEntryHop("")
 
         model.newCode()
 
@@ -375,6 +455,7 @@ class DevicesViewModelTest {
 internal class FakeDevices(private val log: MutableList<String>) : RelayDevices {
     var board = Result.success(DeviceBoard(listOf(LAPTOP, PHONE), self = "laptop", admin = true, poolEmpty = false))
     var addResult = Result.success(CODE)
+    var checkResult = Result.success(Unit)
     var refillResult = Result.success(Unit)
     var cutOffResult = Result.success(Unit)
     var renameResult = Result.success(Unit)
@@ -389,8 +470,13 @@ internal class FakeDevices(private val log: MutableList<String>) : RelayDevices 
         return board
     }
 
-    override suspend fun add(name: String): Result<PairingCode> {
-        log += "add:$name"
+    override suspend fun checkEntryHop(conf: String): Result<Unit> {
+        log += "check"
+        return checkResult
+    }
+
+    override suspend fun add(name: String, entryHop: String?): Result<PairingCode> {
+        log += "add:$name" + if (entryHop != null) ":entry" else ""
         return addResult
     }
 

@@ -8,9 +8,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use common::fakes::{FakeLive, FakeRestart};
 use common::{
-    assert_no_secret, fixture, http_request, key_for, parse_reply, read, signed_headers, signer,
+    assert_no_secret, fixture, http_request, key_for, parse_reply, public_der, read,
+    signed_headers, signer,
 };
 use p256::ecdsa::SigningKey;
 use relay_jobs::{Jobs, Layout};
@@ -363,6 +366,63 @@ fn an_admin_gets_a_pairing_link_for_another_device_and_the_audit_omits_it() {
     let audit = rig.audit_text();
     assert!(audit.contains(r#""action":"devices.pair","target":"shared","result":"ok""#));
     assert!(!audit.contains(token), "{audit}");
+}
+
+const ENTRY: &str = "[Interface]\nPrivateKey = kPwG0r8sXv1zB3dF5hJ7lN9pR2tV4xZ6bD8fH0jL2nM=\nAddress = 10.8.0.2/32\n\n[Peer]\nPublicKey = pEeRpUbLiCkEyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\nAllowedIPs = 0.0.0.0/0\nEndpoint = 203.0.113.9:51820\n";
+
+fn token_of(link: &Value) -> &str {
+    let link = link.as_str().unwrap();
+    link.split("&t=").nth(1).unwrap().split('&').next().unwrap()
+}
+
+impl Rig {
+    fn enroll(&self, token: &str, seed: u8) -> Reply {
+        let public_key = STANDARD.encode(public_der(&signer(seed)));
+        let body = json!({ "token": token, "publicKey": public_key }).to_string();
+        self.send("POST", "/v1/enroll", &body, &[])
+    }
+}
+
+#[test]
+fn a_pairing_with_an_entry_hop_hands_it_over_once_at_enroll() {
+    let rig = Rig::start(false, SPARES);
+    let body = json!({ "entryHop": ENTRY }).to_string();
+
+    let paired = rig.admin("POST", "/v1/devices/shared/pair", &body);
+    let enrolled = rig.enroll(token_of(&paired.body["link"]), 9);
+
+    assert_eq!((paired.status, enrolled.status), (200, 200));
+    assert_eq!(enrolled.body["entryHop"], ENTRY);
+    assert!(!paired.body.to_string().contains("kPwG0r8"));
+    assert!(!rig.audit_text().contains("kPwG0r8"));
+}
+
+#[test]
+fn a_pairing_without_an_entry_hop_enrolls_without_one() {
+    let rig = Rig::start(false, SPARES);
+
+    let paired = rig.admin("POST", "/v1/devices/shared/pair", r#"{}"#);
+    let enrolled = rig.enroll(token_of(&paired.body["link"]), 9);
+
+    assert_eq!((paired.status, enrolled.status), (200, 200));
+    assert!(enrolled.body.get("entryHop").is_none());
+}
+
+#[test]
+fn an_invalid_entry_hop_is_a_400_that_issues_no_code_and_leaks_nothing() {
+    let rig = Rig::start(false, SPARES);
+    let split = ENTRY.replace("0.0.0.0/0", "10.0.0.0/8");
+
+    let reply = rig.admin(
+        "POST",
+        "/v1/devices/shared/pair",
+        &json!({ "entryHop": split }).to_string(),
+    );
+
+    assert_eq!(reply.status, 400);
+    assert!(!reply.body.to_string().contains("kPwG0r8"));
+    assert!(!rig.audit_text().contains("kPwG0r8"));
+    assert!(!rig.dir.path().join("enroll.json").exists());
 }
 
 #[test]
