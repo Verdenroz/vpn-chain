@@ -15,9 +15,8 @@ use crate::{
 /// Short IDs kept unissued in the config, so a new device never needs a restart.
 pub const SPARES: usize = 8;
 
-/// Device operations on one relay. Every operation takes the devices lock first, so it never
-/// interleaves with the server scripts or another relayd, and fails if the lock stays held for
-/// `lock_wait`.
+/// Device operations on one relay. Every operation takes the devices lock first and fails if
+/// it stays held for `lock_wait`.
 ///
 /// Each change is saved to the state, rendered to the config through the checked swap, and
 /// applied to the running xray through its API; only [`Manager::revoke`], [`Manager::refill_pool`]

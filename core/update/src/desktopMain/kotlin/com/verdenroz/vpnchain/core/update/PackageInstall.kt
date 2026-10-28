@@ -20,7 +20,7 @@ class PackageInstall(
     val artifactKey: String =
         root.resolve("libexec/artifact-key").takeIf(Files::isRegularFile)?.let { Files.readString(it).trim() } ?: "linux-x64"
 
-    /** Whether the launcher at [appPath] lives in the package, as opposed to a development run. */
+    /** Whether the launcher at [appPath] lives in the package rather than a development run. */
     fun manages(appPath: String?): Boolean =
         appPath != null && Files.isDirectory(root) && Path.of(appPath).toRealPath().startsWith(root.toRealPath())
 

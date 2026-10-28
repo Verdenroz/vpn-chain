@@ -8,8 +8,7 @@ import kotlin.time.Duration.Companion.seconds
  * Takes the [EngineLock], or asks the instance holding it to show its window.
  * The holder binds the control socket a moment after it locks, so the ask
  * retries for [patience] before the unreachable-engine error escapes.
- *
- * @return the lock, or null once the running instance has been asked to show.
+ * Returns null once the running instance has been asked to show.
  */
 fun claimOrHandOff(
     paths: EnginePaths,

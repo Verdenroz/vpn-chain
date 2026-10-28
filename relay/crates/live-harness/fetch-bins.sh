@@ -26,7 +26,6 @@ xray() {
     [ -x "$dir/xray" ] && [ -f "$dir/geoip.dat" ] && return
     mkdir -p "$dir"
     fetch "$base/Xray-linux-64.zip" "$XRAY_SHA256" "$dir/xray.zip"
-    # The release's own digest file must agree with the pin.
     curl -fsSL "$base/Xray-linux-64.zip.dgst" | grep -qx "SHA2-256= *$XRAY_SHA256" \
         || { echo "xray .dgst disagrees with the pin" >&2; exit 1; }
     # relayd renders geoip:private, which xray reads from geoip.dat beside the binary.

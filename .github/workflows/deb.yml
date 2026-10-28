@@ -1,6 +1,5 @@
-# Builds the Linux desktop app as a .deb, lints it, and installs, removes and purges
-# it in Debian and Ubuntu containers. The release workflow calls this one, so a tag
-# builds exactly what a pull request proved.
+# Builds the Linux desktop app as a .deb, lints it, and installs, removes and purges it in
+# Debian and Ubuntu containers. release.yml calls it, so a tag builds what a PR proved.
 name: deb
 
 on:
@@ -32,8 +31,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      # The project's gradle.properties pins a local JDK path; the user-home
-      # file takes precedence, so point it at the runner's JDK instead.
+      # The user-home gradle.properties overrides the project's pinned local JDK path.
       - name: Use runner JDK
         run: |
           mkdir -p ~/.gradle

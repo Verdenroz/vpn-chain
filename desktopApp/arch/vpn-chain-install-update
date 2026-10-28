@@ -1,8 +1,7 @@
 #!/bin/sh
 # Installs a vpn-chain update as root: vpn-chain-install-update SHA256 < vpn-chain.pkg.tar.zst
-# Run through pkexec, which asks for an administrator password. The package is
-# copied out of the caller's reach before it is hashed, so the file that is
-# checked is the file that is installed.
+# Run through pkexec. The package is copied out of the caller's reach before it is
+# hashed, so the file that is checked is the file that is installed.
 set -eu
 
 sha256="${1:-}"

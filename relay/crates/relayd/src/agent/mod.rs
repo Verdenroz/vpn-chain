@@ -22,8 +22,6 @@
 //! | `POST /enroll` | a pairing token |
 //!
 //! `POST /enroll` is the one route that takes no signature: its pairing token authenticates it.
-//!
-//! `/devices/{name}/claim` and `/invites` are left unrouted for claim-and-invite.
 
 mod audit;
 mod auth;

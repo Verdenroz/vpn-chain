@@ -98,7 +98,6 @@ internal class DevicesActions(
     val onDismissNotice: () -> Unit,
 )
 
-/** The relay's devices, and the step an admin is in the middle of. A member sees only its own row. */
 @Composable
 internal fun DevicesSection(state: DevicesUiState, actions: DevicesActions, modifier: Modifier = Modifier) {
     val colors = VpnChainTheme.colors
@@ -208,7 +207,6 @@ private fun DeviceRowView(device: DeviceRow, canManage: Boolean, pending: Device
     }
 }
 
-/** `2026-10-26T07:33:20Z` as `2026-10-26 07:33 UTC`. */
 private fun readable(seen: String) = seen.take(16).replace('T', ' ') + " UTC"
 
 @Composable

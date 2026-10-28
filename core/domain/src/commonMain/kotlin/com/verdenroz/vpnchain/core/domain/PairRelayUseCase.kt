@@ -33,15 +33,12 @@ class PairingFailed(
 /** The relay a pairing joined, whether this device is its admin, and whether an entry hop it was sent could not be added. */
 data class PairedRelay(val host: String, val admin: Boolean, val entryHopFailed: Boolean = false)
 
-/** Pairs this device with a relay from the link it printed. */
 interface RelayPairing {
-    /** Whether [text] is a pairing link, as opposed to a secrets.env or a WireGuard conf. */
+    /** Whether [text] is a pairing link rather than a secrets.env or a WireGuard conf. */
     fun accepts(text: String): Boolean
 
     /**
      * [onStep] hears each step with the host being paired, which is not a secret.
-     *
-     * @return the relay joined.
      */
     suspend fun pair(text: String, onStep: (PairingStep, String) -> Unit): Result<PairedRelay>
 }

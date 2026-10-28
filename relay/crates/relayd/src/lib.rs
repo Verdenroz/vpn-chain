@@ -1,24 +1,20 @@
 //! The relay's resident agent: the single owner of what the VLESS+REALITY relay serves.
 //!
 //! The state file is the source of truth; xray's `config.json` is rendered from it. xray's
-//! runtime API changes users only in memory, so something on the server has to own a durable
-//! copy and write the config to match. Keeping that copy in relayd's own schema-versioned file,
-//! rather than reading facts back out of `config.json`, lets it hold what xray has no place for:
-//! per-device roles, traffic totals, last-seen times and a pool of unissued short IDs.
+//! runtime API changes users only in memory, so relayd keeps a durable, schema-versioned copy
+//! that also holds what xray has no place for: device roles, traffic totals, last-seen times
+//! and a pool of unissued short IDs.
 //!
 //! Private keys sit in a separate 0600 secrets file, and every credential is a [`Secret`] whose
-//! `Debug` hides it, so the state can be printed, logged and diffed. Device UUIDs and short IDs
-//! stay in the state, which is 0600 too, because each belongs to one device entry.
+//! `Debug` hides it, so the state can be printed, logged and diffed.
 //!
-//! [`Manager`] changes devices without restarting xray where it can: an added, renamed or
-//! rekeyed device goes in through xray's API and is also written to the state and the config,
-//! and only a revocation, which has to cut open connections, restarts it. xray's traffic
-//! counters are folded into the state before every change.
+//! [`Manager`] changes devices without restarting xray where it can; only a revocation, which
+//! has to cut open connections, restarts it. xray's traffic counters are folded into the state
+//! before every change.
 //!
-//! [`import`] adopts a relay exactly as `server/deploy-server.sh` and `server/xray-clients.sh`
-//! leave it, and refuses one it could not render back the same. It takes the traffic counters as
-//! `devices.json` last recorded them: what xray counted since the scripts last folded its stats
-//! is not read, and folding them before import is still to be built.
+//! [`import`] adopts a relay as `server/deploy-server.sh` and `server/xray-clients.sh` leave it,
+//! and refuses one it could not render back the same. Traffic counted since the scripts last
+//! folded xray's stats is not read.
 
 mod adapters;
 mod adopt;

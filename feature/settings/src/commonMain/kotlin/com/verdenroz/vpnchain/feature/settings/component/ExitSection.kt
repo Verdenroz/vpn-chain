@@ -50,7 +50,6 @@ internal class ExitActions(
     val onDismiss: () -> Unit,
 )
 
-/** Where the relay's traffic leaves, for an admin. Nothing is drawn for a member. */
 @Composable
 internal fun ExitSection(state: ExitUiState, actions: ExitActions, modifier: Modifier = Modifier) {
     val board = state.board as? ExitBoard.Ready ?: return
