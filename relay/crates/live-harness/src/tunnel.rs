@@ -1,13 +1,14 @@
 use std::io;
 use std::net::IpAddr;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 
 const PATIENCE: Duration = Duration::from_secs(5);
 const SILENCE: Duration = Duration::from_secs(2);
+const READY: Duration = Duration::from_secs(20);
 
 /// A TCP echo server on loopback: the internet the relay's users reach.
 pub async fn echo_server() -> u16 {
@@ -103,6 +104,24 @@ pub async fn roundtrip_to(proxy: u16, host: &str, target: u16, payload: &[u8]) -
         .await?
         .echo(payload)
         .await
+}
+
+/// Like [`roundtrip_to`], retried until it succeeds or [`READY`] runs out, for a path that
+/// is expected to work but may still be warming up.
+pub async fn roundtrip_until(
+    proxy: u16,
+    host: &str,
+    target: u16,
+    payload: &[u8],
+) -> io::Result<()> {
+    let deadline = Instant::now() + READY;
+    loop {
+        match roundtrip_to(proxy, host, target, payload).await {
+            Err(error) if Instant::now() >= deadline => return Err(error),
+            Err(_) => sleep(Duration::from_millis(250)).await,
+            Ok(()) => return Ok(()),
+        }
+    }
 }
 
 async fn within<T>(io: impl Future<Output = io::Result<T>>) -> io::Result<T> {

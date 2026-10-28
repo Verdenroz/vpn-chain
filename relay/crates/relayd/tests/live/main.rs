@@ -29,11 +29,11 @@ fn an_added_device_connects_while_xray_keeps_running() {
             .unwrap();
 
         let phone = site.client(&site.identity(&out), version);
-        assert!(site.works(phone), "sing-box {version}");
+        assert!(site.connects(phone), "sing-box {version}");
     }
 
     assert_eq!(site.process(), before);
-    assert!(site.works(site.client(&site.laptop, SING_BOX[0])));
+    assert!(site.connects(site.client(&site.laptop, SING_BOX[0])));
     assert_eq!(site.users(), ["laptop", "phone-1-13-14", "phone-1-14-3"]);
 }
 
@@ -49,7 +49,7 @@ fn a_renamed_device_keeps_its_identity_and_xray_keeps_running() {
     assert_eq!(site.users(), ["desk"]);
     for version in SING_BOX {
         let proxy = site.client(&site.laptop, version);
-        assert!(site.works(proxy), "sing-box {version}");
+        assert!(site.connects(proxy), "sing-box {version}");
     }
     assert_eq!(site.relay().state.devices[0].name, "desk");
 }
@@ -76,7 +76,10 @@ fn a_rekeyed_device_refuses_its_old_identity_and_accepts_the_new_one() {
             !site.works(site.client(&old, version)),
             "sing-box {version}"
         );
-        assert!(site.works(site.client(&new, version)), "sing-box {version}");
+        assert!(
+            site.connects(site.client(&new, version)),
+            "sing-box {version}"
+        );
         assert!(!site.config().contains(&old.short_id));
     }
 
@@ -112,7 +115,7 @@ fn revoking_cuts_an_open_connection_and_drops_the_short_id_from_the_config() {
         assert!(!site.works(proxy), "sing-box {version}");
         assert!(!site.config().contains(&phone.short_id));
         assert!(!site.config().contains(&phone.uuid));
-        assert!(site.works(site.client(&site.laptop, version)));
+        assert!(site.connects(site.client(&site.laptop, version)));
     }
 }
 
@@ -139,7 +142,7 @@ fn counters_and_api_added_devices_survive_the_restart() {
     assert!(held.up >= 64 * 1024 && held.down >= 64 * 1024, "{held:?}");
     assert!(held.seen.is_some());
     assert!(
-        site.works(phone),
+        site.connects(phone),
         "the API-added device survives the restart"
     );
 
@@ -169,7 +172,7 @@ fn refilling_the_pool_restarts_xray_with_fresh_short_ids() {
     assert_eq!(added, 1);
     assert_ne!(site.process(), before);
     assert_eq!(site.relay().state.spare_short_ids.len(), SPARES);
-    assert!(site.works(site.client(&site.identity(&out), SING_BOX[0])));
+    assert!(site.connects(site.client(&site.identity(&out), SING_BOX[0])));
 }
 
 #[test]
@@ -198,7 +201,7 @@ fn xray_test_rejects_a_config_before_it_replaces_the_live_one() {
     assert!(error.to_string().contains("-test rejected"), "{error}");
     assert_eq!(site.config(), live);
     assert_eq!(site.process(), before);
-    assert!(site.works(site.client(&site.laptop, SING_BOX[0])));
+    assert!(site.connects(site.client(&site.laptop, SING_BOX[0])));
 }
 
 /// Runs the server script `devices.sh` streams over SSH while relayd holds the lock, from
