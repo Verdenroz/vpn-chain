@@ -99,7 +99,6 @@ impl Lab {
         &self.dir
     }
 
-    /// Where xray reads its config from.
     pub fn config_path(&self) -> PathBuf {
         self.dir.join("xray.json")
     }
@@ -124,7 +123,6 @@ impl Lab {
         self.start_xray().await;
     }
 
-    /// Starts xray on the config already in place.
     pub async fn start_xray(&self) {
         let xray = format!("/opt/bins/{XRAY}/xray");
         self.run(

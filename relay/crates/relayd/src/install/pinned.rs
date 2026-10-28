@@ -86,7 +86,6 @@ pub fn keypair(xray: &Path) -> Result<(Secret, String), Error> {
     x25519(xray, &[])
 }
 
-/// The public key for the REALITY private key `private`.
 pub fn public_key(xray: &Path, private: &Secret) -> Result<String, Error> {
     x25519(xray, &["-i", private.expose()]).map(|(_, public)| public)
 }

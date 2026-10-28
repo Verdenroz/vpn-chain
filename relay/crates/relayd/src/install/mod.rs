@@ -77,7 +77,6 @@ struct Site {
     xray: PathBuf,
 }
 
-/// What a run created, for the steps after it.
 struct Created {
     device: Option<String>,
     restart: bool,

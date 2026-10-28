@@ -244,7 +244,6 @@ impl Site {
         self.rt.block_on(self.lab.xray_process())
     }
 
-    /// The emails xray itself holds on the inbound.
     pub fn users(&self) -> Vec<String> {
         let api = self.rt.block_on(async {
             XrayApi::new(

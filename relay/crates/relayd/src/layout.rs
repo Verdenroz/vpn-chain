@@ -1,5 +1,3 @@
-//! Where a relay installed by `relayd install` keeps its files.
-
 /// The job runner's state, which `relay-privileged` also reads.
 pub const JOBS_DIR: &str = "/var/lib/vpn-chain";
 
