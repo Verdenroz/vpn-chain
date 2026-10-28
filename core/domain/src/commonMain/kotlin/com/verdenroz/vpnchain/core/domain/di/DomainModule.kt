@@ -28,7 +28,7 @@ val domainModule = module {
     factory { DisconnectChainUseCase(get()) }
     factory { ImportProfileUseCase(get()) }
     factory { ImportWireGuardConfUseCase(get(), get()) }
-    factory<RelayPairing> { PairRelayUseCase(get(), get(), get(), get()) { currentTimeMillis() / 1000 } }
+    factory<RelayPairing> { PairRelayUseCase(get(), get(), get(), get(), get()) { currentTimeMillis() / 1000 } }
     factory<RelayDevices> { ManageDevicesUseCase(get(), get(), get()) }
     factory { SwitchProfileUseCase(get(), get()) }
     factory { ChangeRoutingUseCase(get(), get()) }

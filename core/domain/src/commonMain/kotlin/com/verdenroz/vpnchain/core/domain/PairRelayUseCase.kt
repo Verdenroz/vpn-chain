@@ -2,6 +2,7 @@ package com.verdenroz.vpnchain.core.domain
 
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
+import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.relay.AgentException
@@ -56,6 +57,7 @@ private const val HTTP_GONE = 410
 class PairRelayUseCase(
     private val profiles: ProfileRepository,
     private val chain: ChainRepository,
+    private val settings: SettingsRepository,
     private val agent: RelayAgent,
     private val key: ManagementKey,
     private val nowSeconds: () -> Long,
@@ -92,6 +94,7 @@ class PairRelayUseCase(
         )
         val entryHop = enrolled.entryHop
         val entryHopFailed = entryHop != null && profiles.importWireGuardConf(entryHop, intoActive = true).isFailure
+        if (entryHop != null && !entryHopFailed) settings.setEntryHopEnabled(true)
         onStep(PairingStep.Reconnecting, link.host)
         chain.restart().getOrElse { throw PairingFailed(PairingStep.Reconnecting, PairingFailed.Reason.Failed, it) }
         PairedRelay(link.host, enrolled.role == DeviceRole.Admin, entryHopFailed)

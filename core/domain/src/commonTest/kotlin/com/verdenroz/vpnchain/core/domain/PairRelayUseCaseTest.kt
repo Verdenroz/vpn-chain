@@ -1,12 +1,19 @@
 package com.verdenroz.vpnchain.core.domain
 
 import com.verdenroz.vpnchain.core.data.ChainRepository
+import com.verdenroz.vpnchain.core.config.SingBoxConfigFactory
 import com.verdenroz.vpnchain.core.data.ProfileRepository
+import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
+import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.SessionStats
+import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.TunnelState
+import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpMode
+import com.verdenroz.vpnchain.core.model.effectiveFor
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.relay.AgentDevice
 import com.verdenroz.vpnchain.core.relay.AgentException
@@ -23,9 +30,14 @@ import com.verdenroz.vpnchain.core.relay.RelayAgent
 import com.verdenroz.vpnchain.core.relay.id
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -50,7 +62,9 @@ class PairRelayUseCaseTest {
 
     private val log = mutableListOf<String>()
     private val profiles = PairingProfiles(log)
+    private val settings = PairingSettings(UserSettings(entryHopEnabled = false))
     private val steps = mutableListOf<PairingStep>()
+    private val dialled = mutableListOf<SavedProfile?>()
 
     private fun useCase(
         role: DeviceRole = DeviceRole.Admin,
@@ -59,8 +73,8 @@ class PairRelayUseCaseTest {
         connect: Result<Unit> = Result.success(Unit),
         restart: Result<Unit> = Result.success(Unit),
         now: Long = 1_000,
-        chain: PairingChain = PairingChain(state, log, connect, restart),
-    ) = PairRelayUseCase(profiles, chain, PairingAgent(enroll), KEY) { now }
+        chain: PairingChain = PairingChain(state, log, connect, restart) { dialled += profiles.profile.value?.effectiveFor(settings.state.value) },
+    ) = PairRelayUseCase(profiles, chain, settings, PairingAgent(enroll), KEY) { now }
 
     private fun failure(result: Result<PairedRelay>) = assertIs<PairingFailed>(result.exceptionOrNull())
 
@@ -90,11 +104,26 @@ class PairRelayUseCaseTest {
     }
 
     @Test
-    fun `no entry hop in the reply leaves the connection without one`() = runTest {
+    fun `the reconnect after a pairing with an entry hop dials the relay through it`() = runTest {
+        useCase(enroll = { Enrolled(ROTATED, KEY.id, DeviceRole.Admin, entryHop = CONF) }).pair(LINK) { _, _ -> }
+
+        val dialledProfile = dialled.single()
+        val config = Json.parseToJsonElement(
+            SingBoxConfigFactory.androidChainConfig(requireNotNull(dialledProfile?.relay), dialledProfile?.wireGuard),
+        ).jsonObject
+        val relay = config.getValue("outbounds").jsonArray.map { it.jsonObject }
+            .first { it["tag"]?.jsonPrimitive?.content == "vless-proxy" }
+        assertEquals("entry-hop", relay.getValue("detour").jsonPrimitive.content)
+        assertTrue(settings.state.value.entryHopEnabled)
+    }
+
+    @Test
+    fun `no entry hop in the reply leaves the connection and the setting alone`() = runTest {
         val result = useCase().pair(LINK) { _, _ -> }
 
         assertEquals(false, result.getOrNull()?.entryHopFailed)
         assertNull(profiles.profile.value?.wireGuard)
+        assertEquals(false, settings.state.value.entryHopEnabled)
     }
 
     @Test
@@ -105,6 +134,7 @@ class PairRelayUseCaseTest {
         assertEquals(listOf("add:203.0.113.10", "connect", "save", "restart"), log)
         assertEquals(KEY.id, profiles.profile.value?.relay?.managementKeyId)
         assertNull(profiles.profile.value?.wireGuard)
+        assertEquals(false, settings.state.value.entryHopEnabled)
     }
 
     @Test
@@ -313,12 +343,35 @@ private class PairingProfiles(private val log: MutableList<String>) : ProfileRep
     }
 }
 
+private class PairingSettings(value: UserSettings) : SettingsRepository {
+    val state = MutableStateFlow(value)
+    override val settings: Flow<UserSettings> = state
+    override suspend fun setEntryHopEnabled(enabled: Boolean) {
+        state.value = state.value.copy(entryHopEnabled = enabled)
+    }
+    override suspend fun setThemeConfig(themeConfig: ThemeConfig) = Unit
+    override suspend fun setSystemWideTun(enabled: Boolean) = Unit
+    override suspend fun setKillSwitchEnabled(enabled: Boolean) = Unit
+    override suspend fun setAllowLocalNetworks(enabled: Boolean) = Unit
+    override suspend fun setDnsFilter(filter: DnsFilter) = Unit
+    override suspend fun setWarpMode(mode: WarpMode) = Unit
+    override suspend fun setLearnBlockedSites(enabled: Boolean) = Unit
+    override suspend fun setFailOpen(enabled: Boolean) = Unit
+    override suspend fun setConnectionLog(enabled: Boolean) = Unit
+    override suspend fun setAutoConnectOnLaunch(enabled: Boolean) = Unit
+    override suspend fun setAutoReconnect(enabled: Boolean) = Unit
+    override suspend fun setCloseToTray(enabled: Boolean) = Unit
+    override val autostartSupported = false
+    override suspend fun setAutoStartOnLogin(enabled: Boolean) = Result.success(Unit)
+}
+
 private class PairingChain(
     state: TunnelState,
     private val log: MutableList<String>,
     private val connect: Result<Unit>,
     private val restart: Result<Unit>,
     private val connectsAtOnce: Boolean = true,
+    private val onRestart: () -> Unit = {},
 ) : ChainRepository {
     override val status = MutableStateFlow(ChainStatus(state = state))
     override val connectionIntent = MutableStateFlow(false)
@@ -333,6 +386,7 @@ private class PairingChain(
     override suspend fun reconnect() = Result.success(Unit)
     override suspend fun restart(): Result<Unit> {
         log += "restart"
+        onRestart()
         return restart.also { settle(it) }
     }
 

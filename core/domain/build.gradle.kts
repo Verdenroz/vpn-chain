@@ -15,5 +15,9 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.koin.core)
         }
+        commonTest.dependencies {
+            implementation(projects.core.config)
+            implementation(libs.kotlinx.serialization.json)
+        }
     }
 }
