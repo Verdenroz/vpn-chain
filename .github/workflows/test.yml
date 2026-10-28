@@ -18,8 +18,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      # The project's gradle.properties pins a local JDK path; the user-home
-      # file takes precedence, so point it at the runner's JDK instead.
+      # The user-home gradle.properties overrides the project's pinned local JDK path.
       - name: Use runner JDK
         run: |
           mkdir -p ~/.gradle

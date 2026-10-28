@@ -2,9 +2,8 @@
 # shellcheck disable=SC2016 # remote command bodies expand in the container
 # A relay deployed by deploy-server.sh, with the egress rules `relayd egress` loads for the
 # xray user, must refuse every loopback and private target a REALITY-authenticated sing-box
-# asks for, whether it names an address or a name that resolves to one (or to one only on the
-# second lookup), and still reach a public-style address. Throwaway docker networks: one of
-# ordinary public addresses, one of private ones. The relay itself is deployed in a container.
+# asks for, by address or by a name that resolves to one (even only on the second lookup), and
+# still reach a public-style address. Throwaway docker networks: one public, one private.
 # REFUSE_XRAY_VERSION picks the relay (default: the pin); SINGBOX_VERSIONS the clients.
 # Needs the static relayd: rustup target add $(uname -m)-unknown-linux-musl, CARGO to override.
 set -euo pipefail

@@ -20,7 +20,7 @@ kotlin {
         androidMain { kotlin.srcDir("src/jvmShared/kotlin") }
         desktopMain { kotlin.srcDir("src/jvmShared/kotlin") }
         desktopMain.dependencies {
-            // QR generation for pairing devices — pure-Java, no AWT/Android deps.
+            // QR generation for pairing devices; pure Java, no AWT/Android deps.
             implementation(libs.zxing.core)
         }
         androidMain.dependencies {

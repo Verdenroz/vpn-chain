@@ -14,7 +14,6 @@ internal fun installShutdownWatchdog(
     graceMs: Long = SHUTDOWN_GRACE_MS,
     halt: (Int) -> Unit = Runtime.getRuntime()::halt,
 ) {
-    // The hook returns at once so a clean shutdown is not held up; only the daemon outlives it.
     Runtime.getRuntime().addShutdownHook(
         Thread {
             thread(isDaemon = true) {
