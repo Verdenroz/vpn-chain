@@ -195,6 +195,18 @@ class ObserveChainRouteUseCaseTest {
         assertTrue(entry?.via?.contains("wireguard") == true)
     }
 
+    @Test
+    fun `entry hop names the provider its dns address identifies`() = runTest {
+        val known = TestWorld(
+            status = connectedStatus(exitIp = VPS_IP),
+            profile = profile(defaultEntry().copy(dns = "10.2.0.1")),
+        )
+        val unknown = TestWorld(status = connectedStatus(exitIp = VPS_IP))
+
+        assertEquals("Proton", known.resolve().hop(HopRole.Entry)?.provider)
+        assertNull(unknown.resolve().hop(HopRole.Entry)?.provider)
+    }
+
     /** A timing taken over the direct path says nothing about the tunnelled one. */
     @Test
     fun `path time is dropped when the route changes under it`() = runTest {

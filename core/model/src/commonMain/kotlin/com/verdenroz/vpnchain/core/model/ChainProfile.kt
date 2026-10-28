@@ -23,8 +23,13 @@ data class WireGuardEntry(
 ) {
     override fun toString() = "WireGuardEntry(endpoint=$endpointHost:$endpointPort)"
 
+    /** Named from the in-tunnel DNS address a provider's configs carry; null for anything unrecognised. */
+    val provider: String?
+        get() = PROVIDER_BY_DNS[dns]
+
     companion object {
         const val DEFAULT_ENDPOINT_PORT = 51820
+        private val PROVIDER_BY_DNS = mapOf("10.2.0.1" to "Proton", "10.64.0.1" to "Mullvad")
     }
 }
 

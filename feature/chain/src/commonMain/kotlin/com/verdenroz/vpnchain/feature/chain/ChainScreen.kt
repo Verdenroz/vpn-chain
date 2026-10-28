@@ -27,6 +27,11 @@ import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 import com.verdenroz.vpnchain.core.domain.ChainRoute
 import com.verdenroz.vpnchain.core.domain.HopRole
 import com.verdenroz.vpnchain.core.model.TunnelState
+import com.verdenroz.vpnchain.feature.chain.generated.resources.Res
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_hop_entry
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_hop_exit
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_hop_origin
+import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -57,7 +62,12 @@ fun ChainScreen(
     onDismissBlocked: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val nodes = remember(uiState.route) { uiState.route.toMapNodes() }
+    val roleNames = mapOf(
+        HopRole.Origin to stringResource(Res.string.chain_hop_origin),
+        HopRole.Entry to stringResource(Res.string.chain_hop_entry),
+        HopRole.Exit to stringResource(Res.string.chain_hop_exit),
+    )
+    val nodes = remember(uiState.route, roleNames) { uiState.route.toMapNodes(roleNames) }
     val connected = uiState.status.state == TunnelState.Connected
 
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -105,10 +115,10 @@ private fun SidePanel(content: @Composable ColumnScope.() -> Unit) {
 private val SIDE_PANEL_BREAKPOINT = 600.dp
 private val MIN_MAP_HEIGHT = 120.dp
 
-private fun ChainRoute.toMapNodes(): List<MapNode> = hops.mapNotNull { hop ->
+private fun ChainRoute.toMapNodes(roleNames: Map<HopRole, String>): List<MapNode> = hops.mapNotNull { hop ->
     val location = hop.location ?: return@mapNotNull null
     MapNode(
-        label = location.countryName,
+        label = mapLabel(roleNames.getValue(hop.role), location),
         lat = location.lat,
         lon = location.lon,
         kind = when (hop.role) {
