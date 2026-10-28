@@ -13,21 +13,17 @@ import com.verdenroz.vpnchain.feature.settings.renderQrCode
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-/** [text] as a QR code scaled to a whole number of device pixels per module. */
 @Composable
 internal fun QrImage(text: String, modifier: Modifier = Modifier) {
     val bitmap = remember(text) { renderQrCode(text) } ?: return
-    // Round to a whole number of device pixels per module. Any fractional
-    // scale makes neighbouring modules differ in width, and that uneven
-    // grid is what a phone camera fails to lock onto.
+    // A fractional scale makes modules uneven in width, which phone cameras fail to lock onto.
     val density = LocalDensity.current
     val modulePx = with(density) { QR_TARGET_SIZE.toPx() } / bitmap.width
     val scale = max(QR_MIN_MODULE_PX, modulePx.roundToInt())
     Image(
         bitmap = bitmap,
         contentDescription = null,
-        // Nearest-neighbor, not the default bilinear: the integer upscale
-        // above keeps every module square, which filtering would blur back out.
+        // Bilinear filtering would blur the square modules.
         filterQuality = FilterQuality.None,
         modifier = modifier.size(with(density) { (bitmap.width * scale).toDp() }),
     )

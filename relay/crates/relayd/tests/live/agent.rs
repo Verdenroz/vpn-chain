@@ -144,6 +144,17 @@ fn to_agent(site: &Site, proxy: u16, request: &str) -> Option<(u16, Value)> {
     through(site, proxy, AGENT_HOST, HTTP, request)
 }
 
+/// The laptop's client once it carries traffic. A signed request can't be retried, since its
+/// nonce is spent on the first send, so the first one has to go out on a working tunnel.
+fn ready(site: &Site, version: &str) -> u16 {
+    let proxy = site.client(&site.laptop, version);
+    assert!(
+        site.connects(proxy),
+        "sing-box {version} never carried traffic"
+    );
+    proxy
+}
+
 #[test]
 #[ignore = "needs docker"]
 fn the_agent_answers_a_signed_request_through_the_tunnel() {
@@ -151,7 +162,7 @@ fn the_agent_answers_a_signed_request_through_the_tunnel() {
     let agent = Agent::start(&site);
 
     for version in SING_BOX {
-        let proxy = site.client(&site.laptop, version);
+        let proxy = ready(&site, version);
         let headers = agent.headers(&agent.admin, "GET", "/v1/relay", "");
         let signed = http_request(AGENT_HOST, "GET", "/v1/relay", "", &headers);
 
@@ -183,7 +194,7 @@ fn nothing_on_the_relay_answers_through_the_tunnel_by_address_or_by_name() {
     );
 
     for version in SING_BOX {
-        let proxy = site.client(&site.laptop, version);
+        let proxy = ready(&site, version);
         let public = site.lab.public_ip.to_string();
         let private = site.lab.private_ip.to_string();
         let headers = agent.headers(&agent.admin, "GET", "/v1/relay", "");
@@ -265,7 +276,7 @@ fn a_signed_add_over_the_tunnel_creates_a_device_that_then_connects() {
     let before = site.process();
 
     for version in SING_BOX {
-        let proxy = site.client(&site.laptop, version);
+        let proxy = ready(&site, version);
         let name = format!("phone-{}", version.replace('.', "-"));
         let body = json!({ "name": name }).to_string();
         let headers = agent.headers(&agent.admin, "POST", "/v1/devices", &body);
@@ -305,7 +316,7 @@ fn a_signed_add_over_the_tunnel_creates_a_device_that_then_connects() {
 fn a_member_key_is_refused_an_add_through_the_tunnel() {
     let site = Site::start("agent-member");
     let agent = Agent::start(&site);
-    let proxy = site.client(&site.laptop, SING_BOX[0]);
+    let proxy = ready(&site, SING_BOX[0]);
     let body = json!({ "name": "phone" }).to_string();
     let headers = agent.headers(&agent.member, "POST", "/v1/devices", &body);
 

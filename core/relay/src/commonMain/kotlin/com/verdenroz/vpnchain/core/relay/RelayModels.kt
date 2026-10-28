@@ -30,7 +30,7 @@ data class AgentDevice(
     val seen: String? = null,
 )
 
-/** A device's VLESS identity as the agent hands it out. It is a secret, so [toString] shows the name only. */
+/** A device's VLESS identity. A secret: [toString] shows the name only. */
 @Serializable
 data class AgentIdentity(
     val name: String,
@@ -42,7 +42,7 @@ data class AgentIdentity(
     override fun toString() = "AgentIdentity(name=$name)"
 }
 
-/** A pairing link the agent issued, valid until unix second [expires]. It is a secret, so [toString] shows the expiry only. */
+/** A pairing link valid until unix second [expires]. A secret: [toString] shows the expiry only. */
 @Serializable
 data class PairingCode(val link: String, val expires: Long) {
     override fun toString() = "PairingCode(expires=$expires)"
@@ -54,7 +54,6 @@ data class Refilled(val added: Int, val job: String? = null)
 
 private val DEVICE_NAME = Regex("[a-z0-9][a-z0-9._-]{0,31}")
 
-/** Whether relayd accepts [name] for a device. */
 fun isDeviceName(name: String) = DEVICE_NAME.matches(name)
 
 /** What the agent answers to a revoke. [job] is set when the short ID's removal needs an xray restart. */
@@ -70,16 +69,12 @@ data class Enrolled(val identity: AgentIdentity, val keyId: String, val role: De
     override fun toString() = "Enrolled(identity=$identity)"
 }
 
-/** Where the relay's traffic leaves for the internet. */
 sealed interface AgentExit {
-    /** The relay's own address. */
     data object Direct : AgentExit
 
-    /** A WireGuard provider, dialled from the relay. */
     data class WireGuard(val endpoint: String) : AgentExit
 }
 
-/** The exit to switch to. */
 sealed interface ExitChange {
     data object Direct : ExitChange
 
@@ -115,7 +110,6 @@ data class AgentJob(
     @SerialName("confirm_by") val confirmBy: Long? = null,
 )
 
-/** A job a client may ask for. */
 sealed interface JobRequest {
     data object RestartXray : JobRequest
     data class SwapXray(val version: String) : JobRequest

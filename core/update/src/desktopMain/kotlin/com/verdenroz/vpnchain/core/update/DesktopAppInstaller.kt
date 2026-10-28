@@ -16,7 +16,7 @@ class DesktopAppInstaller(
     appPath: String? = System.getProperty("jpackage.app-path"),
     private val relaunch: (Path) -> Unit = ::relaunchAndExit,
 ) : AppInstaller {
-    /** Only the packaged app can be replaced, so a source build is never offered an update. */
+    /** A source build is never offered an update: only the packaged app can be replaced. */
     override val artifactKey: String? =
         installation.artifactKey.takeIf {
             System.getProperty("os.name").startsWith("Linux") &&

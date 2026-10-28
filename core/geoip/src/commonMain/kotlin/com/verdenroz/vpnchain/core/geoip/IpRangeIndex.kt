@@ -8,7 +8,7 @@ internal class IndexedCity(val name: String, val lat: Double, val lon: Double)
 
 internal class RangeHit(val countryCode: String, val city: IndexedCity?)
 
-/** Binary search over a sorted (startIp, countryCode, city) table — see `licenses/ATTRIBUTION.txt`. */
+/** Binary search over a sorted (startIp, countryCode, city) table; see `licenses/ATTRIBUTION.txt`. */
 internal class IpRangeIndex(private val data: ByteArray, private val cities: List<IndexedCity>) {
     private val recordCount = data.size / RECORD_SIZE
 

@@ -52,8 +52,8 @@ interface TunnelController {
     }
 
     /**
-     * Let go of a tunnel that dropped and will not be retried — distinct from
-     * [stop], which is the user asking to come down.
+     * Lets go of a tunnel that dropped and will not be retried; [stop] is the user
+     * asking to come down.
      *
      * No-op by default, and deliberately so on desktop: a chain that stalled
      * leaves the kill switch engaged, because traffic staying blocked until
@@ -66,8 +66,8 @@ interface TunnelController {
 
     /**
      * Whether this platform has an OS-level kill switch worth guiding the user
-     * toward. Neither platform lets an app enable one silently - Android's is a
-     * system Settings toggle, desktop's is the external VPN app's own switch.
+     * toward. Neither lets an app enable one: Android's is a system Settings toggle,
+     * desktop's is the external VPN app's own switch.
      */
     val killSwitchGuidanceSupported: Boolean get() = false
 
@@ -88,7 +88,7 @@ interface TunnelController {
 
     /**
      * Stops the user asked for through a surface that never reaches the app's
-     * own disconnect path — Android's notification button, or an OS revoke.
+     * own disconnect path, such as Android's notification button or an OS revoke.
      * Whoever tracks connection intent has to clear it on these, or they read
      * as a drop. Empty on platforms where every stop goes through [stop].
      */
@@ -100,9 +100,7 @@ interface TunnelController {
     /**
      * Supplies a config for a start this app did not initiate: Android's sticky
      * restart after the process was killed, or the OS launching us as the
-     * Always-on VPN. Those arrive at a platform tunnel holding nothing, because
-     * the process that was handed the rendered config is gone — before this,
-     * they failed outright with "no configuration provided".
+     * Always-on VPN. The process that was handed the rendered config is gone.
      *
      * No-op where every start comes through [start].
      */

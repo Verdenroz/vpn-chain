@@ -4,7 +4,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** City-level location lookup for a chain hop's host or IP. */
 interface RouteGeolocator {
     suspend fun locate(hostOrIp: String): HopLocation?
 }

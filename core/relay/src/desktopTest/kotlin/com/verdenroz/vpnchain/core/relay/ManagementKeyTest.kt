@@ -14,11 +14,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Vector shared with relayd's `auth` tests: the key is P-256 with the scalar 0x07 repeated
- * 32 times, and the message is the one `the_signed_message_is_the_five_fields_after_the_context`
- * pins. The signature was produced independently of both implementations.
- */
 internal object Vector {
     const val PUBLIC_KEY = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHhhTL9R1TALzBB2cdc6zO4P/2BrHzk/ogsyxyYvFiW6kbDEcTi/0DdlqNlPm5FRF0y3+SG7O11x6kMahiIHAow=="
     const val KEY_ID = "ce97ec20d43661a1"

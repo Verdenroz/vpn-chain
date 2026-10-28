@@ -58,7 +58,6 @@ pub fn systemctl(args: &[&str]) -> Result<(), Error> {
     run("systemctl", args)
 }
 
-/// Whether an executable called `name` is on `PATH`.
 pub fn have(name: &str) -> bool {
     std::env::var_os("PATH")
         .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
@@ -120,7 +119,6 @@ pub fn give(path: &Path, uid: u32, gid: u32) -> Result<(), Error> {
     chown(path, Some(uid), Some(gid)).map_err(|error| Error::at(path, error))
 }
 
-/// Gives `dir` and the files directly in it to `uid` and `gid`.
 pub fn give_all(dir: &Path, uid: u32, gid: u32) -> Result<(), Error> {
     give(dir, uid, gid)?;
     for entry in fs::read_dir(dir).map_err(|error| Error::at(dir, error))? {

@@ -24,11 +24,6 @@ internal class Seen(
 
 internal class Reply(val status: Int, val body: String)
 
-/**
- * A sing-box probe inbound and the relayd agent behind it, in one loopback socket. It accepts
- * CONNECT with the probe credentials, then applies relayd's signature rules independently of the
- * client: the five-line message, a 120 second window, 16 to 64 character nonces never seen twice.
- */
 internal class FakeAgent(
     private val keys: Map<String, ByteArray>,
     private val clock: () -> Long,
@@ -71,7 +66,6 @@ internal class FakeAgent(
         return text.toString().trimEnd().split("\r\n")
     }
 
-    /** Null when the request is signed correctly, or needs no signature. */
     private fun authenticate(request: Seen): Reply? {
         if (request.target == "/v1/enroll") return null
         val deny = Reply(401, """{"error":"unauthorized"}""")

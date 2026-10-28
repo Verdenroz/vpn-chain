@@ -93,7 +93,6 @@ internal class FakeSettings : SettingsRepository {
     override suspend fun setCloseToTray(enabled: Boolean) = Unit
 }
 
-/** Walks the steps in [steps], waits for [gate] if given, then answers [result], as the real pairing would. */
 internal class FakePairing(
     private val log: MutableList<String>,
     private val steps: List<PairingStep> = emptyList(),

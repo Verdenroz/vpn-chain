@@ -7,8 +7,8 @@
 #
 # Pro++, not Ultimate: the app has no per-domain allowlist, and Ultimate breaks
 # parts of Facebook and WhatsApp for one more hit on d3ward's adblock test
-# (Pro++ with the geosite ads set scores 130/131). The app also trusts this
-# workflow's compile, so the canaries below gate every publish.
+# (Pro++ with the geosite ads set scores 130/131).
+# The app trusts this workflow's compile, so the canaries below gate every publish.
 name: blocklists
 
 on:

@@ -23,7 +23,7 @@ interface RelayAgent {
     suspend fun refillPool(): Refilled
 
     /**
-     * A one-time pairing code that enrolls [name] on another device, which is admin only.
+     * A one-time pairing code that enrolls [name] on another device.
      * [entryHop] is a WireGuard conf the relay hands to that device when it enrolls.
      */
     suspend fun pair(name: String, entryHop: String? = null): PairingCode
@@ -31,13 +31,11 @@ interface RelayAgent {
     /** A new UUID and short ID for [name], with no restart. */
     suspend fun rekey(name: String): AgentIdentity
 
-    /** Admin only. */
     suspend fun exit(): AgentExit
 
-    /** Admin only. Restarts xray, which drops every device: follow the returned job id with [awaitJob], if there is one. */
+    /** Restarts xray, which drops every device: follow the returned job id with [awaitJob]. */
     suspend fun setExit(change: ExitChange): String?
 
-    /** @return the job id. */
     suspend fun startJob(request: JobRequest): String
 
     suspend fun job(id: String): AgentJob

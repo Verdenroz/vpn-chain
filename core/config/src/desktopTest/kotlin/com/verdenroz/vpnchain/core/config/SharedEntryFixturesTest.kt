@@ -5,7 +5,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** The same files and verdicts `relayd install` checks in `install/entry.rs`. */
 class SharedEntryFixturesTest {
 
     private val dir = File("../../relay/crates/relayd/tests/fixtures/entry")

@@ -38,7 +38,6 @@ data class DeviceBoard(
 /** Where the relay's traffic leaves. [exit] is null for a member, who is not told. */
 data class ExitBoard(val admin: Boolean, val exit: AgentExit?)
 
-/** Manages the active connection's relay through its agent. */
 interface RelayDevices {
     /** Emits when the active relay's key or the tunnel's reachability changes, which is when [load] may answer differently. */
     val changes: Flow<Unit>
@@ -145,7 +144,7 @@ class ManageDevicesUseCase(
         }
     }
 
-    /** A restart drops the tunnel, so the job is followed through a reconnect to its confirmation. */
+    /** A restart drops the tunnel, so the job is followed through a reconnect. */
     private suspend fun finish(job: String) {
         val done = agent.awaitJob(job, reconnect = { chain.restart() })
         if (done.state != JobState.Confirmed) throw DevicesFailed(DevicesFailed.Reason.Failed, done.reason)

@@ -43,7 +43,6 @@ impl XrayApi {
             })
     }
 
-    /// Every user xray currently accepts on the inbound tagged `inbound`.
     pub async fn users(&self, inbound: &str) -> Result<Vec<VlessUser>, Error> {
         let request = GetInboundUserRequest {
             tag: inbound.to_owned(),

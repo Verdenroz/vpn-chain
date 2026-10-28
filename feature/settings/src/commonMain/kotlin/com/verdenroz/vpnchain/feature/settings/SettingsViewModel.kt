@@ -82,7 +82,6 @@ sealed interface PendingImport {
     }
 }
 
-/** Where pairing with a relay has got to. The host is the relay's address; nothing from the link is kept. */
 sealed interface PairingStatus {
     data class Working(val step: PairingStep, val host: String) : PairingStatus
     data class Done(val host: String, val admin: Boolean, val entryHopFailed: Boolean = false) : PairingStatus
@@ -256,7 +255,7 @@ class SettingsViewModel(
 
     fun importAsEntryHop(text: String) = reviewConf(text, intoActive = true)
 
-    /** A pairing link is the user's own act to scan or paste, and is single use, so it skips the review. */
+    /** A pairing link is single use and the user's own act, so it skips the review. */
     private fun pair(text: String) {
         if (pairingInFlight) return
         pairingInFlight = true

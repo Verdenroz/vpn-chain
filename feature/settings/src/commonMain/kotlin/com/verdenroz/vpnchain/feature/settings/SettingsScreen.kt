@@ -544,11 +544,6 @@ fun SettingsScreen(
     }
 }
 
-/**
- * The WARP tail: which traffic takes it and, in automatic mode, how blocked
- * sites are learned. The rest only appears for that mode, since it decides
- * nothing in the other two.
- */
 @Composable
 private fun WarpSection(
     mode: WarpMode,

@@ -34,7 +34,6 @@ data class DeviceRow(
     val self: Boolean,
 )
 
-/** What the Devices card has to show; [Unavailable] is one plain line saying why. */
 sealed interface DevicesBoard {
     data object Loading : DevicesBoard
     data class Unavailable(val why: Why) : DevicesBoard
@@ -43,23 +42,20 @@ sealed interface DevicesBoard {
     enum class Why { NoKey, Offline, Failed }
 }
 
-/** The one question or result the card puts in front of the list. */
 sealed interface DevicesStep {
     data class Naming(val error: UiText? = null, val name: String = "") : DevicesStep
 
-    /** Asks for the WireGuard conf the new device [name] will use, or to skip it. */
     data class EntryHop(val name: String, val error: UiText? = null) : DevicesStep
     data class Renaming(val name: String, val error: UiText? = null) : DevicesStep
     data class ConfirmCutOff(val name: String) : DevicesStep
     data class ConfirmNewCode(val name: String) : DevicesStep
 
-    /** Adding [then] needs the spare pool refilled first, which restarts the relay. */
+    /** Adding [then] first refills the spare pool, which restarts the relay. */
     data class ConfirmRestart(val then: String) : DevicesStep
 
     data class ShowCode(val name: String, val code: PairingCode) : DevicesStep
 }
 
-/** A change the relay has not confirmed yet; the row shows it in place of its actions. */
 data class DevicePending(val name: String, val action: Action) {
     enum class Action { CuttingOff, Renaming, NewCode }
 }
@@ -70,14 +66,12 @@ data class DevicesUiState(
     val pending: DevicePending? = null,
     val busy: Boolean = false,
     val error: UiText? = null,
-    /** A confirmed change, shown for a few seconds or until dismissed. */
     val notice: UiText? = null,
 )
 
 /**
- * Lists the relay's devices and changes them. A pairing code lives only in [DevicesUiState.step]
- * and is dropped as soon as the step is, so it is never saved or logged. An entry hop conf
- * waits in [entryHop] and is dropped when the add ends.
+ * A pairing code lives only in [DevicesUiState.step] and an entry hop conf only in [entryHop];
+ * neither is saved or logged.
  */
 class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
 
@@ -116,7 +110,6 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
         open(DevicesStep.EntryHop(name))
     }
 
-    /** Adds the device the open step names, with [conf] as its entry hop unless that is blank. */
     fun submitEntryHop(conf: String) {
         val name = (_state.value.step as? DevicesStep.EntryHop)?.name ?: return
         val trimmed = conf.trim().ifEmpty { null }
@@ -176,7 +169,6 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
         }
     }
 
-    /** Issues the code for the device the open step names, whether it was confirmed or has expired. */
     fun newCode() {
         val name = when (val step = _state.value.step) {
             is DevicesStep.ConfirmNewCode -> step.name

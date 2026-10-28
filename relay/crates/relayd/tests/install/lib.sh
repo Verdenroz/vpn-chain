@@ -62,9 +62,8 @@ eq() {
 }
 g() { docker exec "$RELAY_C" "$@"; }
 
-# lab_up: the networks, the decoy and targets on them, and the resolver. The lab networks
-# have public-style addresses and no route out, so the relay and the resolver also join an
-# ordinary bridge, which gets the default route and so the internet.
+# lab_up: the networks, decoy, targets and resolver. The lab networks have no route out, so
+# the relay and resolver also join an ordinary bridge for the internet.
 lab_up() {
     local caddy=caddy:2.10-alpine upstream
     upstream="$(docker run --rm "$TEST_IMG" sed -n 's/^nameserver //p' /etc/resolv.conf | head -1)"
@@ -135,9 +134,8 @@ setup_install() {
         'curl -fsSL "$VPN_CHAIN_BASE_URL/setup.sh" | bash -s -- "$@"' _ "$@"
 }
 
-# tty_install LABEL [PATTERN=FILE]... -- ARG...: setup_install on a terminal. Each FILE in the VPS
-# is typed once its PATTERN shows. The install's stdout and stderr, and everything the terminal
-# showed, come back as $W/out-LABEL, $W/err-LABEL and $W/tty-LABEL.
+# tty_install LABEL [PATTERN=FILE]... -- ARG...: setup_install on a terminal; each FILE in the VPS
+# is typed once its PATTERN shows. Output lands in $W/out-LABEL, $W/err-LABEL and $W/tty-LABEL.
 # shellcheck disable=SC2016 # expands in the container
 tty_install() {
     local label="$1" answers=()

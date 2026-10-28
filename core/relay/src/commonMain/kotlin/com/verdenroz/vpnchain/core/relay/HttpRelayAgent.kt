@@ -22,7 +22,7 @@ internal class HttpRelayAgent(
     private val nonce: () -> String = ::newNonce,
 ) : RelayAgent {
 
-    // Added to the local clock so a device whose clock is wrong still signs a timestamp relayd accepts.
+    // Applied to the local clock so a device with a wrong clock still signs an acceptable timestamp.
     private var skew = 0L
 
     override suspend fun status() = get("/v1/relay").decode<RelayStatus>()

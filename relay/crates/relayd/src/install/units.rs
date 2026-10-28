@@ -52,7 +52,7 @@ const FILES: [(&str, u32, &str); 9] = [
     ),
 ];
 
-/// Writes every file, and returns whether any of them changed.
+/// Returns whether any file changed.
 pub fn install() -> Result<bool, Error> {
     let mut changed = false;
     for (path, mode, contents) in FILES {
@@ -61,7 +61,6 @@ pub fn install() -> Result<bool, Error> {
     Ok(changed)
 }
 
-/// Creates the users and directories the files above describe.
 pub fn accounts() -> Result<(), Error> {
     run("systemd-sysusers", &[])?;
     run("systemd-tmpfiles", &["--create"])

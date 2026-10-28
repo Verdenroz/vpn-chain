@@ -4,7 +4,6 @@ import okio.ByteString.Companion.toByteString
 
 /** The P-256 key this device signs relay requests with. The private half never leaves the device. */
 interface ManagementKey {
-    /** SubjectPublicKeyInfo DER. */
     val publicKey: ByteArray
 
     /** An ASN.1 DER ECDSA signature over SHA-256 of [message]. */

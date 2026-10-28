@@ -40,8 +40,9 @@ pub fn rules(agent_port: u16, resolv_conf: &Path) -> Result<String, Error> {
 /// xray dials whatever a client names, so a name that resolves to a private address after the
 /// routing rules ran would otherwise reach services that trust local callers. Every resolver
 /// takes DNS only, matched on the destination port the caller asked for, since a stub such as
-/// Docker's sits behind a port redirect, and no other port of a loopback stub is open. Replies on a connection someone opened to xray, such as
-/// relayd's to its API, pass: only connections xray starts are limited.
+/// Docker's sits behind a port redirect, and no other port of a loopback stub is open. Replies
+/// on a connection someone opened to xray, such as relayd's to its API, pass: only connections
+/// xray starts are limited.
 pub fn ruleset(agent_port: u16, resolvers: &[IpAddr]) -> String {
     let allowed: Vec<String> = resolvers.iter().map(|address| allow(*address)).collect();
     format!(
