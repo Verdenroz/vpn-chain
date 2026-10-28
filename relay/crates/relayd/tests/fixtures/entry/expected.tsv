@@ -1,0 +1,22 @@
+ok-basic	ok
+ok-provider-extras	ok
+ok-route-halves	ok
+ok-bare-address	ok
+bad-no-peer	Config has no peer.
+bad-two-peers	Config has 2 peers. Use one.
+bad-no-private-key	Missing PrivateKey.
+bad-short-private-key	Bad PrivateKey.
+bad-no-address	Missing Address.
+bad-no-public-key	Missing PublicKey.
+bad-no-allowed-ips	Missing AllowedIPs.
+bad-split-tunnel	Only full-tunnel configs work. Set AllowedIPs to 0.0.0.0/0.
+bad-one-route-half	Only full-tunnel configs work. Set AllowedIPs to 0.0.0.0/0.
+bad-no-endpoint	Missing Endpoint.
+bad-endpoint-no-port	Bad Endpoint.
+bad-endpoint-port-range	Bad Endpoint.
+bad-endpoint-hostname	Use an IPv4 endpoint.
+bad-endpoint-ipv6	Use an IPv4 endpoint.
+bad-endpoint-octet	Use an IPv4 endpoint.
+bad-preshared-key	Bad PresharedKey.
+bad-mtu	Bad MTU.
+bad-keepalive	Bad PersistentKeepalive.

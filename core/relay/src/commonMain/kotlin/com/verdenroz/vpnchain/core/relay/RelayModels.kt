@@ -61,9 +61,12 @@ fun isDeviceName(name: String) = DEVICE_NAME.matches(name)
 @Serializable
 data class Revoked(val countersLost: Boolean, val job: String? = null)
 
-/** What enrolling returns: the device's rotated identity, the id relayd now knows its key by, and its role. */
+/**
+ * What enrolling returns: the device's rotated identity, the id relayd now knows its key by, and its role.
+ * [entryHop] is the `wg-quick` text of a WireGuard entry hop the installer was given, which holds a private key.
+ */
 @Serializable
-data class Enrolled(val identity: AgentIdentity, val keyId: String, val role: DeviceRole) {
+data class Enrolled(val identity: AgentIdentity, val keyId: String, val role: DeviceRole, val entryHop: String? = null) {
     override fun toString() = "Enrolled(identity=$identity)"
 }
 

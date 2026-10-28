@@ -17,7 +17,8 @@ use common::{
 };
 use relayd::agent::{Audit, Enroll, Service, Verifier, serve_on};
 use relayd::{
-    Enrollments, Placement, Relay, Role, TOKEN_TTL, Verdict, add_key, secrets_path, write_config,
+    Enrollments, Placement, Relay, Role, Secret, TOKEN_TTL, Verdict, add_key, secrets_path,
+    write_config,
 };
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
@@ -162,7 +163,8 @@ fn a_token_is_good_once() {
         first,
         Verdict::Claimed {
             device: "laptop".to_owned(),
-            role: Role::Admin
+            role: Role::Admin,
+            entry: None
         }
     );
     assert_eq!(second, Verdict::Unknown);
@@ -371,5 +373,126 @@ fn every_other_path_still_wants_a_signature() {
 
     for target in ["/v1/relay", "/v1/devices", "/nowhere"] {
         assert_eq!(rig.send("GET", target, "", &[]).status, 401, "{target}");
+    }
+}
+
+const ENTRY: &str = "[Interface]\nPrivateKey = kPwG0r8sXv1zB3dF5hJ7lN9pR2tV4xZ6bD8fH0jL2nM=\nAddress = 10.8.0.2/32\n\n[Peer]\nPublicKey = pEeRpUbLiCkEyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\nAllowedIPs = 0.0.0.0/0\nEndpoint = 203.0.113.9:51820\n";
+
+impl Rig {
+    fn token_with_entry(&self, device: &str, now: u64, ttl: u64) -> Secret {
+        let token = self
+            .tokens()
+            .issue(&self.lock(), WAIT, device, Role::Admin, now, ttl)
+            .unwrap();
+        self.tokens()
+            .keep_entry(&self.lock(), WAIT, &token, &Secret::new(ENTRY))
+            .unwrap();
+        token
+    }
+
+    fn entry_files(&self) -> Vec<PathBuf> {
+        fs::read_dir(self.dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "entry"))
+            .collect()
+    }
+}
+
+#[test]
+fn an_entry_hop_is_kept_private_and_returned_once_on_enroll() {
+    let rig = Rig::start();
+    let token = rig.token_with_entry("laptop", seconds(), TOKEN_TTL);
+
+    let files = rig.entry_files();
+    assert_eq!(files.len(), 1);
+    assert_eq!(
+        fs::metadata(&files[0]).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    let first = rig.enroll(token.expose(), 7);
+    let second = rig.enroll(token.expose(), 8);
+
+    assert_eq!(first.status, 200);
+    assert_eq!(first.body["entryHop"], ENTRY);
+    assert_eq!(second.status, 401);
+    assert!(second.body.get("entryHop").is_none());
+    assert!(rig.entry_files().is_empty());
+}
+
+#[test]
+fn a_token_without_an_entry_hop_replies_without_one() {
+    let rig = Rig::start();
+    let token = rig.token_for("laptop", Role::Member);
+
+    let reply = rig.enroll(&token, 7);
+
+    assert_eq!(reply.status, 200);
+    assert!(reply.body.get("entryHop").is_none());
+}
+
+#[test]
+fn an_entry_hop_is_deleted_when_its_token_expires_or_is_replaced() {
+    let rig = Rig::start();
+    let replaced = rig.token_with_entry("shared", seconds(), TOKEN_TTL);
+    rig.tokens()
+        .issue(
+            &rig.lock(),
+            WAIT,
+            "shared",
+            Role::Admin,
+            seconds(),
+            TOKEN_TTL,
+        )
+        .unwrap();
+    assert!(rig.entry_files().is_empty());
+    let stale = rig.token_with_entry("laptop", seconds() - TOKEN_TTL - 5, TOKEN_TTL);
+
+    assert_eq!(rig.entry_files().len(), 1);
+    let expired = rig.enroll(stale.expose(), 7);
+
+    assert_eq!(expired.status, 410);
+    assert!(expired.body.get("entryHop").is_none());
+    assert!(rig.entry_files().is_empty());
+    assert_eq!(rig.enroll(replaced.expose(), 7).status, 401);
+}
+
+#[test]
+fn a_second_code_for_the_device_drops_the_first_ones_entry_hop() {
+    let rig = Rig::start();
+    rig.token_with_entry("laptop", seconds(), TOKEN_TTL);
+
+    let again = rig.token_for("laptop", Role::Admin);
+    let reply = rig.enroll(&again, 7);
+
+    assert_eq!(reply.status, 200);
+    assert!(reply.body.get("entryHop").is_none());
+    assert!(rig.entry_files().is_empty());
+}
+
+#[test]
+fn the_audit_log_and_refusals_never_hold_the_entry_hop() {
+    let rig = Rig::start();
+    let token = rig.token_with_entry("laptop", seconds(), TOKEN_TTL);
+
+    let bad = rig.send(
+        "POST",
+        "/v1/enroll",
+        &json!({ "token": token.expose(), "publicKey": "bm90IGEga2V5" }).to_string(),
+        &[],
+    );
+    let good = rig.enroll(token.expose(), 7);
+    let late = rig.enroll(token.expose(), 8);
+
+    assert_eq!((bad.status, good.status, late.status), (400, 200, 401));
+    for text in [
+        rig.audit_text(),
+        bad.body.to_string(),
+        late.body.to_string(),
+    ] {
+        assert!(
+            !text.contains("kPwG0r8") && !text.contains("203.0.113.9"),
+            "{text}"
+        );
     }
 }

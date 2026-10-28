@@ -41,6 +41,9 @@ private const val LINK =
     "vpnchain://pair?v=1&h=203.0.113.10&p=443&sni=www.example.com&pbk=pubKeyPUBKEYpubKeyPUBKEYpubKeyPUBKEYpubKeyP" +
         "&sid=ab12&id=11111111-1111-4111-8111-111111111111&n=laptop&t=tokenTOKENtokenTOKENtokenTOKENtokenTOKENtok&e=2000"
 
+private const val CONF = "[Interface]\nPrivateKey = FAKEKEY"
+private const val BAD_CONF = "not a conf"
+
 private val ROTATED = AgentIdentity("laptop", "22222222-2222-4222-8222-222222222222", "cd34", 443, listOf("www.example.com"))
 
 class PairRelayUseCaseTest {
@@ -74,6 +77,34 @@ class PairRelayUseCaseTest {
         assertEquals(KEY.id, relay?.managementKeyId)
         assertEquals(true, relay?.managementAdmin)
         assertEquals("www.example.com", relay?.sni)
+    }
+
+    @Test
+    fun `an entry hop in the reply is saved on the new connection before the reconnect`() = runTest {
+        val result = useCase(enroll = { Enrolled(ROTATED, KEY.id, DeviceRole.Admin, entryHop = CONF) }).pair(LINK) { _, _ -> }
+
+        assertEquals(PairedRelay("203.0.113.10", admin = true, entryHopFailed = false), result.getOrNull())
+        assertEquals(listOf("add:203.0.113.10", "connect", "save", "entry", "restart"), log)
+        assertEquals("203.0.113.9", profiles.profile.value?.wireGuard?.endpointHost)
+        assertEquals(ROTATED.uuid, profiles.profile.value?.relay?.vlessUuid)
+    }
+
+    @Test
+    fun `no entry hop in the reply leaves the connection without one`() = runTest {
+        val result = useCase().pair(LINK) { _, _ -> }
+
+        assertEquals(false, result.getOrNull()?.entryHopFailed)
+        assertNull(profiles.profile.value?.wireGuard)
+    }
+
+    @Test
+    fun `an entry hop that does not parse still finishes pairing and says so`() = runTest {
+        val result = useCase(enroll = { Enrolled(ROTATED, KEY.id, DeviceRole.Admin, entryHop = BAD_CONF) }).pair(LINK) { _, _ -> }
+
+        assertEquals(PairedRelay("203.0.113.10", admin = true, entryHopFailed = true), result.getOrNull())
+        assertEquals(listOf("add:203.0.113.10", "connect", "save", "restart"), log)
+        assertEquals(KEY.id, profiles.profile.value?.relay?.managementKeyId)
+        assertNull(profiles.profile.value?.wireGuard)
     }
 
     @Test
@@ -272,8 +303,14 @@ private class PairingProfiles(private val log: MutableList<String>) : ProfileRep
     override suspend fun rename(id: String, name: String) = Unit
     override suspend fun clear() = Unit
     override suspend fun importFromSecretsEnv(text: String, activate: Boolean) = Result.failure<ChainProfile>(IllegalStateException())
-    override suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean) =
-        Result.failure<WireGuardEntry>(IllegalStateException())
+    override suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean): Result<WireGuardEntry> {
+        if (text == BAD_CONF) return Result.failure(IllegalArgumentException("Bad PrivateKey."))
+        log += "entry"
+        val entry = WireGuardEntry(privateKey = "k", address = "10.8.0.2/32", peerPublicKey = "p", endpointHost = "203.0.113.9")
+        profiles.value = profiles.value.map { if (it.id == activeProfileId.value) it.copy(wireGuard = entry) else it }
+        publish()
+        return Result.success(entry)
+    }
 }
 
 private class PairingChain(

@@ -114,7 +114,8 @@ fn the_token_in_the_link_is_the_one_the_store_accepts_once() {
         first,
         Verdict::Claimed {
             device: "laptop".to_owned(),
-            role: Role::Admin
+            role: Role::Admin,
+            entry: None
         }
     );
     assert_eq!(second, Verdict::Unknown);

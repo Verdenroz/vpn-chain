@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.feature.settings
 import com.verdenroz.vpnchain.core.domain.ChangeRoutingUseCase
 import com.verdenroz.vpnchain.core.domain.ImportProfileUseCase
 import com.verdenroz.vpnchain.core.domain.ImportWireGuardConfUseCase
+import com.verdenroz.vpnchain.core.domain.PairedRelay
 import com.verdenroz.vpnchain.core.domain.PairingFailed
 import com.verdenroz.vpnchain.core.domain.PairingStep
 import com.verdenroz.vpnchain.core.domain.SwitchProfileUseCase
@@ -71,6 +72,15 @@ class PairingImportTest {
         assertEquals(PairingStatus.Done("203.0.113.10", admin = true), viewModel.pairing.value)
         assertNull(viewModel.pendingImport.value)
         assertEquals(listOf("pair"), log)
+    }
+
+    @Test
+    fun `an entry hop that could not be added shows beside the pairing result`() {
+        val viewModel = viewModel(FakePairing(log, result = Result.success(PairedRelay("203.0.113.10", admin = true, entryHopFailed = true))))
+
+        viewModel.importSecretsEnv(LINK)
+
+        assertEquals(PairingStatus.Done("203.0.113.10", admin = true, entryHopFailed = true), viewModel.pairing.value)
     }
 
     @Test

@@ -19,6 +19,7 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pair
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_dismiss
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_done
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_done_member
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_entry_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_reconnecting
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_registering
 import org.jetbrains.compose.resources.stringResource
@@ -39,11 +40,20 @@ fun PairingStatusPanel(status: PairingStatus, onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.ink,
                 )
-                is PairingStatus.Done -> Text(
-                    stringResource(if (status.admin) Res.string.settings_pairing_done else Res.string.settings_pairing_done_member, status.host),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.connectedText,
-                )
+                is PairingStatus.Done -> Column {
+                    Text(
+                        stringResource(if (status.admin) Res.string.settings_pairing_done else Res.string.settings_pairing_done_member, status.host),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.connectedText,
+                    )
+                    if (status.entryHopFailed) {
+                        Text(
+                            stringResource(Res.string.settings_pairing_entry_failed),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.ink,
+                        )
+                    }
+                }
                 is PairingStatus.Failed -> Text(
                     status.text.asString(),
                     style = MaterialTheme.typography.bodyMedium,

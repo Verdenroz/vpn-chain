@@ -9,6 +9,8 @@
 #   c) the nft rules stop a name that rebinds to loopback, keep the agent and the internet
 #      reachable, leave other tables alone and come back with the unit
 #   d) a relay made by server/deploy-server.sh is adopted with its keypair and clients intact
+#   e) on a terminal, setup asks for a device name and an entry hop conf, which the device gets
+#      once when it enrolls and which is left nowhere afterwards
 # Usage: run.sh [debian|ubuntu]. The containers are never privileged: SYS_ADMIN for systemd's
 # cgroup, NET_ADMIN for nft.
 set -eEuo pipefail
@@ -59,6 +61,7 @@ grep -q '█' "$W/out"
 eq "$(grep -c 'vpnchain://' "$W/err" || true)" 0
 pass "stdout holds the link once, as text and a QR code, and stderr never shows it"
 eq "$(link_field "$W/out" n)" admin
+no grep -q 'Name for the first device' "$W/err"
 eq "$(link_field "$W/out" h)" "$(addr 10)"
 eq "$(link_field "$W/out" v)" 1
 eq "$(link_field "$W/out" f)" 1
@@ -164,6 +167,7 @@ for version in "${SINGBOX_VERSIONS[@]}"; do
     reply="$(enroll "c-$tag" "$(link_field "$W/link-$tag" t)" "k-$tag")"
     eq "${reply%% *}" 200
     body="${reply#* }"
+    eq "$(jq -r '.entryHop // "none"' <<<"$body")" none
     key_id="$(jq -r .keyId <<<"$body")"
     eq "${#key_id}" 16
     new_uuid="$(jq -r .identity.uuid <<<"$body")"
@@ -329,5 +333,65 @@ step "d) a relay deployed by deploy-server.sh is adopted, pairing an existing de
 adopt_case existing "$(addr 100)" device1 --device device1
 step "d) the same, pairing a new admin device"
 adopt_case newdev "$(addr 101)" tablet2 --name tablet2
+
+# prompt_case: a fresh VPS set up from a terminal, the way a person at a keyboard does it.
+prompt_case() {
+    local c="prompt-$DISTRO-$$" ip version="${SINGBOX_VERSIONS[1]}"
+    local conf="$HERE/../fixtures/entry/ok-provider-extras.conf"
+    ip="$(addr 102)"
+    relay_up "$c" "$ip"
+    RELAY_C="$c"
+    release_up
+    printf 'laptop\n' >"$W/a-name"
+    printf '\n' >"$W/a-skip"
+    { cat "$conf"; echo; } >"$W/a-entry"
+    for file in a-name a-skip a-entry; do docker cp "$W/$file" "$c:/root/$file"; done
+    local name_ask='Name for the first device=/root/a-name' entry_ask='entry hop for that device=/root/a-entry'
+    local skip_entry='entry hop for that device=/root/a-skip' skip_exit='WireGuard exit for the relay=/root/a-skip'
+    entry_files() { g bash -c "ls $STATE_DIR/enroll-*.entry 2>/dev/null | wc -l"; }
+
+    tty_install fresh "$name_ask" "$entry_ask" "$skip_exit" -- --host "$ip" --sni dest.test
+    eq "$(grep -c 'vpnchain://pair' "$W/out-fresh")" 1
+    eq "$(link_field "$W/out-fresh" n)" laptop
+    grep -q 'Name for the first device \[admin\]' "$W/tty-fresh"
+    grep -q 'between the device and this relay' "$W/tty-fresh"
+    grep -q 'between this relay and the internet' "$W/tty-fresh"
+    no grep -q -e 'Name for the first device' -e 'Paste the .conf' "$W/out-fresh" "$W/err-fresh"
+    no grep -q -e 'vpnchain://' -e FAKEprivateKey "$W/tty-fresh"
+    no grep -q FAKEprivateKey "$W/out-fresh" "$W/err-fresh"
+    pass "the prompts go to the terminal, the name reaches the link, and the terminal never shows the code or the conf"
+    eq "$(entry_files)" 1
+    eq "$(g bash -c "stat -c '%U:%G %a' $STATE_DIR/enroll-*.entry")" "relayd:relayd 600"
+    pass "the entry conf waits in a private file of its own"
+
+    tty_install skip "$skip_entry" -- --host "$ip" --sni dest.test
+    no grep -q 'Name for the first device' "$W/tty-skip"
+    eq "$(link_field "$W/out-skip" n)" laptop
+    eq "$(entry_files)" 0
+    pass "a re-run before a device enrolls asks only for the entry hop, and skipping it drops the waiting conf"
+    tty_install again "$entry_ask" -- --host "$ip" --sni dest.test
+    eq "$(entry_files)" 1
+
+    client_from p-first "$version" "$W/out-fresh"
+    new_key p-first
+    eq "$(enroll p-first "$(link_field "$W/out-fresh" t)" p-first | cut -d' ' -f1)" 401
+    client_from p-again "$version" "$W/out-again"
+    reply="$(enroll p-again "$(link_field "$W/out-again" t)" p-first)"
+    eq "${reply%% *}" 200
+    eq "$(jq -r .entryHop <<<"${reply#* }")" "$(cat "$conf")"
+    eq "$(entry_files)" 0
+    pass "enrolling returns the conf once, and the replaced codes got 401"
+    client_from p-after "$version" "$W/out-again" "$(jq -r .identity.uuid <<<"${reply#* }")" "$(jq -r .identity.shortId <<<"${reply#* }")"
+    reply="$(enroll p-after "$(link_field "$W/out-again" t)" p-first)"
+    eq "${reply%% *}" 401
+    no grep -q entryHop <<<"${reply#* }"
+    g rm -f /root/a-name /root/a-skip /root/a-entry /root/out /root/err /root/tty.log
+    no g grep -rlF -e FAKEprivateKey /var /etc /root /usr/local /opt/vpn-chain
+    no g bash -c "journalctl --no-pager -a | grep -F FAKEprivateKey"
+    pass "a second enroll gets 401 and no conf, and none remains on disk or in the journal"
+}
+
+step "e) setup asks for a name and an entry hop on a terminal, and hands the entry hop over once"
+prompt_case
 
 printf '\nrun.sh %s: %d checks passed\n' "$DISTRO" "$PASS"

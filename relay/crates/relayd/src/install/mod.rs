@@ -6,6 +6,8 @@
 //! finished install refreshes the binaries, the units and SSH hardening, and prints a new
 //! pairing link while no device has enrolled.
 
+mod ask;
+mod entry;
 mod host;
 mod pinned;
 mod ssh;
@@ -20,14 +22,15 @@ use std::time::{Duration, Instant};
 
 use relay_jobs::{JobId, JobKind, JobState, Jobs, Layout};
 
+use self::ask::{Asked, Needs};
 use self::host::{
     give, give_all, have, output, put, require, run, run_reporting, say, systemctl, uid,
 };
 use crate::pairing::{self, Public, Purpose};
 use crate::{
     AGENT_PORT, Agent, Api, DEVICES_LOCK, Device, Error, Exit, INBOUND_TAG, Inbound, Placement,
-    Relay, Role, SCHEMA, SECRETS_SCHEMA, SPARES, Secrets, State, XRAY_VERSION, Xray, adopt_with,
-    egress, layout, now, secrets_path, valid_name, write_config,
+    Relay, Role, SCHEMA, SECRETS_SCHEMA, SPARES, Secret, Secrets, State, XRAY_VERSION, Xray,
+    adopt_with, egress, layout, now, secrets_path, valid_name, write_config,
 };
 
 pub use pinned::RELEASES;
@@ -49,6 +52,7 @@ const RELAYD: &str = "relayd";
 const EGRESS_UNIT: &str = "vpn-chain-egress.service";
 
 /// What the person asked for. Everything else is fixed.
+#[derive(Clone, Default)]
 pub struct Options {
     /// The first device on a fresh relay, or a new admin device on an adopted one.
     pub name: Option<String>,
@@ -62,6 +66,8 @@ pub struct Options {
     pub host: Option<String>,
     /// A `wg-quick` file for a WireGuard exit.
     pub wireguard: Option<PathBuf>,
+    /// A `wg-quick` file for the first device's WireGuard entry hop.
+    pub entry: Option<PathBuf>,
 }
 
 struct Site {
@@ -80,6 +86,11 @@ struct Created {
 pub fn run_install(options: &Options) -> Result<(), Error> {
     check_host()?;
     check_options(options)?;
+    let asked = ask::ask(options, needs(options)?)?;
+    let options = &Options {
+        name: options.name.clone().or_else(|| asked.name.clone()),
+        ..options.clone()
+    };
     require(&[("curl", "curl"), ("unzip", "unzip"), ("nft", "nftables")])?;
     let mut changed = units::install()?;
     units::accounts()?;
@@ -96,7 +107,7 @@ pub fn run_install(options: &Options) -> Result<(), Error> {
         refuse_new_relay_flags(options, &site)?;
     }
     if Public::beside(&site.state).exists() {
-        return refresh(&site, changed);
+        return refresh(&site, changed, &asked);
     }
     let created = if site.state.exists() {
         Created {
@@ -104,24 +115,29 @@ pub fn run_install(options: &Options) -> Result<(), Error> {
             restart: false,
         }
     } else {
-        create(options, &site)?
+        create(options, &site, &asked)?
     };
     start(&site, &created)?;
     save_public(&site, options)?;
     ssh::harden()?;
     say("done; run this command again for a new code until the first device is set up");
-    print_first_code(&site, created.device.as_deref())
+    print_first_code(&site, created.device.as_deref(), asked.entry.as_ref())
 }
 
 /// Prints the first admin device's pairing code, and for a relay that already had devices says
-/// what happens to them.
-fn print_first_code(site: &Site, device: Option<&str>) -> Result<(), Error> {
-    let link = pairing::issue(
+/// what happens to them. The entry hop, if any, goes to the device when it enrolls.
+fn print_first_code(
+    site: &Site,
+    device: Option<&str>,
+    entry: Option<&Secret>,
+) -> Result<(), Error> {
+    let link = pairing::issue_with_entry(
         &site.state,
         &site.secrets,
         Path::new(DEVICES_LOCK),
         device,
         Purpose::FirstAdmin,
+        entry,
     )?;
     print!("{}", pairing::show(&link, Purpose::FirstAdmin));
     if Relay::load(&site.state, &site.secrets)?.state.devices.len() > 1 {
@@ -180,7 +196,7 @@ fn binaries() -> Result<bool, Error> {
 
 /// Brings an installed relay up to date with this relayd: its files, the egress rules and the
 /// services. xray keeps running until it restarts, which loads a changed unit.
-fn refresh(site: &Site, changed: bool) -> Result<(), Error> {
+fn refresh(site: &Site, changed: bool, asked: &Asked) -> Result<(), Error> {
     if changed {
         units::reload()?;
     }
@@ -202,11 +218,34 @@ fn refresh(site: &Site, changed: bool) -> Result<(), Error> {
     ssh::harden()?;
     if relay.state.keys.is_empty() {
         say("already installed; no device is set up yet, so here is a new code");
-        print_first_code(site, None)
+        print_first_code(site, None, asked.entry.as_ref())
     } else {
         say("already set up; add devices from the app (Settings → Devices)");
         Ok(())
     }
+}
+
+/// The questions this run has left, by what the machine already has. A name only matters for a
+/// device that does not exist yet, and only a new relay takes an exit.
+fn needs(options: &Options) -> Result<Needs, Error> {
+    let state = Path::new(layout::STATE);
+    let claimed = Public::beside(state).exists()
+        && !Relay::load(state, &secrets_path(state))?
+            .state
+            .keys
+            .is_empty();
+    if claimed && options.entry.is_some() {
+        return Err(Error::invalid(
+            "--entry is for the first device, and this relay already has one",
+        ));
+    }
+    Ok(Needs {
+        name: !state.exists() && options.name.is_none() && options.device.is_none(),
+        entry: !claimed,
+        exit: !state.exists()
+            && !Path::new(layout::XRAY_CONFIG).exists()
+            && options.wireguard.is_none(),
+    })
 }
 
 fn check_options(options: &Options) -> Result<(), Error> {
@@ -247,7 +286,7 @@ fn refuse_new_relay_flags(options: &Options, site: &Site) -> Result<(), Error> {
     Ok(())
 }
 
-fn create(options: &Options, site: &Site) -> Result<Created, Error> {
+fn create(options: &Options, site: &Site, asked: &Asked) -> Result<Created, Error> {
     if site.config.exists() {
         adopt(options, site)
     } else if options.device.is_some() {
@@ -255,19 +294,20 @@ fn create(options: &Options, site: &Site) -> Result<Created, Error> {
             "--device names a device of an existing relay, and there is none here",
         ))
     } else {
-        fresh(options, site)
+        fresh(options, site, asked)
     }
 }
 
-fn fresh(options: &Options, site: &Site) -> Result<Created, Error> {
+fn fresh(options: &Options, site: &Site, asked: &Asked) -> Result<Created, Error> {
     say("setting up a new relay");
     let (private, _) = pinned::keypair(&site.xray)?;
-    let (exit, exit_secret_key) = match &options.wireguard {
-        Some(path) => {
+    let (exit, exit_secret_key) = match (&options.wireguard, &asked.exit) {
+        (Some(path), _) => {
             let (exit, key) = wireguard::read(path)?;
             (exit, Some(key))
         }
-        None => (Exit::Direct, None),
+        (None, Some((exit, key))) => (exit.clone(), Some(key.clone())),
+        (None, None) => (Exit::Direct, None),
     };
     let name = options.name.as_deref().unwrap_or(FIRST_DEVICE);
     let sni = options.sni.as_deref().unwrap_or(SNI);

@@ -98,8 +98,12 @@ fn claim(service: &Service, body: &[u8]) -> Result<serde_json::Value, ApiError> 
         .enroll
         .tokens
         .claim(&service.lock, LOCK_WAIT, &request.token, now)?;
-    let (device, role) = match verdict {
-        Verdict::Claimed { device, role } => (device, role),
+    let (device, role, entry) = match verdict {
+        Verdict::Claimed {
+            device,
+            role,
+            entry,
+        } => (device, role, entry),
         Verdict::Unknown => return Err(refuse(ApiError::unauthorized(), "unknown token")),
         Verdict::Expired => {
             return Err(refuse(
@@ -126,5 +130,9 @@ fn claim(service: &Service, body: &[u8]) -> Result<serde_json::Value, ApiError> 
                 .record(&key.id, "enroll", Some(&device), "failed")
         })?;
     service.audit.record(&key.id, "enroll", Some(&device), "ok");
-    Ok(json!({ "identity": identity, "keyId": key.id, "role": role }))
+    let mut reply = json!({ "identity": identity, "keyId": key.id, "role": role });
+    if let Some(entry) = entry {
+        reply["entryHop"] = entry.expose().into();
+    }
+    Ok(reply)
 }

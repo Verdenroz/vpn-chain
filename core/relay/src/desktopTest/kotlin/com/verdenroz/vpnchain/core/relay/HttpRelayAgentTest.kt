@@ -130,6 +130,17 @@ class HttpRelayAgentTest {
     }
 
     @Test
+    fun `enroll returns the entry hop when the relay sends one and keeps it out of the text form`() = runTest {
+        route = { _, _ -> Reply(200, """{"identity":$IDENTITY,"keyId":"${key.id}","role":"admin","entryHop":"[Interface]\nPrivateKey = FAKEKEY"}""") }
+        val (client, _) = agent(registered = emptyMap())
+
+        val enrolled = client.enroll("tokenvalue", key)
+
+        assertEquals("[Interface]\nPrivateKey = FAKEKEY", enrolled.entryHop)
+        assertFalse("FAKEKEY" in enrolled.toString())
+    }
+
+    @Test
     fun `an expired token surfaces as 410`() = runTest {
         route = { _, _ -> Reply(410, """{"error":"expired"}""") }
         val (client, _) = agent(registered = emptyMap())
