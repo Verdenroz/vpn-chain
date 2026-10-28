@@ -2,10 +2,10 @@
 #   - Android: release APKs (arm64-v8a + x86_64 splits), signed with the
 #     keystore from secrets. The job fails when they are missing: an APK
 #     signed with another key cannot update an installed one.
-#   - Desktop: the Linux .deb, built and tested by deb.yml.
+#   - Desktop: the Linux .deb and Arch package, built and tested by deb.yml and arch.yml.
 #   - Relay: static relayd, relay-jobs and relay-privileged for amd64 and arm64
 #     (musl), each with a SHA-256 file that setup.sh checks, plus setup.sh.
-#   - manifest.json: sizes + SHA-256 of the APKs and the .deb, which the apps'
+#   - manifest.json: sizes + SHA-256 of the APKs, the .deb and the Arch package, which the apps'
 #     in-app updater reads from the latest release.
 #
 # Required secrets for stable Android signing across releases:
@@ -79,6 +79,9 @@ jobs:
   desktop:
     uses: ./.github/workflows/deb.yml
 
+  desktop-arch:
+    uses: ./.github/workflows/arch.yml
+
   relay:
     strategy:
       matrix:
@@ -113,7 +116,7 @@ jobs:
           path: dist/*
 
   publish:
-    needs: [android, desktop, relay]
+    needs: [android, desktop, desktop-arch, relay]
     runs-on: ubuntu-latest
     environment: release
     permissions:

@@ -8,17 +8,17 @@ import kotlinx.coroutines.withContext
 import okio.Path as OkioPath
 
 /**
- * Installs a verified .deb over the package this app runs from, then restarts into it.
+ * Installs a verified package over the package this app runs from, then restarts into it.
  * The relay is a separate process, so it keeps running across the restart for the new window to adopt.
  */
 class DesktopAppInstaller(
-    private val installation: DebInstall,
+    private val installation: PackageInstall,
     appPath: String? = System.getProperty("jpackage.app-path"),
     private val relaunch: (Path) -> Unit = ::relaunchAndExit,
 ) : AppInstaller {
     /** Only the packaged app can be replaced, so a source build is never offered an update. */
     override val artifactKey: String? =
-        LINUX_BUILD.takeIf {
+        installation.artifactKey.takeIf {
             System.getProperty("os.name").startsWith("Linux") &&
                 System.getProperty("os.arch") in setOf("amd64", "x86_64") &&
                 installation.manages(appPath)
@@ -26,7 +26,7 @@ class DesktopAppInstaller(
 
     override suspend fun install(file: OkioPath, release: AppRelease): InstallResult {
         try {
-            val sha256 = release.artifacts.getValue(LINUX_BUILD).sha256
+            val sha256 = release.artifacts.getValue(installation.artifactKey).sha256
             withContext(Dispatchers.IO) { installation.install(file.toNioPath(), sha256) }
         } catch (e: IOException) {
             return InstallResult.Failed(e.message ?: "Could not install the update")
@@ -35,8 +35,6 @@ class DesktopAppInstaller(
         return InstallResult.Started
     }
 }
-
-private const val LINUX_BUILD = "linux-x64"
 
 // The jpackage launcher treats a process carrying this as its own re-exec and skips the JVM arguments.
 private const val JPACKAGE_LAUNCHER_ENV = "_JPACKAGE_LAUNCHER"

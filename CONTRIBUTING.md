@@ -50,6 +50,25 @@ and the update action. The helper alone carries a file capability, set in `posti
 and purges the package in a container with no privileges and no systemd. The
 `deb` workflow runs all of this on every change to the files it packages.
 
+### Arch package
+
+```
+./gradlew :desktopApp:createReleaseDistributable
+desktopApp/arch/build-in-container.sh desktopApp/build/compose/binaries/main-release/app/vpn-chain dist
+desktopApp/arch/test-install.sh dist/vpn-chain-*.pkg.tar.zst
+```
+
+`build-in-container.sh` runs `build-arch.sh` in the Arch image pinned in
+`desktopApp/arch/image`; on Arch itself run `build-arch.sh` directly as a normal user.
+It stages the same files as the `.deb` and hands them to `makepkg` through
+`desktopApp/arch/PKGBUILD`. `vpn-chain.install` does what the `.deb` maintainer scripts
+do, and also removes the `sing-box` user and `vpn-chain` group it created, since pacman
+has no purge. The package marks itself with `libexec/artifact-key`, which makes the app
+read `linux-x64-arch` from the manifest instead of `linux-x64`. `lint.sh` runs `namcap`
+and fails on anything outside its short list of expected findings for a bundled JRE. The
+`arch` workflow runs the build, the lint and `test-install.sh` on every change to the
+files it packages.
+
 ### Server scripts
 
 These need Docker. The first run downloads the pinned Xray and checks its SHA-256.
@@ -125,10 +144,11 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`.
    gh release edit v0.2.1 --prerelease=false --latest
    ```
 
-The release carries the signed APKs (arm64-v8a, x86_64), the `.deb`, and
-`manifest.json` with the size and SHA-256 of each. The installed app downloads the
-`.deb`, checks those, and hands it to `desktopApp/deb/vpn-chain-install-update`
-through `pkexec`, which hashes its own copy again before `apt` installs it. Copies
+The release carries the signed APKs (arm64-v8a, x86_64), the `.deb`, the Arch package,
+and `manifest.json` with the size and SHA-256 of each. The installed app downloads the
+package for its install, checks those, and hands it to `vpn-chain-install-update`
+(`desktopApp/deb/` or `desktopApp/arch/`) through `pkexec`, which hashes its own copy
+again before `apt` or `pacman` installs it. Copies
 installed from the old tarball cannot update; reinstall the `.deb` once by hand.
 
 ### Signing

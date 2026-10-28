@@ -5,16 +5,20 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Installs a downloaded package through the polkit action the .deb ships. The helper hashes its own copy of the
- * package before `apt` sees it, so the file that was checked is the file that is installed.
+ * Installs a downloaded package through the polkit action the .deb and the Arch package ship. The helper hashes its
+ * own copy of the package before `apt` or `pacman` sees it, so the file that was checked is the file that is installed.
  */
-class DebInstall(
+class PackageInstall(
     private val root: Path = Path.of("/opt/vpn-chain"),
     private val pkexec: String = "pkexec",
 ) {
     val launcher: Path = root.resolve("bin/vpn-chain")
 
     private val helper: Path = root.resolve("libexec/vpn-chain-install-update")
+
+    /** The manifest key of this package's format; the Arch package names its own, the .deb ships no marker. */
+    val artifactKey: String =
+        root.resolve("libexec/artifact-key").takeIf(Files::isRegularFile)?.let { Files.readString(it).trim() } ?: "linux-x64"
 
     /** Whether the launcher at [appPath] lives in the package, as opposed to a development run. */
     fun manages(appPath: String?): Boolean =

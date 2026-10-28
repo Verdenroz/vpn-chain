@@ -1,0 +1,43 @@
+# Maintainer: Harvey Tseng <verde@nroz.dev>
+# Built by build-arch.sh, which fills in the version and sets APP_IMAGE, SINGBOX, REPO and HERE.
+pkgname=vpn-chain
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Multi-hop VPN through your own server'
+arch=(x86_64)
+url='https://github.com/Verdenroz/vpn-chain'
+license=(GPL-3.0-or-later)
+depends=(glibc alsa-lib freetype2 fontconfig harfbuzz giflib libjpeg-turbo libpng lcms2 libglvnd libx11 libxext libxi libxrender libxtst hicolor-icon-theme libcap nftables systemd polkit)
+install=vpn-chain.install
+# The app carries its own JRE and a Go binary; stripping either buys nothing.
+options=(!strip !debug)
+
+package() {
+  local prefix="$pkgdir/opt/vpn-chain"
+
+  install -d "$prefix/libexec"
+  cp -a "$APP_IMAGE/." "$prefix/"
+  install -m 755 "$SINGBOX" "$prefix/libexec/sing-box"
+  install -m 755 "$REPO/cli/killswitch/vpn-chain-killswitch" "$prefix/libexec/"
+  install -m 755 "$HERE/vpn-chain-install-update" "$prefix/libexec/"
+  echo linux-x64-arch >"$prefix/libexec/artifact-key"
+  chmod -R u=rwX,go=rX "$prefix"
+  chmod 644 "$prefix/lib/libapplauncher.so"
+  find "$prefix" -type d -empty -delete
+
+  install -d "$pkgdir/usr/bin"
+  ln -s /opt/vpn-chain/libexec/vpn-chain-killswitch "$pkgdir/usr/bin/vpn-chain-killswitch"
+
+  install -d "$pkgdir/usr/lib/systemd/system" "$pkgdir/usr/lib/tmpfiles.d"
+  sed 's|^ExecStart=/usr/bin/sing-box|ExecStart=/opt/vpn-chain/libexec/sing-box|' \
+    "$REPO/cli/systemd/vpn-chain-relay.service" >"$pkgdir/usr/lib/systemd/system/vpn-chain-relay.service"
+  install -m 644 "$REPO/cli/systemd/vpn-chain-tmpfiles.conf" "$pkgdir/usr/lib/tmpfiles.d/vpn-chain.conf"
+
+  install -d "$pkgdir/usr/share/polkit-1/rules.d" "$pkgdir/usr/share/polkit-1/actions"
+  install -m 644 "$REPO"/cli/polkit/*.rules "$pkgdir/usr/share/polkit-1/rules.d/"
+  install -m 644 "$HERE/../deb/com.verdenroz.vpnchain.update.policy" "$pkgdir/usr/share/polkit-1/actions/"
+
+  install -Dm 644 "$HERE/../deb/vpn-chain.desktop" -t "$pkgdir/usr/share/applications"
+  install -Dm 644 "$REPO/desktopApp/icons/vpn-chain.png" -t "$pkgdir/usr/share/icons/hicolor/512x512/apps"
+  install -Dm 644 "$REPO/assets/branding/icon.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/vpn-chain.svg"
+}

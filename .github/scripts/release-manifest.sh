@@ -15,7 +15,7 @@ badge() {
 }
 
 artifacts='{}'
-for entry in "android-arm64-v8a:vpn-chain-$version-android-arm64-v8a.apk" "android-x86_64:vpn-chain-$version-android-x86_64.apk" "linux-x64:vpn-chain_${version}_amd64.deb"; do
+for entry in "android-arm64-v8a:vpn-chain-$version-android-arm64-v8a.apk" "android-x86_64:vpn-chain-$version-android-x86_64.apk" "linux-x64:vpn-chain_${version}_amd64.deb" "linux-x64-arch:vpn-chain-${version//-/_}-1-x86_64.pkg.tar.zst"; do
   key="${entry%%:*}"
   name="${entry#*:}"
   [ -f "$dist/$name" ] || { echo "missing $name" >&2; exit 1; }
