@@ -45,7 +45,10 @@ internal class HttpRelayAgent(
 
     override suspend fun refillPool() = send("POST", "/v1/pool/refill").decode<Refilled>()
 
-    override suspend fun pair(name: String) = send("POST", "/v1/devices/${segment(name)}/pair").decode<PairingCode>()
+    override suspend fun pair(name: String, entryHop: String?): PairingCode {
+        val body = entryHop?.let { buildJsonObject { put("entryHop", it) }.toString() } ?: ""
+        return send("POST", "/v1/devices/${segment(name)}/pair", body).decode<PairingCode>()
+    }
 
     override suspend fun exit(): AgentExit {
         val reply = json.parseToJsonElement(get("/v1/exit").body).jsonObject

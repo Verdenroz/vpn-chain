@@ -187,6 +187,16 @@ class HttpRelayAgentTest {
     }
 
     @Test
+    fun `pair sends an entry hop as the body`() = runTest {
+        route = { _, _ -> Reply(200, """{"link":"vpnchain://pair?v=1&t=tokenvalue","expires":$NOW}""") }
+        val (client, fake) = agent()
+
+        client.pair("phone", entryHop = "[Interface]\nPrivateKey = x")
+
+        assertEquals("""{"entryHop":"[Interface]\nPrivateKey = x"}""", fake.seen.single().body)
+    }
+
+    @Test
     fun `pairing the calling device is refused with the agent's wording`() = runTest {
         route = { _, _ -> Reply(409, """{"error":"this device cannot pair itself"}""") }
         val (client, _) = agent()

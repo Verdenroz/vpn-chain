@@ -24,6 +24,7 @@ fun DevicesRoute(
             state = state,
             actions = DevicesActions(
                 onAdd = viewModel::add,
+                onSubmitEntryHop = viewModel::submitEntryHop,
                 onRename = viewModel::rename,
                 onRestartAndAdd = viewModel::restartAndAdd,
                 onCutOff = viewModel::cutOff,

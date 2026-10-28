@@ -1,5 +1,6 @@
 package com.verdenroz.vpnchain.core.domain
 
+import com.verdenroz.vpnchain.core.config.WireGuardConfParser
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.model.TunnelState
@@ -44,8 +45,11 @@ interface RelayDevices {
 
     suspend fun load(): Result<DeviceBoard>
 
-    /** Adds [name] and issues the code that enrolls it. */
-    suspend fun add(name: String): Result<PairingCode>
+    /** Whether [conf] can be another device's entry hop. A failure's message says why, without the conf. */
+    suspend fun checkEntryHop(conf: String): Result<Unit>
+
+    /** Adds [name] and issues the code that enrolls it, which also hands it [entryHop] when given one. */
+    suspend fun add(name: String, entryHop: String? = null): Result<PairingCode>
 
     suspend fun rename(name: String, to: String): Result<Unit>
 
@@ -83,11 +87,18 @@ class ManageDevicesUseCase(
         DeviceBoard(devices, relay.managementDevice, relay.managementAdmin, poolEmpty = agent.status().pool == 0)
     }
 
-    override suspend fun add(name: String) = call {
+    override suspend fun checkEntryHop(conf: String) = call {
+        val entry = WireGuardConfParser.parse(conf).getOrElse { throw DevicesFailed(DevicesFailed.Reason.Refused, it.message) }
+        if (entry.privateKey == profiles.profile.first()?.wireGuard?.privateKey) {
+            throw DevicesFailed(DevicesFailed.Reason.Refused, "That is this device's own config. Each device needs its own.")
+        }
+    }
+
+    override suspend fun add(name: String, entryHop: String?) = call {
         keyed()
         if (agent.status().pool == 0) throw DevicesFailed(DevicesFailed.Reason.PoolEmpty)
         takenIs409 { agent.add(name) }
-        agent.pair(name)
+        agent.pair(name, entryHop)
     }
 
     override suspend fun rename(name: String, to: String) = call {

@@ -38,6 +38,19 @@ import kotlin.test.assertTrue
 private val LAPTOP = AgentDevice("laptop", DeviceRole.Admin, added = "2026-10-01T00:00:00Z", up = 1, down = 2)
 private val PHONE = AgentDevice("phone", DeviceRole.Member, added = "2026-10-02T00:00:00Z", up = 0, down = 0)
 private val CODE = PairingCode("vpnchain://pair?v=1&t=tokenvalue", expires = 2_000)
+private const val OWN_KEY = "kPwG0r8sXv1zB3dF5hJ7lN9pR2tV4xZ6bD8fH0jL2nM="
+private const val OTHER_KEY = "mQxH1s9tYw2aC4eG6iK8mO0qS3uW5yA7cE9gI1kM3oQ="
+
+private fun conf(privateKey: String) = """
+    [Interface]
+    PrivateKey = $privateKey
+    Address = 10.8.0.2/32
+
+    [Peer]
+    PublicKey = pEeRpUbLiCkEyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    AllowedIPs = 0.0.0.0/0
+    Endpoint = 203.0.113.9:51820
+""".trimIndent()
 private const val JOB = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
 
 class ManageDevicesUseCaseTest {
@@ -92,6 +105,39 @@ class ManageDevicesUseCaseTest {
 
         assertEquals(CODE, code)
         assertEquals(listOf("status", "add:phone", "pair:phone"), log)
+    }
+
+    @Test
+    fun `an entry hop is handed to the relay with the pairing request`() = runTest {
+        useCase().add("phone", conf(OTHER_KEY)).getOrThrow()
+
+        assertEquals(listOf("status", "add:phone", "pair:phone:entry"), log)
+    }
+
+    @Test
+    fun `a different entry hop passes the check`() = runTest {
+        profiles.ownEntryHop(OWN_KEY)
+
+        useCase().checkEntryHop(conf(OTHER_KEY)).getOrThrow()
+    }
+
+    @Test
+    fun `an entry hop that does not parse is refused with the parser's words`() = runTest {
+        val failure = assertIs<DevicesFailed>(useCase().checkEntryHop("[Interface]\nPrivateKey = $OTHER_KEY").exceptionOrNull())
+
+        assertEquals(DevicesFailed.Reason.Refused, failure.reason)
+        assertEquals("Config has no peer.", failure.message)
+    }
+
+    @Test
+    fun `this device's own entry hop is refused without echoing its key`() = runTest {
+        profiles.ownEntryHop(OWN_KEY)
+
+        val failure = assertIs<DevicesFailed>(useCase().checkEntryHop(conf(OWN_KEY)).exceptionOrNull())
+
+        assertEquals(DevicesFailed.Reason.Refused, failure.reason)
+        assertTrue(OWN_KEY !in failure.message.orEmpty())
+        assertEquals(emptyList(), log)
     }
 
     @Test
@@ -276,8 +322,8 @@ private class DevicesAgent(private val log: MutableList<String>) : RelayAgent {
         return Revoked(countersLost = false, job = revokeJob)
     }
 
-    override suspend fun pair(name: String): PairingCode {
-        log += "pair:$name"
+    override suspend fun pair(name: String, entryHop: String?): PairingCode {
+        log += "pair:$name" + if (entryHop != null) ":entry" else ""
         gate()
         return CODE
     }
@@ -336,6 +382,12 @@ private class DevicesProfiles(keyed: Boolean) : ProfileRepository {
             managementDevice = device.takeIf { keyed },
         )
         profile.value = SavedProfile("a", "home", relay = relay)
+    }
+
+    fun ownEntryHop(privateKey: String) {
+        profile.value = profile.value?.copy(
+            wireGuard = WireGuardEntry(privateKey = privateKey, address = "10.2.0.2/32", peerPublicKey = "p", endpointHost = "203.0.113.8"),
+        )
     }
 
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = error("unused")

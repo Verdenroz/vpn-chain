@@ -279,7 +279,7 @@ private class PairingAgent(private val enroll: () -> Enrolled) : RelayAgent {
     override suspend fun rename(name: String, to: String) = error("unused")
     override suspend fun revoke(name: String) = error("unused")
     override suspend fun rekey(name: String) = error("unused")
-    override suspend fun pair(name: String) = error("unused")
+    override suspend fun pair(name: String, entryHop: String?) = error("unused")
     override suspend fun refillPool() = error("unused")
     override suspend fun exit() = error("unused")
     override suspend fun setExit(change: ExitChange) = error("unused")

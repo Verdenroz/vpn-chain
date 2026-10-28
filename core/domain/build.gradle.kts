@@ -12,11 +12,11 @@ kotlin {
             api(projects.core.geoip)
             implementation(projects.core.common)
             api(projects.core.relay)
+            implementation(projects.core.config)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.koin.core)
         }
         commonTest.dependencies {
-            implementation(projects.core.config)
             implementation(libs.kotlinx.serialization.json)
         }
     }

@@ -142,6 +142,10 @@
     <string name="devices_name_invalid">Use up to 32 lowercase letters, digits, dots, dashes or underscores, starting with a letter or digit.</string>
     <string name="devices_name_taken">Another device already has that name.</string>
     <string name="devices_show_code">Show code</string>
+    <string name="devices_skip">Skip</string>
+    <string name="devices_entry_hop_intro">Paste %1$s's WireGuard .conf from your VPN provider, or skip.</string>
+    <string name="devices_entry_hop_note">Each device needs its own config from your VPN provider. One config on two devices knocks both off.</string>
+    <string name="devices_entry_hop_label">WireGuard .conf</string>
     <string name="devices_save_name">Save name</string>
     <string name="devices_action_failed">That did not go through. Nothing was changed.</string>
     <string name="devices_confirm_cut_off">Cut off %1$s? Its app stops connecting right away. The relay restarts, so everyone connected, including you, drops for a few seconds. To use that device again, add it as a new device.</string>
