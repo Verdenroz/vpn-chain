@@ -25,7 +25,6 @@ enum class SiteAction { UseMyConnection, Undo, Remove }
 
 data class SiteRow(val domain: String, val host: String, val action: SiteAction)
 
-/** Learned sites by where they go, newest first in each section. */
 data class SitesUiState(
     val blocked: List<SiteRow> = emptyList(),
     val direct: List<SiteRow> = emptyList(),
@@ -35,10 +34,7 @@ data class SitesUiState(
     val isEmpty: Boolean get() = blocked.isEmpty() && direct.isEmpty() && warp.isEmpty() && entry.isEmpty()
 }
 
-/**
- * A site learned for WARP is listed there only while the tail is rendered; with
- * WARP off or unregistered it goes through the relay, which refuses it.
- */
+/** A WARP site is listed there only while the tail is rendered; otherwise it goes through the relay, which refuses it. */
 internal fun sitesUiState(
     sites: List<LearnedSite>,
     settings: UserSettings,

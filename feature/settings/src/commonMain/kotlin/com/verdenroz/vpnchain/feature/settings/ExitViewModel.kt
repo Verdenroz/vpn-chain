@@ -16,17 +16,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** What the Exit row shows. It is [Hidden] for a member, and whenever the relay cannot be asked. */
 sealed interface ExitBoard {
     data object Hidden : ExitBoard
     data class Ready(val exit: AgentExit) : ExitBoard
 }
 
-/** The one question the row puts in front of the exit. */
 sealed interface ExitStep {
     data class Pasting(val error: UiText? = null) : ExitStep
 
-    /** [conf] holds the provider's private key, so [toString] hides it. */
+    /** [toString] hides [conf], which holds the provider's private key. */
     data class ConfirmWireGuard(val conf: String, val endpoint: String) : ExitStep {
         override fun toString() = "ConfirmWireGuard(endpoint=$endpoint)"
     }
@@ -42,8 +40,7 @@ data class ExitUiState(
 )
 
 /**
- * Shows the relay's exit to an admin and switches it. A pasted conf lives only in
- * [ExitUiState.step] and is dropped as soon as the step is, so it is never saved or logged.
+ * A pasted conf lives only in [ExitUiState.step]; it is never saved or logged.
  */
 class ExitViewModel(private val devices: RelayDevices) : ViewModel() {
 

@@ -24,7 +24,6 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pair
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_pairing_registering
 import org.jetbrains.compose.resources.stringResource
 
-/** One plain line for the step pairing is on, then for how it ended. */
 @Composable
 fun PairingStatusPanel(status: PairingStatus, onDismiss: () -> Unit) {
     val colors = VpnChainTheme.colors
