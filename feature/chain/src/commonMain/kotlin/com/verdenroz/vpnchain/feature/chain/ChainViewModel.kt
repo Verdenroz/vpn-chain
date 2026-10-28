@@ -18,6 +18,7 @@ import com.verdenroz.vpnchain.core.model.LearnedSite
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.bareHost
+import com.verdenroz.vpnchain.core.model.effectiveFor
 import com.verdenroz.vpnchain.core.model.offersOutside
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,6 +39,7 @@ data class ChainUiState(
     val connectedSinceMillis: Long? = null,
     val blockedSite: BlockedSite? = null,
     val cutOff: Boolean = false,
+    val entryHop: Boolean = false,
 )
 
 /** A site that refuses the chain and could go over the user's own connection; [host] is for display. */
@@ -67,7 +69,7 @@ class ChainViewModel(
     observeChainRoute: ObserveChainRouteUseCase,
     chainRepository: ChainRepository,
     private val profileRepository: ProfileRepository,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
     private val learnedSites: LearnedSitesRepository,
     supervisor: ChainSupervisor,
 ) : ViewModel() {
@@ -77,7 +79,9 @@ class ChainViewModel(
     val uiState: StateFlow<ChainUiState> =
         combine(
             chainRepository.status,
-            profileRepository.profile.map { it != null },
+            combine(profileRepository.profile, settingsRepository.settings) { profile, settings ->
+                profile to (profile?.effectiveFor(settings)?.wireGuard != null)
+            },
             // Seeded empty because the route is measured: waiting for the first
             // probe would show a live tunnel as an unconfigured one.
             observeChainRoute().onStart { emit(ChainRoute()) },
@@ -93,14 +97,15 @@ class ChainViewModel(
                 dismissed,
                 ::blockedSite,
             ),
-        ) { status, hasProfile, route, (connectedSince, cutOff), blockedSite ->
+        ) { status, (profile, entryHop), route, (connectedSince, cutOff), blockedSite ->
             ChainUiState(
                 status = status,
-                hasProfile = hasProfile,
+                hasProfile = profile != null,
                 route = route,
                 connectedSinceMillis = connectedSince,
                 blockedSite = blockedSite,
                 cutOff = cutOff,
+                entryHop = entryHop,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -111,6 +116,11 @@ class ChainViewModel(
     fun connect() = viewModelScope.launch { connectChain() }
 
     fun disconnect() = viewModelScope.launch { disconnectChain() }
+
+    fun connectWithoutEntryHop() = viewModelScope.launch {
+        settingsRepository.setEntryHopEnabled(false)
+        connectChain()
+    }
 
     fun removeConnection() = viewModelScope.launch {
         val id = profileRepository.activeProfileId.first() ?: return@launch

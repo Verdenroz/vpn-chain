@@ -40,13 +40,3 @@ class AgentException(val status: Int, message: String) : Exception(message)
 expect fun createAgentTransport(): AgentTransport
 
 expect fun newNonce(): String
-
-/**
- * Whether the relay's port completes a TLS handshake. Any client gets one, an unknown REALITY
- * identity included, because the relay hands it to the decoy site.
- */
-fun interface RelayHandshake {
-    suspend fun completes(host: String, port: Int, sni: String): Boolean
-}
-
-expect fun createRelayHandshake(): RelayHandshake

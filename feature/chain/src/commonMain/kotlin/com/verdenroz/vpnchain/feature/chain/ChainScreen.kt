@@ -48,6 +48,7 @@ fun ChainRoute(
         onDisconnect = viewModel::disconnect,
         onOpenSettings = onOpenSettings,
         onPairAgain = onPairAgain,
+        onConnectWithoutEntryHop = viewModel::connectWithoutEntryHop,
         onRemove = viewModel::removeConnection,
         onUseMyConnection = viewModel::sendDirect,
         onDismissBlocked = viewModel::dismissBlocked,
@@ -62,6 +63,7 @@ fun ChainScreen(
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
     onPairAgain: () -> Unit,
+    onConnectWithoutEntryHop: () -> Unit,
     onRemove: () -> Unit,
     onUseMyConnection: (String) -> Unit,
     onDismissBlocked: (String) -> Unit,
@@ -83,7 +85,7 @@ fun ChainScreen(
                     uiState.blockedSite?.let { site ->
                         BlockedSitePrompt(site, onDismissBlocked, onUseMyConnection, Modifier.padding(bottom = 16.dp))
                     }
-                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, onPairAgain, onRemove, fillHeight = true)
+                    ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, onPairAgain, onConnectWithoutEntryHop, onRemove, fillHeight = true)
                 }
             }
         } else {
@@ -95,7 +97,7 @@ fun ChainScreen(
                         BlockedSitePrompt(site, onDismissBlocked, onUseMyConnection, Modifier.padding(bottom = 12.dp))
                     }
                     InfoCard(Modifier.weight(1f, fill = false).fillMaxWidth()) {
-                        ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, onPairAgain, onRemove)
+                        ChainDetails(uiState, onConnect, onDisconnect, onOpenSettings, onPairAgain, onConnectWithoutEntryHop, onRemove)
                     }
                 }
             }

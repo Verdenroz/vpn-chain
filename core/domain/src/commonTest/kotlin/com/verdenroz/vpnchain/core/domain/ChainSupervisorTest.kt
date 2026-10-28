@@ -14,7 +14,6 @@ import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
-import com.verdenroz.vpnchain.core.relay.RelayHandshake
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -325,20 +324,6 @@ class ChainSupervisorTest {
     }
 
     @Test
-    fun `keeps reconnecting while the relay does not answer`() = runTest {
-        val world = silentWorld()
-        world.handshake.answers = false
-        world.run()
-        advanceTimeBy(SETTLE_MS)
-
-        world.chain.emit(TunnelState.Error)
-        advanceTimeBy(ReconnectPolicy.MAX_DELAY_MS * 10)
-
-        assertTrue(world.chain.reconnectCalls > 3, "a relay that is down is not a cut-off")
-        assertNotEquals(ReconnectState.CutOff, world.supervisor.state.value)
-    }
-
-    @Test
     fun `a recovery before the last attempt leaves no cut-off behind`() = runTest {
         val world = silentWorld()
         world.run()
@@ -469,14 +454,11 @@ private class SupervisorWorld(
     val settingsRepo = FakeSettingsRepository(settings)
     val network = FakeConnectivity()
 
-    val handshake = FakeRelayHandshake()
-
     val supervisor = ChainSupervisor(
         chain = chain,
         profiles = profiles,
         settings = settingsRepo,
         network = network,
-        handshake = handshake,
         now = { scope.testScheduler.currentTime },
     )
 
@@ -577,9 +559,4 @@ private class FakeConnectivity : ConnectivityRepository {
     val handovers = MutableSharedFlow<Unit>()
     override val online: Flow<Boolean> = reachable
     override val linkChanges: Flow<Unit> = handovers
-}
-
-private class FakeRelayHandshake : RelayHandshake {
-    var answers = true
-    override suspend fun completes(host: String, port: Int, sni: String) = answers
 }
