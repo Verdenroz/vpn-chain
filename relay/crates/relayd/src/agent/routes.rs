@@ -17,9 +17,9 @@ use super::guard::{BODY_LIMIT, authenticate};
 use super::reply::ApiError;
 use super::{Principal, Service};
 use crate::clock::seconds;
-use crate::install::wireguard;
+use crate::install::{entry, wireguard};
 use crate::pairing::Purpose;
-use crate::{Error, Exit, Role, TOKEN_TTL, pairing, valid_name};
+use crate::{Error, Exit, Role, Secret, TOKEN_TTL, pairing, valid_name};
 
 type Outcome = Result<Response, ApiError>;
 
@@ -63,6 +63,13 @@ struct AddDevice {
 #[serde(deny_unknown_fields)]
 struct Rename {
     name: String,
+}
+
+/// The `entry_hop` holds a WireGuard private key, so this has no `Debug`.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PairDevice {
+    entry_hop: Option<String>,
 }
 
 /// The `conf` holds a WireGuard private key, so this has no `Debug`.
@@ -288,7 +295,13 @@ async fn pair_device(
     State(service): State<Arc<Service>>,
     Extension(who): Extension<Principal>,
     Path(name): Path<String>,
+    body: Bytes,
 ) -> Outcome {
+    let request = if body.is_empty() {
+        Ok(PairDevice::default())
+    } else {
+        parsed::<PairDevice>(&body)
+    };
     let call = Call::new(service, who, "devices.pair", known(name.clone()));
     let admin = call.is_admin();
     let (link, expires) = call
@@ -298,13 +311,18 @@ async fn pair_device(
                     "this device cannot pair itself: its key would be replaced mid-request",
                 ));
             }
+            let conf = request?.entry_hop.map(Secret::new);
+            if let Some(conf) = &conf {
+                entry::validate(conf.expose())?;
+            }
             let expires = seconds() + TOKEN_TTL;
-            let link = pairing::issue(
+            let link = pairing::issue_with_entry(
                 &service.state,
                 &service.secrets,
                 &service.lock,
                 Some(&name),
                 Purpose::Device,
+                conf.as_ref(),
             )?;
             Ok((link.expose().to_owned(), expires))
         })

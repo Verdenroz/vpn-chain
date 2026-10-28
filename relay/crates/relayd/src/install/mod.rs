@@ -7,7 +7,7 @@
 //! pairing link while no device has enrolled.
 
 mod ask;
-mod entry;
+pub(crate) mod entry;
 mod host;
 mod pinned;
 mod ssh;
