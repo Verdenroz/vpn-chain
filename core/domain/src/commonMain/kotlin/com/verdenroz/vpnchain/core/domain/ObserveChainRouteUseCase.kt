@@ -169,6 +169,7 @@ class ObserveChainRouteUseCase(
             evidence = HopEvidence.Configured,
             carrying = connected,
             via = "wireguard · udp ${entry.endpointPort}",
+            provider = entry.provider,
         )
     }
 
