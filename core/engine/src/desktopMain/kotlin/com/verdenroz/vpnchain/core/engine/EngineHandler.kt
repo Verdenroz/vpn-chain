@@ -25,6 +25,7 @@ class EngineHandler(
     private val disconnect: DisconnectChainUseCase,
     private val switchProfile: SwitchProfileUseCase,
     private val settings: Flow<UserSettings>,
+    private val onShow: () -> Unit,
 ) {
 
     /** One reply for a plain request; a stream for [Request.Subscribe]. */
@@ -39,6 +40,10 @@ class EngineHandler(
         is Request.Up -> up(request.profile)
         Request.Down -> {
             disconnect()
+            Reply.Ok
+        }
+        Request.Show -> {
+            onShow()
             Reply.Ok
         }
         Request.Profiles -> Reply.Profiles(summaries().first())

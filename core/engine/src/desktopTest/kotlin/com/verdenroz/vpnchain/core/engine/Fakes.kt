@@ -98,6 +98,7 @@ internal fun handlerOver(
     profiles: ProfileRepository,
     logs: LogRepository,
     settings: Flow<UserSettings> = MutableStateFlow(UserSettings()),
+    onShow: () -> Unit = {},
 ) = EngineHandler(
     chain = chain,
     profiles = profiles,
@@ -106,4 +107,5 @@ internal fun handlerOver(
     disconnect = DisconnectChainUseCase(chain),
     switchProfile = SwitchProfileUseCase(profiles, chain),
     settings = settings,
+    onShow = onShow,
 )
