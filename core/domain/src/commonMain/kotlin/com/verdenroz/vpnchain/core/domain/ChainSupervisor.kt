@@ -5,6 +5,7 @@ import com.verdenroz.vpnchain.core.data.ConnectivityRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.model.TunnelState
+import com.verdenroz.vpnchain.core.relay.RelayHandshake
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
@@ -27,6 +28,9 @@ sealed interface ReconnectState {
     data object Idle : ReconnectState
     data class Waiting(val attempt: Int, val delayMillis: Long) : ReconnectState
     data class Retrying(val attempt: Int) : ReconnectState
+
+    /** The relay answers but the chain carries nothing for this device, so retries have stopped. */
+    data object CutOff : ReconnectState
 }
 
 /**
@@ -42,14 +46,25 @@ class ChainSupervisor(
     private val profiles: ProfileRepository,
     private val settings: SettingsRepository,
     private val network: ConnectivityRepository,
+    private val handshake: RelayHandshake,
+    private val now: () -> Long,
 ) {
 
     private val _state = MutableStateFlow<ReconnectState>(ReconnectState.Idle)
     val state: StateFlow<ReconnectState> = _state.asStateFlow()
 
+    private val silentAttempts = ArrayDeque<Long>()
+
     suspend fun run(): Unit = coroutineScope {
         launch { connectOnLaunch() }
         launch { superviseDrops() }
+        launch { clearCutOffOnNewProfile() }
+    }
+
+    private suspend fun clearCutOffOnNewProfile() {
+        profiles.profile.distinctUntilChanged().collect {
+            if (_state.value == ReconnectState.CutOff) _state.value = ReconnectState.Idle
+        }
     }
 
     private suspend fun connectOnLaunch() {
@@ -71,6 +86,7 @@ class ChainSupervisor(
                 when (state) {
                     TunnelState.Connected -> {
                         attempt = 0
+                        silentAttempts.clear()
                         _state.value = ReconnectState.Idle
                     }
 
@@ -90,9 +106,13 @@ class ChainSupervisor(
                             _state.value = ReconnectState.Retrying(attempt)
                             // Not cancellable: reaching Connecting re-emits and
                             // would otherwise cancel the very attempt in flight.
-                            withContext(NonCancellable) { chain.reconnect() }
+                            val result = withContext(NonCancellable) { chain.reconnect() }
+                            if (isCutOff(result)) {
+                                _state.value = ReconnectState.CutOff
+                                break
+                            }
                         }
-                        _state.value = ReconnectState.Idle
+                        if (_state.value != ReconnectState.CutOff) _state.value = ReconnectState.Idle
                         // A drop nobody is going to retry must not leave the
                         // platform tunnel held: Android keeps its VpnService in
                         // the foreground across a drop precisely so a retry can
@@ -100,15 +120,41 @@ class ChainSupervisor(
                         if (state == TunnelState.Error && !shouldReconnect()) chain.release()
                     }
 
-                    TunnelState.Connecting -> Unit
+                    TunnelState.Connecting -> {
+                        if (_state.value == ReconnectState.CutOff) _state.value = ReconnectState.Idle
+                    }
                 }
             }
     }
 
     private suspend fun shouldReconnect(): Boolean =
-        chain.connectionIntent.first() &&
+        _state.value != ReconnectState.CutOff &&
+            chain.connectionIntent.first() &&
             settings.settings.first().autoReconnect &&
             profiles.profile.first() != null
+
+    /**
+     * Whether consecutive attempts have shown the relay answering while this
+     * device's chain carries nothing: to an identity the relay has dropped,
+     * REALITY looks like the decoy site, so the handshake succeeds and then
+     * nothing flows. Any other outcome, or a link that is down, starts the
+     * count over, so an outage is never mistaken for a cut-off.
+     */
+    private suspend fun isCutOff(result: Result<Unit>): Boolean {
+        if (result.isSuccess || !chain.status.first().carriedNothing || !relayAnswers()) {
+            silentAttempts.clear()
+            return false
+        }
+        val at = now()
+        silentAttempts.addLast(at)
+        while (at - silentAttempts.first() > CUT_OFF_WINDOW_MS) silentAttempts.removeFirst()
+        return silentAttempts.size >= CUT_OFF_ATTEMPTS
+    }
+
+    private suspend fun relayAnswers(): Boolean {
+        val relay = profiles.profile.first()?.relay ?: return false
+        return network.online.first() && handshake.completes(relay.vpsIp, relay.serverPort, relay.sni)
+    }
 
     /**
      * Holds an attempt back until there is a link to dial on.
@@ -145,5 +191,9 @@ class ChainSupervisor(
 
     private companion object {
         const val OFFLINE_WAIT_CAP_MS = 5 * 60 * 1000L
+        const val CUT_OFF_ATTEMPTS = 3
+
+        // One attempt can spend half a minute in its readiness check.
+        const val CUT_OFF_WINDOW_MS = 5 * 60 * 1000L
     }
 }
