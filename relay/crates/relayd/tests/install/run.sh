@@ -7,7 +7,8 @@
 #   b) the link connects; enrolling with a P-256 key works once, a used token gets 401, an
 #      expired one 410, a replaced one 401, and the old identity is refused afterwards
 #   c) the nft rules stop a name that rebinds to loopback, keep the agent and the internet
-#      reachable, leave other tables alone and come back with the unit
+#      reachable, pass a port a container publishes on the public address but not one on
+#      loopback or a private address, leave other tables alone and come back with the unit
 #   d) a relay made by server/deploy-server.sh is adopted with its keypair and clients intact
 #   e) on a terminal, setup asks for a device name and an entry hop conf, which the device gets
 #      once when it enrolls and which is left nowhere afterwards
@@ -217,6 +218,38 @@ for version in "${SINGBOX_VERSIONS[@]}"; do
     eq "$(signed "e-$tag" "k-$tag" "$key_id" GET /v1/relay)" 200
     pass "after the rules are back: a public name and address work, a private one does not, the agent answers"
 done
+
+step "c) ports a container publishes, forwarded the way Podman's netavark does"
+as_xray() { g setpriv --reuid="$(g id -u xray)" --regid="$(g id -g xray)" --clear-groups curl -sS --max-time 5 "$1" 2>/dev/null || true; }
+priv_local="$(g ip -4 -o addr show | awk -v net="$PRIV_SUBNET." 'index($4, net) == 1 { sub("/.*", "", $4); print $4 }')"
+g mount -o remount,rw /proc/sys
+g sysctl -qw net.ipv4.conf.all.route_localnet=1
+docker exec -i "$RELAY_C" nft -f - <<EOF
+table ip podlike {
+    chain output {
+        type nat hook output priority dstnat; policy accept;
+        fib daddr type local tcp dport 8091 dnat to $PRIV_SUBNET.50:80
+        ip daddr 127.0.0.1 tcp dport 8092 dnat to $PRIV_SUBNET.50:80
+    }
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+        ip daddr $PRIV_SUBNET.50 masquerade
+    }
+}
+EOF
+eq "$(through "e-$tag" "http://$(addr 10):8091/")" private
+eq "$(as_xray "http://$(addr 10):8091/")" private
+pass "a port published on the relay's public address is reached through the relay"
+for url in "http://127.0.0.1:8092/" "http://127.0.0.1:8091/" "http://$priv_local:8091/" "http://$PRIV_SUBNET.50/"; do
+    eq "$(as_xray "$url")" ""
+done
+g nft delete table inet vpn_chain_egress
+for url in "http://127.0.0.1:8092/" "http://127.0.0.1:8091/" "http://$priv_local:8091/" "http://$PRIV_SUBNET.50/"; do
+    eq "$(as_xray "$url")" private
+done
+g /usr/local/bin/relayd egress --state $STATE_DIR/relay.json
+g nft delete table ip podlike
+pass "one published on loopback or reached by a private address is refused, and only the rules refuse it"
 
 step "c) the rules and xray come back with the unit, as after a reboot"
 g systemctl stop vpn-chain-egress
