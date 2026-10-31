@@ -1,16 +1,18 @@
-# Runs the suites a pull request touches. ci-ok is the required check.
+# Runs the suites a change touches. ci-ok is the required check; the push run feeds the README badge.
 name: ci
 
 on:
   pull_request:
   merge_group:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   changes:
@@ -28,7 +30,7 @@ jobs:
           persist-credentials: false
       - id: diff
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: |
           files="$(git diff --name-only "$BASE"...HEAD)"
           printf '%s\n' "$files"

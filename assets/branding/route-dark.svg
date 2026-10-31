@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 124" width="920" height="124" role="img" aria-label="Route: your device, through an optional WireGuard entry hop, to your VPS over VLESS and REALITY, then through an optional WireGuard exit hop to the internet." font-family="system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+  <text x="152.5" y="42" font-size="13" font-weight="400" fill="#abb6c1" text-anchor="middle">WireGuard</text>
+  <text x="357.5" y="42" font-size="13" font-weight="400" fill="#abb6c1" text-anchor="middle">VLESS + REALITY</text>
+  <text x="562.5" y="42" font-size="13" font-weight="400" fill="#abb6c1" text-anchor="middle">WireGuard</text>
+  <line x1="58" y1="58" x2="245" y2="58" stroke="#2e9e52" stroke-width="3" stroke-linecap="round"/>
+  <line x1="265" y1="58" x2="443" y2="58" stroke="#2e9e52" stroke-width="3" stroke-linecap="round"/>
+  <line x1="477" y1="58" x2="655" y2="58" stroke="#2e9e52" stroke-width="3" stroke-linecap="round"/>
+  <line x1="675" y1="58" x2="862" y2="58" stroke="#414f5d" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="50" cy="58" r="6" fill="#bbc5d1"/>
+  <circle cx="255" cy="58" r="7" fill="none" stroke="#bbc5d1" stroke-width="2" stroke-dasharray="3 2.5"/>
+  <circle cx="460" cy="58" r="15" fill="#2e9e52" fill-opacity="0.18"/>
+  <circle cx="460" cy="58" r="8" fill="#2e9e52"/>
+  <circle cx="665" cy="58" r="7" fill="none" stroke="#bbc5d1" stroke-width="2" stroke-dasharray="3 2.5"/>
+  <circle cx="870" cy="58" r="6" fill="none" stroke="#bbc5d1" stroke-width="2"/>
+  <text x="50" y="92" font-size="15" font-weight="600" fill="#eff2f5" text-anchor="middle">You</text>
+  <text x="255" y="92" font-size="15" font-weight="600" fill="#eff2f5" text-anchor="middle">Entry hop</text>
+  <text x="255" y="111" font-size="13" font-weight="400" fill="#abb6c1" text-anchor="middle">optional</text>
+  <text x="460" y="92" font-size="15" font-weight="600" fill="#eff2f5" text-anchor="middle">Your VPS</text>
+  <text x="460" y="111" font-size="13" font-weight="400" fill="#abb6c1" text-anchor="middle">the relay</text>
+  <text x="665" y="92" font-size="15" font-weight="600" fill="#eff2f5" text-anchor="middle">Exit hop</text>
+  <text x="665" y="111" font-size="13" font-weight="400" fill="#abb6c1" text-anchor="middle">optional</text>
+  <text x="870" y="92" font-size="15" font-weight="600" fill="#eff2f5" text-anchor="middle">Internet</text>
+</svg>
