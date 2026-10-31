@@ -67,6 +67,40 @@ fn private_and_link_local_ranges_are_rejected() {
 }
 
 #[test]
+fn a_forwarded_port_passes_only_when_xray_dialled_a_public_address() {
+    let rules = ruleset(10086, &[]);
+
+    let v4 = rules
+        .lines()
+        .find(|line| line.contains("ct original ip daddr"))
+        .unwrap();
+    let v6 = rules
+        .lines()
+        .find(|line| line.contains("ct original ip6 daddr"))
+        .unwrap();
+    assert!(
+        v4.trim_start()
+            .starts_with("ct status dnat ct original ip daddr != {")
+    );
+    assert!(
+        v6.trim_start()
+            .starts_with("ct status dnat ct original ip6 daddr != {")
+    );
+    for range in [
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+    ] {
+        assert!(v4.contains(range), "{range}");
+    }
+    for range in ["::1", "fc00::/7", "fe80::/10"] {
+        assert!(v6.contains(range), "{range}");
+    }
+    assert!(rules.find("ct status dnat").unwrap() < rules.find("reject").unwrap());
+}
+
+#[test]
 fn every_resolver_takes_dns_and_nothing_else() {
     let rules = ruleset(
         10086,

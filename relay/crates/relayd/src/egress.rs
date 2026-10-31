@@ -43,6 +43,10 @@ pub fn rules(agent_port: u16, resolv_conf: &Path) -> Result<String, Error> {
 /// Docker's sits behind a port redirect, and no other port of a loopback stub is open. Replies
 /// on a connection someone opened to xray, such as relayd's to its API, pass: only connections
 /// xray starts are limited.
+///
+/// A port a container publishes on this machine's public address is DNAT'd to the container's
+/// private address before these rules see it, so a forwarded connection is judged by the address
+/// xray dialled. A port published on loopback only, or on a private local address, stays refused.
 pub fn ruleset(agent_port: u16, resolvers: &[IpAddr]) -> String {
     let allowed: Vec<String> = resolvers.iter().map(|address| allow(*address)).collect();
     format!(
@@ -55,6 +59,8 @@ pub fn ruleset(agent_port: u16, resolvers: &[IpAddr]) -> String {
          \t\tct state established,related accept\n\
          \t\tip daddr 127.0.0.1 tcp dport {agent_port} accept\n\
          {allowed}\
+         \t\tct status dnat ct original ip daddr != {{ {PRIVATE_V4} }} accept\n\
+         \t\tct status dnat ct original ip6 daddr != {{ {PRIVATE_V6} }} accept\n\
          \t\tip daddr {{ {PRIVATE_V4} }} reject\n\
          \t\tip6 daddr {{ {PRIVATE_V6} }} reject\n\
          \t}}\n\
