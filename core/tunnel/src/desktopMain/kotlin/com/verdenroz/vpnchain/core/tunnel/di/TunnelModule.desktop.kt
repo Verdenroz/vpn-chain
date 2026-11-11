@@ -24,6 +24,7 @@ actual val tunnelModule: Module = module {
             scope = get<CoroutineScope>(applicationScopeQualifier),
             singBoxBin = bundledTool("sing-box"),
             killSwitchBin = bundledTool("vpn-chain-killswitch"),
+            linkChanges = get<NetworkMonitor>().linkChanges,
         )
     }
     single<NetworkMonitor> { DesktopNetworkMonitor() }
