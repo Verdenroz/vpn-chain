@@ -99,7 +99,9 @@ app-private storage on Android. They never go in logs or backups.
 ## Troubleshooting
 
 - **No internet on Linux after the app stopped.** The kill switch stays up until you
-  connect or press **Disconnect**. `vpn-chain-killswitch down` removes it.
+  connect or disconnect. When the chain is down and the kill switch is still loaded,
+  the app and its tray menu show **Unblock network**. Without the app,
+  `vpn-chain-killswitch down` removes it.
 - **Kill switch shows Off, or `TUNSETIFF: operation not permitted`, on Linux.**
   Reinstall the package from a terminal in your own desktop session:
   `sudo apt install --reinstall ./vpn-chain_<version>_amd64.deb`, or `sudo pacman -U`

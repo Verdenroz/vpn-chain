@@ -64,7 +64,7 @@ internal suspend fun engageKillSwitch(
     val engaged = when {
         fault == null -> true
         outcome == HelperOutcome.NotFound -> false
-        else -> (run(listOf("status")) as? HelperOutcome.Exited)?.code == 0
+        else -> killSwitchLoaded(run)
     }
     return KillSwitchEngagement(fault, engaged)
 }
@@ -93,6 +93,16 @@ internal suspend fun rearmForRestart(
     val outcome = engageKillSwitch(exemptIps, allowLocal, markArgs, onMarkRefused, run)
     if (outcome.engaged || outcome.fault !in UNASKED_FAULTS) return outcome
     return outcome.copy(engaged = tableLoaded(run, assumed = engaged))
+}
+
+/** Whether a table is loaded right now, whoever loaded it. */
+internal suspend fun killSwitchLoaded(run: HelperRunner): Boolean = tableLoaded(run, assumed = false)
+
+/** Whether the table is gone after a `down` that ended as [down]. A failed `down` counts only when `status` finds no table. */
+internal suspend fun killSwitchLifted(down: HelperOutcome, run: HelperRunner): Boolean = when {
+    down == HelperOutcome.NotFound -> true
+    (down as? HelperOutcome.Exited)?.code == 0 -> true
+    else -> !tableLoaded(run, assumed = true)
 }
 
 /** Faults [engageKillSwitch] reports without asking `status`; on a switch the old table may still be loaded. */

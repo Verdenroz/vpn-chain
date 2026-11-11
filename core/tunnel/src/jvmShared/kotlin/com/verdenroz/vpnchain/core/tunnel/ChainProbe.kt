@@ -1,6 +1,7 @@
 package com.verdenroz.vpnchain.core.tunnel
 
 import java.net.HttpURLConnection
+import java.net.Proxy
 import java.net.URI
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -13,11 +14,12 @@ import kotlinx.coroutines.launch
 /**
  * Asks whether the chain actually carries traffic, end to end.
  *
- * Nothing else on Android can answer that. libbox's status stream is a loopback
+ * Nothing else can answer that. On Android libbox's status stream is a loopback
  * socket, so it stays healthy while the entry hop's UDP socket sits on a network
- * that went away — which is the whole "connected, zero bytes" failure. This app's
- * own sockets are not protected, so a plain request here leaves through the TUN
- * and exercises the entire path: DNS through the chain, the entry hop, the relay.
+ * that went away — which is the whole "connected, zero bytes" failure. On desktop
+ * sing-box and the tun device outlive a dead chain the same way. This app's own
+ * sockets are not protected, so a plain request here leaves through the TUN and
+ * exercises the entire path: DNS through the chain, the entry hop, the relay.
  */
 internal class ChainProbe(
     /**
@@ -82,19 +84,25 @@ internal class ChainProbe(
         /** Room for a target's own timeouts to fire before the outer bound does. */
         private const val GRACE_MS = 1_000L
 
-        private val shared = ChainProbe(
-            CoroutineScope(SupervisorJob() + Dispatchers.IO),
-            listOf(
-                "https://cp.cloudflare.com/generate_204",
-                "https://www.gstatic.com/generate_204",
-            ),
-            ::httpReaches,
+        val TARGETS = listOf(
+            "https://cp.cloudflare.com/generate_204",
+            "https://www.gstatic.com/generate_204",
         )
+
+        private val shared = ChainProbe(CoroutineScope(SupervisorJob() + Dispatchers.IO), TARGETS) { url, timeoutMs ->
+            httpReaches(url, timeoutMs)
+        }
 
         suspend fun carriesTraffic(timeoutMs: Int = TIMEOUT_MS): Boolean = shared.carriesTraffic(timeoutMs)
 
-        private fun httpReaches(url: String, timeoutMs: Int): Boolean = runCatching {
-            val conn = URI(url).toURL().openConnection() as HttpURLConnection
+        /** [proxy] is for a chain that is a local listener instead of a TUN. */
+        fun open(url: String, proxy: Proxy?): HttpURLConnection {
+            val target = URI(url).toURL()
+            return (proxy?.let(target::openConnection) ?: target.openConnection()) as HttpURLConnection
+        }
+
+        fun httpReaches(url: String, timeoutMs: Int, proxy: Proxy? = null): Boolean = runCatching {
+            val conn = open(url, proxy)
             conn.connectTimeout = timeoutMs
             conn.readTimeout = timeoutMs
             conn.instanceFollowRedirects = false

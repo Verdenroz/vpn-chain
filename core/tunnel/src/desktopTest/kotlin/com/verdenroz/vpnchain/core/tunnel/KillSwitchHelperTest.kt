@@ -21,6 +21,39 @@ class KillSwitchHelperTest {
     ) = runBlocking { engageKillSwitch(exemptIps, allowLocal, run = run) }.fault
 
     @Test
+    fun `a table is loaded only when status exits zero`() = runBlocking {
+        assertTrue(killSwitchLoaded { HelperOutcome.Exited(0, "") })
+        assertFalse(killSwitchLoaded { HelperOutcome.Exited(1, "") })
+        assertFalse(killSwitchLoaded { HelperOutcome.NotFound })
+        assertFalse(killSwitchLoaded { HelperOutcome.TimedOut })
+    }
+
+    private fun lifted(down: HelperOutcome, status: HelperOutcome) = runBlocking {
+        killSwitchLifted(down) { status }
+    }
+
+    @Test
+    fun `a clean down lifts the table`() {
+        assertTrue(lifted(down = HelperOutcome.Exited(0, ""), status = HelperOutcome.Exited(0, "")))
+    }
+
+    @Test
+    fun `a failed down lifts nothing while status still finds the table`() {
+        assertFalse(lifted(down = HelperOutcome.Exited(1, "denied"), status = HelperOutcome.Exited(0, "")))
+        assertFalse(lifted(down = HelperOutcome.TimedOut, status = HelperOutcome.TimedOut))
+    }
+
+    @Test
+    fun `a failed down still counts when status finds no table`() {
+        assertTrue(lifted(down = HelperOutcome.Exited(1, "no such table"), status = HelperOutcome.Exited(1, "")))
+    }
+
+    @Test
+    fun `a missing helper has no table to leave behind`() {
+        assertTrue(lifted(down = HelperOutcome.NotFound, status = HelperOutcome.NotFound))
+    }
+
+    @Test
     fun `exit zero engages`() {
         assertNull(fault { HelperOutcome.Exited(0, "") })
     }
