@@ -56,13 +56,16 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
@@ -94,6 +97,7 @@ class DesktopTunnelController(
     private val scope: CoroutineScope,
     private val singBoxBin: String = "sing-box",
     private val killSwitchBin: String = "vpn-chain-killswitch",
+    private val linkChanges: Flow<Unit> = emptyFlow(),
 ) : TunnelController {
 
     private val helperRunner = processHelperRunner(killSwitchBin)
@@ -146,6 +150,9 @@ class DesktopTunnelController(
     private var launchLogOffset = 0L
     private var logTailJob: Job? = null
     private var healthJob: Job? = null
+
+    /** Raised when the link moved, so a live chain is checked now instead of at its next interval. */
+    private val recheck = Channel<Unit>(Channel.CONFLATED)
 
     /** When the hold through a silent link began. Null while the chain is not held. */
     @Volatile
@@ -211,6 +218,7 @@ class DesktopTunnelController(
     }
 
     init {
+        scope.launch { linkChanges.collect { recheck.trySend(Unit) } }
         scope.launch(Dispatchers.IO) {
             while (isActive) {
                 delay(DOWN_REQUEST_POLL_MS)
@@ -953,8 +961,11 @@ class DesktopTunnelController(
         healthJob?.cancel()
         healthJob = scope.launch(Dispatchers.IO) {
             val probe = newChainProbe()
+            // A move seen before this session began says nothing about it.
+            recheck.tryReceive()
             while (isActive) {
-                delay(if (heldSince == null) HEALTH_INTERVAL_MS else LINK_RECHECK_MS)
+                val interval = if (heldSince == null) HEALTH_INTERVAL_MS else LINK_RECHECK_MS
+                awaitNextCheck(recheck, interval, LINK_SETTLE_MS)
                 if (_status.value.state != TunnelState.Connected) return@launch
                 // Only relays we started: an adopted one belongs to the CLI or an
                 // older run, and is not ours to tear down.
@@ -1153,6 +1164,7 @@ class DesktopTunnelController(
         const val HEALTH_CONFIRM_ATTEMPTS = 2
         const val HEALTH_CONFIRM_RETRY_MS = 3_000L
         const val LINK_RECHECK_MS = 10_000L
+        const val LINK_SETTLE_MS = 5_000L
         const val LOG_TAIL_LINES = 200
         const val LOG_FOLLOW_MS = 500L
         val ANSI_REGEX = Regex("\u001B\\[[0-9;]*m")

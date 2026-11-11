@@ -11,7 +11,8 @@ import java.net.NetworkInterface
 /**
  * Desktop has no portable connectivity callback, so this polls the interface
  * list. The interval is coarse on purpose — it only needs to beat the reconnect
- * backoff, not to be the thing that notices first.
+ * backoff, not to be the thing that notices first. The same poll reports a link
+ * that changed identity and a machine that slept.
  */
 internal class DesktopNetworkMonitor(
     private val pollIntervalMs: Long = POLL_INTERVAL_MS,
@@ -19,16 +20,32 @@ internal class DesktopNetworkMonitor(
 
     override val online: Flow<Boolean> = flow {
         while (true) {
-            emit(hasUsableInterface())
+            emit(usableLinks().isNotEmpty())
             delay(pollIntervalMs)
         }
     }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
-    private fun hasUsableInterface(): Boolean = runCatching {
-        NetworkInterface.getNetworkInterfaces().asSequence().any { iface ->
-            iface.isUp && !iface.isLoopback && !iface.isOurTunnel() && iface.hasRoutableAddress()
+    override val linkChanges: Flow<Unit> = flow {
+        var links = usableLinks()
+        // Wall clock: the monotonic one stops while the machine sleeps.
+        var polledAt = System.currentTimeMillis()
+        while (true) {
+            delay(pollIntervalMs)
+            val current = usableLinks()
+            val now = System.currentTimeMillis()
+            if (linkMoved(links, current, elapsedMs = now - polledAt, pollMs = pollIntervalMs)) emit(Unit)
+            links = current
+            polledAt = now
         }
-    }.getOrDefault(false)
+    }.flowOn(Dispatchers.IO)
+
+    /** Each usable interface with its routable addresses, which together identify the link. */
+    private fun usableLinks(): Set<String> = runCatching {
+        NetworkInterface.getNetworkInterfaces().asSequence()
+            .filter { it.isUp && !it.isLoopback && !it.isOurTunnel() }
+            .flatMap { iface -> iface.routableAddresses().map { "${iface.name}/$it" } }
+            .toSet()
+    }.getOrDefault(emptySet())
 
     private companion object {
         const val POLL_INTERVAL_MS = 4_000L
@@ -43,8 +60,8 @@ private fun NetworkInterface.isOurTunnel(): Boolean =
     name == ENTRY_APP_INTERFACE ||
         inetAddresses.asSequence().any { it.hostAddress == TUN_ADDRESS }
 
-private fun NetworkInterface.hasRoutableAddress(): Boolean =
-    inetAddresses.asSequence().any { !it.isLoopbackAddress && !it.isLinkLocalAddress }
+private fun NetworkInterface.routableAddresses(): Sequence<String> =
+    inetAddresses.asSequence().filter { !it.isLoopbackAddress && !it.isLinkLocalAddress }.map { it.hostAddress }
 
 // The literal interface the ProtonVPN desktop app creates — the only external
 // VPN client detected here, because it is the only one with a fixed name.
