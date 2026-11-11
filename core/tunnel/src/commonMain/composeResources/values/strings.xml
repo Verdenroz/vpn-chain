@@ -15,6 +15,10 @@
     <string name="tunnel_log_awaiting_traffic">tunnel up, waiting for the chain to carry traffic…</string>
     <string name="tunnel_log_chain_stalled">chain stopped carrying traffic, rebuilding it</string>
     <string name="tunnel_error_stopped_carrying">the entry hop went silent and traffic stopped. Reconnecting.</string>
+    <string name="tunnel_log_kill_switch_left">a kill switch left by an earlier session is still blocking the network</string>
+    <string name="tunnel_log_link_silent">chain stopped carrying traffic, but the network under it sends nothing back, so keeping the chain up</string>
+    <string name="tunnel_log_link_recovered">network answers again and the chain carries traffic</string>
+    <string name="tunnel_status_link_silent">your network takes traffic but sends nothing back. Waiting for it to recover. If it doesn't, reconnect Wi-Fi.</string>
     <string name="tunnel_status_tun_adopted">All apps, joined the running relay</string>
     <string name="tunnel_status_tun">All apps</string>
     <string name="tunnel_status_sharing_cli">Shared with the CLI</string>

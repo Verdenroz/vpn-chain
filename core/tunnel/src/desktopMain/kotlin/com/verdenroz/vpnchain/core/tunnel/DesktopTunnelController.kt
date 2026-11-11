@@ -31,11 +31,15 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_port_ra
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_already_state
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_awaiting_traffic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_chain_stalled
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_link_recovered
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_link_silent
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_disengaged
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_managed_unusable
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_engaged
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_helper_error
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_left
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_no_exempt
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_status_link_silent
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_status_sharing_cli
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_status_tun
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_status_tun_adopted
@@ -59,8 +63,11 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -140,6 +147,23 @@ class DesktopTunnelController(
     private var logTailJob: Job? = null
     private var healthJob: Job? = null
 
+    /** When the hold through a silent link began. Null while the chain is not held. */
+    @Volatile
+    private var heldSince: Long? = null
+
+    /** A table found at launch that no session of this process loaded. */
+    private var leftoverKillSwitch = false
+
+    // Each attempt and each session gets its own probe. A probe shares an undecided
+    // flight, and one sent through a replaced chain must not answer for the next.
+    private fun newChainProbe() = ChainProbe(scope + Dispatchers.IO, ChainProbe.TARGETS) { url, timeoutMs ->
+        ChainProbe.httpReaches(url, timeoutMs, chainProxy())
+    }
+
+    /** Null in TUN mode, which captures this process's own requests. */
+    private fun chainProxy(): Proxy? =
+        if (tunMode) null else Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", proxyPort))
+
     @Volatile
     private var proxyPort: Int = DEFAULT_PROXY_PORT
 
@@ -159,6 +183,10 @@ class DesktopTunnelController(
     /** True once the nftables kill-switch table has been installed for this session. */
     @Volatile
     private var killSwitchEngaged: Boolean = false
+        set(value) {
+            field = value
+            _status.update { it.withFirewall(value) }
+        }
 
     /** Why the last engage attempt left the chain unprotected; null if none failed. */
     @Volatile
@@ -194,10 +222,29 @@ class DesktopTunnelController(
             // spends reporting Disconnected while a tunnel is up, anything that
             // probes the network reads the tunnel's answer and believes it came
             // from an untunnelled machine.
-            startStopLock.withLock { adoptRunningSession() }
+            startStopLock.withLock { if (!adoptRunningSession()) noticeLeftoverKillSwitch() }
             pollExternalState()
         }
     }
+
+    /**
+     * A table outlives a relay that died and an app that crashed. With no relay
+     * running to adopt, that table is why there is no network, and the status
+     * has to say so.
+     */
+    private suspend fun noticeLeftoverKillSwitch() {
+        if (!killSwitchLoaded(helperRunner)) return
+        killSwitchEngaged = true
+        leftoverKillSwitch = true
+        emitLog(Res.string.tunnel_log_kill_switch_left)
+    }
+
+    private fun down(state: TunnelState, detail: UiText? = null, carriedNothing: Boolean = false) =
+        downStatus(state, firewallLoaded = killSwitchEngaged, detail = detail, carriedNothing = carriedNothing)
+
+    private fun connecting() = ChainStatus(state = TunnelState.Connecting).withFirewall(killSwitchEngaged)
+
+    private fun killSwitchWanted(): Boolean = tunMode && killSwitchEnabled && firewallIsOurs()
 
     override suspend fun start(
         configJson: String,
@@ -216,13 +263,16 @@ class DesktopTunnelController(
             this@DesktopTunnelController.killSwitchEnabled = killSwitchEnabled
             this@DesktopTunnelController.allowLocalNetworks = allowLocalNetworks
             killSwitchFault = null
+            // A leftover table exempts an older profile's addresses, and launch replaces only a wanted one.
+            if (leftoverKillSwitch && !killSwitchWanted()) disengageKillSwitch(force = true)
+            leftoverKillSwitch = false
             arming = AttemptArming.forStart(killSwitchEngaged, killSwitchEnabled)
             // A relay left running by the CLI or a previous GUI run is invisible to
             // a fresh process. Launching a second sing-box over the same TUN makes
             // it tear down the live instance's routing on exit, which strands the
             // machine offline — so adopt what's running instead of competing.
             if (adoptRunningSession(startConfig = configJson)) return@withLock
-            _status.value = ChainStatus(state = TunnelState.Connecting)
+            _status.value = connecting()
             launchRelay(configJson)
         }
         _status.awaitConnected()
@@ -240,12 +290,12 @@ class DesktopTunnelController(
             this@DesktopTunnelController.allowLocalNetworks = allowLocalNetworks
             killSwitchFault = null
             // Connecting throughout: a Disconnected here reads as a drop to the supervisor.
-            _status.value = ChainStatus(state = TunnelState.Connecting)
+            _status.value = connecting()
             // The new table goes in before the old relay stops, so traffic is never left with none.
             val outcome = rearmForRestart(
                 RelayConfig.exemptIps(configJson),
                 allowLocalNetworks,
-                wanted = tunMode && killSwitchEnabled && firewallIsOurs(),
+                wanted = killSwitchWanted(),
                 engaged = killSwitchEngaged,
                 markArgs = RelayConfig.markArgs(configJson),
                 onMarkRefused = { emitLog(Res.string.tunnel_log_kill_switch_no_mark) },
@@ -267,7 +317,7 @@ class DesktopTunnelController(
         val fresh = configProvider.current?.invoke() ?: return
         emitLog(Res.string.tunnel_log_port_race_retry)
         applyConfig(fresh)
-        _status.value = ChainStatus(state = TunnelState.Connecting)
+        _status.value = connecting()
         launchAttempt(fresh)
     }
 
@@ -312,7 +362,7 @@ class DesktopTunnelController(
         // Under systemd the capability comes from the unit, so the binary having
         // none is the expected state rather than a reason to refuse.
         if (!ManagedRelay.available && !hasNetAdminPrivilege()) {
-            _status.value = ChainStatus(
+            _status.value = down(
                 state = TunnelState.Error,
                 detail = UiText.Resource(Res.string.tunnel_error_tun_privilege_hint),
             )
@@ -323,7 +373,7 @@ class DesktopTunnelController(
         // engaging the kill switch would replace the live session's table, and a
         // second sing-box on the same TUN rips out its routing when it exits.
         if (detectRunningSession() != null) {
-            _status.value = ChainStatus(
+            _status.value = down(
                 state = TunnelState.Error,
                 detail = UiText.Resource(Res.string.tunnel_error_already_running_hint),
             )
@@ -385,7 +435,7 @@ class DesktopTunnelController(
                 ManagedRelay.stop()
                 if (startConfig == null) killSwitchEnabled = session.killSwitchEnabled
                 applyConfig(fresh)
-                _status.value = ChainStatus(state = TunnelState.Connecting)
+                _status.value = connecting()
                 launchRelay(fresh)
                 return true
             }
@@ -472,10 +522,11 @@ class DesktopTunnelController(
     private suspend fun disengageKillSwitch(force: Boolean = false) {
         if (!killSwitchEngaged && !force) return
         val wasEngaged = killSwitchEngaged
-        runKillSwitchHelper(listOf("down"))
-        killSwitchEngaged = false
+        val lifted = killSwitchLifted(runKillSwitchHelper(listOf("down")), helperRunner)
+        // A table that would not come down still blocks, so Unblock stays on offer.
+        killSwitchEngaged = !lifted
         killSwitchFault = null
-        if (wasEngaged) emitLog(Res.string.tunnel_log_kill_switch_disengaged)
+        if (lifted && wasEngaged) emitLog(Res.string.tunnel_log_kill_switch_disengaged)
     }
 
     private suspend fun runKillSwitchHelper(args: List<String>): HelperOutcome {
@@ -520,7 +571,7 @@ class DesktopTunnelController(
         // live relay, and never overwrite its pidfile — that would orphan a process
         // neither the GUI nor the CLI could stop afterwards.
         livePidFileProcess()?.let { existing ->
-            _status.value = ChainStatus(
+            _status.value = down(
                 state = TunnelState.Error,
                 detail = UiText.Resource(
                     Res.string.tunnel_error_relay_already_running_pid,
@@ -550,7 +601,7 @@ class DesktopTunnelController(
                 writeText(configJson)
             }
         } catch (e: IOException) {
-            _status.value = ChainStatus(
+            _status.value = down(
                 state = TunnelState.Error,
                 detail = UiText.Resource(Res.string.tunnel_error_runtime_dir, listOf(runtimeDir.path)),
             )
@@ -565,7 +616,7 @@ class DesktopTunnelController(
                 .start()
         } catch (e: IOException) {
             cfg.delete()
-            _status.value = ChainStatus(
+            _status.value = down(
                 state = TunnelState.Error,
                 detail = UiText.Resource(Res.string.tunnel_error_cannot_launch, listOf(singBoxBin)),
             )
@@ -613,7 +664,7 @@ class DesktopTunnelController(
         writeManagedConfig(SystemdRelay.configFile.toPath(), SystemdRelay.stampFile.toPath(), configJson)
 
     private suspend fun failManagedStart(message: StringResource, detail: String) {
-        _status.value = ChainStatus(
+        _status.value = down(
             state = TunnelState.Error,
             detail = UiText.Resource(message, listOf(detail)),
         )
@@ -641,7 +692,7 @@ class DesktopTunnelController(
             // exactly what it exists to stop. A startup that never got there
             // protected nothing, so leave networking as we found it instead.
             if (state == TunnelState.Connecting && arming.liftsOnFailure()) disengageKillSwitch()
-            _status.value = ChainStatus(
+            _status.value = down(
                 state = if (exit == 0) TunnelState.Disconnected else TunnelState.Error,
                 detail = when {
                     exit == 0 -> null
@@ -675,11 +726,11 @@ class DesktopTunnelController(
      */
     private suspend fun confirmCarrying(proc: RelayProcess) {
         emitLog(Res.string.tunnel_log_awaiting_traffic)
+        val probe = newChainProbe()
         repeat(READINESS_ATTEMPTS) {
             if (!stillWaitingToCarry(proc)) return
-            val exitIp = probeExitIp(READINESS_PROBE_TIMEOUT_MS)
-            if (exitIp != null) {
-                markConnected(adopted = false, exitIp = exitIp)
+            if (probe.carriesTraffic(READINESS_PROBE_TIMEOUT_MS)) {
+                markConnected(adopted = false)
                 return
             }
             delay(READINESS_RETRY_MS)
@@ -689,7 +740,7 @@ class DesktopTunnelController(
         // instead of leaving a tunnel that will never carry anything.
         if (!stillWaitingToCarry(proc)) return
         tearDown(restoreNetworking = arming.liftsOnFailure())
-        _status.value = ChainStatus(
+        _status.value = down(
             state = TunnelState.Error,
             detail = UiText.Resource(Res.string.tunnel_error_no_traffic),
             carriedNothing = true,
@@ -727,7 +778,7 @@ class DesktopTunnelController(
         // still has to be able to restore networking — Disconnect is the user's
         // documented way out of a fail-closed state.
         if (restoreNetworking) disengageKillSwitch(force = true)
-        _status.value = ChainStatus(state = settled)
+        _status.value = if (settled == TunnelState.Connecting) connecting() else down(settled)
         readerJob?.cancel()
         readerJob = null
         // Cleared before the stop so the reader doesn't report the shutdown as a crash.
@@ -761,7 +812,7 @@ class DesktopTunnelController(
                     TunnelState.Connected ->
                         if (detectRunningSession() == null) {
                             stopSessionJobs()
-                            _status.value = ChainStatus(state = TunnelState.Disconnected)
+                            _status.value = down(TunnelState.Disconnected)
                         }
                     TunnelState.Connecting -> Unit
                 }
@@ -771,13 +822,17 @@ class DesktopTunnelController(
         }
     }
 
-    /** [exitIp] is set when readiness already measured it; an adopted relay has
-     *  not been probed yet, so it is looked up below instead. */
-    private fun markConnected(adopted: Boolean, exitIp: String? = null) {
+    private fun connectedDetail(adopted: Boolean): UiText? = when {
+        tunMode && adopted -> UiText.Resource(Res.string.tunnel_status_tun_adopted)
+        tunMode -> UiText.Resource(Res.string.tunnel_status_tun)
+        adopted -> UiText.Resource(Res.string.tunnel_status_sharing_cli)
+        else -> null
+    }
+
+    private fun markConnected(adopted: Boolean) {
         val externalAppUp = entryAppInterfaceUp()
         _status.value = ChainStatus(
             state = TunnelState.Connected,
-            exitIp = exitIp,
             // An entry hop is in play whether sing-box dialed the WireGuard peer
             // itself, or an external VPN app happens to be the OS default route.
             entryHopActive = tunHasEntry || externalAppUp,
@@ -794,20 +849,14 @@ class DesktopTunnelController(
                 !tunMode -> KillSwitchState.ExternalAppRequired
                 else -> killSwitchFault ?: KillSwitchState.NotEngaged
             },
-            detail = when {
-                tunMode && adopted -> UiText.Resource(Res.string.tunnel_status_tun_adopted)
-                tunMode -> UiText.Resource(Res.string.tunnel_status_tun)
-                adopted -> UiText.Resource(Res.string.tunnel_status_sharing_cli)
-                else -> null
-            },
+            detail = connectedDetail(adopted),
         )
         startLogTail()
         startStatsPoll()
         startHealthWatch()
-        if (exitIp != null) return
         scope.launch(Dispatchers.IO) {
-            // An adopted relay was never probed, and the first request after a
-            // fresh one often times out while the VLESS connection warms up.
+            // The first request after a fresh start often times out while the
+            // VLESS connection warms up.
             repeat(EXIT_IP_ATTEMPTS) {
                 if (_status.value.state != TunnelState.Connected) return@launch
                 val probed = probeExitIp()
@@ -894,44 +943,86 @@ class DesktopTunnelController(
      * Watches a live session for the failure the readiness gate cannot catch: a
      * chain that came up carrying traffic and later went silent. sing-box stays
      * alive and the tun device stays present through that, so nothing else
-     * notices — which is why it takes a manual reconnect to clear today.
+     * notices.
+     *
+     * A rebuild is the remedy only when the chain is at fault. When the link
+     * under it went silent a new sing-box dials into the same silence, so the
+     * session is held as it is until the link delivers again.
      */
     private fun startHealthWatch() {
         healthJob?.cancel()
         healthJob = scope.launch(Dispatchers.IO) {
+            val probe = newChainProbe()
             while (isActive) {
-                delay(HEALTH_INTERVAL_MS)
+                delay(if (heldSince == null) HEALTH_INTERVAL_MS else LINK_RECHECK_MS)
                 if (_status.value.state != TunnelState.Connected) return@launch
                 // Only relays we started: an adopted one belongs to the CLI or an
                 // older run, and is not ours to tear down.
-                if (process?.isAlive != true) return@launch
-                if (carriesTraffic()) continue
+                val relay = process?.takeIf { it.isAlive } ?: return@launch
+                val before = readLinkCounters()
+                if (carriesTraffic(probe)) {
+                    resumeFromSilentLink()
+                    continue
+                }
+                val now = currentTimeMillis()
+                val cause = stallCause(before, readLinkCounters())
+                if (!shouldRebuild(cause, heldForMs = heldSince?.let { now - it })) {
+                    holdThroughSilentLink(now)
+                    continue
+                }
                 // Handed to a sibling job so cancelling this one mid-teardown
                 // (stopSessionJobs does exactly that) cannot leave it half done.
-                scope.launch(Dispatchers.IO) { failStalledChain() }
+                scope.launch(Dispatchers.IO) { failStalledChain(relay) }
                 return@launch
             }
         }
     }
 
     /** One lost probe is a blip; the verdict needs a couple in a row to miss. */
-    private suspend fun carriesTraffic(): Boolean {
+    private suspend fun carriesTraffic(probe: ChainProbe): Boolean {
         repeat(HEALTH_CONFIRM_ATTEMPTS) {
-            if (probeExitIp(READINESS_PROBE_TIMEOUT_MS) != null) return true
+            if (probe.carriesTraffic(READINESS_PROBE_TIMEOUT_MS)) return true
             if (_status.value.state != TunnelState.Connected) return true
             delay(HEALTH_CONFIRM_RETRY_MS)
         }
         return false
     }
 
-    private suspend fun failStalledChain() = startStopLock.withLock {
-        if (_status.value.state != TunnelState.Connected) return@withLock
+    /** Stays Connected, so Disconnect stays on offer while the kill switch holds the network. */
+    private suspend fun holdThroughSilentLink(now: Long) {
+        if (heldSince != null) return
+        startStopLock.withLock {
+            if (_status.value.state != TunnelState.Connected) return@withLock
+            emitLog(Res.string.tunnel_log_link_silent)
+            // Set before the status changes: a relay exit clears it, and one that lands mid-update must not find it set.
+            heldSince = now
+            val silent = UiText.Resource(Res.string.tunnel_status_link_silent)
+            val held = _status.updateAndGet { if (it.state == TunnelState.Connected) it.copy(detail = silent) else it }
+            if (held.state != TunnelState.Connected) heldSince = null
+        }
+    }
+
+    private suspend fun resumeFromSilentLink() {
+        if (heldSince == null) return
+        startStopLock.withLock {
+            if (heldSince == null) return@withLock
+            heldSince = null
+            emitLog(Res.string.tunnel_log_link_recovered)
+            // Only a relay this controller started is ever held.
+            val detail = connectedDetail(adopted = false)
+            _status.update { if (it.state == TunnelState.Connected) it.copy(detail = detail) else it }
+        }
+    }
+
+    private suspend fun failStalledChain(relay: RelayProcess) = startStopLock.withLock {
+        // A restart can replace the session while this waits for the lock.
+        if (process !== relay || _status.value.state != TunnelState.Connected) return@withLock
         emitLog(Res.string.tunnel_log_chain_stalled)
         // The session did reach Connected, so the kill switch stays up: traffic
         // stays blocked until something carries it again, which is the whole
         // point of it. Disconnect remains the documented way out.
         tearDown(restoreNetworking = false)
-        _status.value = ChainStatus(
+        _status.value = down(
             state = TunnelState.Error,
             detail = UiText.Resource(Res.string.tunnel_error_stopped_carrying),
             carriedNothing = true,
@@ -951,6 +1042,7 @@ class DesktopTunnelController(
         logTailJob = null
         healthJob?.cancel()
         healthJob = null
+        heldSince = null
     }
 
     private fun emitRecentLog() =
@@ -973,15 +1065,10 @@ class DesktopTunnelController(
      * traffic, not just that a device exists. TUN mode captures everything, so
      * it probes directly; proxy mode goes via the local SOCKS listener.
      */
-    private fun probeExitIp(timeoutMs: Int = HTTP_TIMEOUT_MS): String? = runCatching {
-        val url = URI("https://api.ipify.org").toURL()
-        val conn = if (tunMode) {
-            url.openConnection()
-        } else {
-            url.openConnection(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", proxyPort)))
-        } as HttpURLConnection
-        conn.connectTimeout = timeoutMs
-        conn.readTimeout = timeoutMs
+    private fun probeExitIp(): String? = runCatching {
+        val conn = ChainProbe.open("https://api.ipify.org", chainProxy())
+        conn.connectTimeout = HTTP_TIMEOUT_MS
+        conn.readTimeout = HTTP_TIMEOUT_MS
         conn.inputStream.bufferedReader().use { it.readText().trim() }.ifBlank { null }
     }.getOrNull()
 
@@ -1065,6 +1152,7 @@ class DesktopTunnelController(
         const val HEALTH_INTERVAL_MS = 45_000L
         const val HEALTH_CONFIRM_ATTEMPTS = 2
         const val HEALTH_CONFIRM_RETRY_MS = 3_000L
+        const val LINK_RECHECK_MS = 10_000L
         const val LOG_TAIL_LINES = 200
         const val LOG_FOLLOW_MS = 500L
         val ANSI_REGEX = Regex("\u001B\\[[0-9;]*m")

@@ -36,6 +36,7 @@ import com.verdenroz.vpnchain.core.model.KillSwitchState
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.chain.generated.resources.Res
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_cancel
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_change
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_connect
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_connect_without_entry_hop
@@ -60,6 +61,7 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switc
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_hint_not_engaged
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_none
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_kill_switch_protected
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_network_blocked
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_open_settings
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_pair_again
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_remove_connection
@@ -71,6 +73,7 @@ import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_state_conn
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_state_connecting
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_state_disconnected
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_state_error
+import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_unblock_network
 import com.verdenroz.vpnchain.feature.chain.generated.resources.chain_uptime
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.StringResource
@@ -93,6 +96,14 @@ internal fun ChainDetails(
             Readouts(uiState)
         }
         Spacer(Modifier.height(16.dp))
+        if (uiState.status.blockedWhileDown) {
+            ActionButton(
+                stringResource(Res.string.chain_unblock_network),
+                onClick = onDisconnect,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+        }
         if (uiState.cutOff) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionButton(
@@ -206,11 +217,9 @@ private fun PrimaryAction(
             tone = ActionTone.Danger,
         )
         TunnelState.Connecting -> ActionButton(
-            stringResource(Res.string.chain_state_connecting),
-            onClick = {},
+            stringResource(Res.string.chain_cancel),
+            onClick = onDisconnect,
             modifier = modifier,
-            tone = ActionTone.Primary,
-            enabled = false,
         )
         TunnelState.Disconnected, TunnelState.Error -> ActionButton(
             stringResource(Res.string.chain_connect),
@@ -267,7 +276,8 @@ private fun Notices(status: ChainStatus, connected: Boolean, cutOffText: String?
     } else {
         null
     }
-    if (detail == null && hint == null) return
+    val blocked = if (status.blockedWhileDown) stringResource(Res.string.chain_network_blocked) else null
+    if (detail == null && hint == null && blocked == null) return
     SelectionContainer {
         Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             detail?.let { text ->
@@ -277,7 +287,9 @@ private fun Notices(status: ChainStatus, connected: Boolean, cutOffText: String?
                     color = if (status.state == TunnelState.Error) colors.unprotectedText else colors.inkMuted,
                 )
             }
-            hint?.let { text -> Text(text, style = MaterialTheme.typography.bodySmall, color = colors.unprotectedText) }
+            (hint ?: blocked)?.let { text ->
+                Text(text, style = MaterialTheme.typography.bodySmall, color = colors.unprotectedText)
+            }
         }
     }
 }

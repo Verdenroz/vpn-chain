@@ -116,12 +116,19 @@ class SingBoxConfigFactoryTest {
     }
 
     @Test
-    fun `vless dials give up after 3s on both the proxy and tun paths`() {
+    fun `direct vless dials give up after 3s on both the proxy and tun paths`() {
         val proxy = parse(SingBoxConfigFactory.mixedProxyConfig(profile())).array("outbounds").taggedWith("proxy")
         val tun = parse(SingBoxConfigFactory.androidChainConfig(profile())).array("outbounds").taggedWith("vless-proxy")
 
         assertEquals("3s", proxy?.getValue("connect_timeout")?.jsonPrimitive?.content)
         assertEquals("3s", tun?.getValue("connect_timeout")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `a vless dial through the entry hop outlasts a lost wireguard handshake`() {
+        val tun = parse(SingBoxConfigFactory.androidChainConfig(profile(), entry())).array("outbounds").taggedWith("vless-proxy")
+
+        assertEquals("10s", tun?.getValue("connect_timeout")?.jsonPrimitive?.content)
     }
 
     /** 10.19.19.1/30 avoids the Docker bridge range sing-box otherwise collides with. */

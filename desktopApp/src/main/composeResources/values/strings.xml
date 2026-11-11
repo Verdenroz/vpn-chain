@@ -4,7 +4,12 @@
     <string name="tray_open">Open VPN Chain</string>
     <string name="tray_connect">Connect</string>
     <string name="tray_disconnect">Disconnect</string>
+    <string name="tray_cancel">Cancel</string>
+    <string name="tray_unblock_network">Unblock network</string>
     <string name="tray_quit">Quit</string>
+    <string name="quit_blocked_title">Quit VPN Chain</string>
+    <string name="quit_blocked_message">Kill switch is blocking the network. It stays blocked after you quit.</string>
+    <string name="quit_blocked_unblock">Unblock and quit</string>
     <string name="tray_tooltip_connected">VPN Chain: Connected</string>
     <string name="tray_tooltip_connecting">VPN Chain: Connecting…</string>
     <string name="tray_tooltip_disconnected">VPN Chain: Disconnected</string>

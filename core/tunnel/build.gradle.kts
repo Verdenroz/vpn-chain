@@ -22,6 +22,8 @@ kotlin {
             implementation(libs.compose.runtime)
             implementation(libs.compose.components.resources)
         }
+        androidMain { kotlin.srcDir("src/jvmShared/kotlin") }
+        desktopMain { kotlin.srcDir("src/jvmShared/kotlin") }
         androidMain.dependencies {
             implementation(libs.libbox)
             implementation(libs.koin.android)

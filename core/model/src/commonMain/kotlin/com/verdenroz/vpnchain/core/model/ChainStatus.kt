@@ -46,4 +46,9 @@ data class ChainStatus(
     val detail: UiText? = null,
     /** An Error because the engine ran but the chain carried nothing, not because it failed to start. */
     val carriedNothing: Boolean = false,
-)
+    /** The chain is not up and the kill switch holds the network. Disconnect lifts it. */
+    val networkBlocked: Boolean = false,
+) {
+    /** Connecting already offers Cancel, which lifts the block, so it is called out only once the chain is down. */
+    val blockedWhileDown: Boolean get() = networkBlocked && state != TunnelState.Connecting
+}

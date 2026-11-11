@@ -427,7 +427,7 @@ object SingBoxConfigFactory {
             }
         }
         put("packet_encoding", "xudp")
-        put("connect_timeout", "3s")
+        put("connect_timeout", if (detour == null) DIRECT_DIAL_TIMEOUT else DETOURED_DIAL_TIMEOUT)
         if (detour != null) put("detour", detour)
     }
 
@@ -537,12 +537,17 @@ object SingBoxConfigFactory {
      */
     const val FAIL_OPEN_MARK = 0x760000
 
+    private const val DIRECT_DIAL_TIMEOUT = "3s"
+
+    // WireGuard retries a lost handshake after 5s and the SYN waiting on it resends at 7s.
+    private const val DETOURED_DIAL_TIMEOUT = "10s"
+
     /**
      * Bumped whenever a config this build renders would route differently from
      * an older one's. A relay outlives the app under systemd, so on adoption a
      * config stamped with another schema is rendered again rather than reused.
      */
-    const val RENDER_SCHEMA = 3
+    const val RENDER_SCHEMA = 4
 
     private data class Blocklist(val tag: String, val url: String)
 

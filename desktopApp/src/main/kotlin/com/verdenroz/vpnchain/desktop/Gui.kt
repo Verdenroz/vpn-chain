@@ -30,11 +30,13 @@ import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.desktop.generated.resources.Res
 import com.verdenroz.vpnchain.desktop.generated.resources.app_icon
+import com.verdenroz.vpnchain.desktop.generated.resources.tray_cancel
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_connect
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_disconnect
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_open
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_quit
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_tooltip_connected
+import com.verdenroz.vpnchain.desktop.generated.resources.tray_unblock_network
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_tooltip_connecting
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_tooltip_disconnected
 import com.verdenroz.vpnchain.desktop.generated.resources.tray_tooltip_error
@@ -72,7 +74,10 @@ internal fun runGui() {
             }
         }
         val trayState = rememberTrayState()
-        val connected = status.state == TunnelState.Connected
+        // Connecting counts: the kill switch can already be up, and Cancel has to reach it.
+        val up = status.state == TunnelState.Connected || status.state == TunnelState.Connecting
+        var quitPrompt by remember { mutableStateOf(false) }
+        val quit = { if (status.networkBlocked) quitPrompt = true else exitApplication() }
         // Hiding the window without a tray to restore it from would leave a
         // running VPN with no way to reach it.
         val hideOnClose = settings.closeToTray && systemTrayAvailable
@@ -93,23 +98,33 @@ internal fun runGui() {
                 Item(stringResource(Res.string.tray_open), onClick = { windowVisible = true })
                 Item(
                     stringResource(
-                        if (connected) Res.string.tray_disconnect else Res.string.tray_connect,
+                        when (status.state) {
+                            TunnelState.Connected -> Res.string.tray_disconnect
+                            TunnelState.Connecting -> Res.string.tray_cancel
+                            TunnelState.Disconnected, TunnelState.Error -> Res.string.tray_connect
+                        },
                     ),
                     // The same repository call the Connect button makes,
                     // so the tray never drives the tunnel by a second path.
                     onClick = {
-                        scope.launch { if (connected) chain.disconnect() else chain.connect() }
+                        scope.launch { if (up) chain.disconnect() else chain.connect() }
                     },
                 )
+                if (status.blockedWhileDown) {
+                    Item(
+                        stringResource(Res.string.tray_unblock_network),
+                        onClick = { scope.launch { chain.disconnect() } },
+                    )
+                }
                 Separator()
-                Item(stringResource(Res.string.tray_quit), onClick = ::exitApplication)
+                Item(stringResource(Res.string.tray_quit), onClick = quit)
             },
         )
 
         if (windowVisible) {
             Window(
                 onCloseRequest = {
-                    if (hideOnClose) windowVisible = false else exitApplication()
+                    if (hideOnClose) windowVisible = false else quit()
                 },
                 title = stringResource(Res.string.window_title),
                 icon = painterResource(Res.drawable.app_icon),
@@ -117,6 +132,20 @@ internal fun runGui() {
                 LaunchedEffect(raiseCount) { window.toFront() }
                 VpnChainApp()
             }
+        }
+
+        if (quitPrompt) {
+            QuitPrompt(
+                themeConfig = settings.themeConfig,
+                onUnblockAndQuit = {
+                    scope.launch {
+                        chain.disconnect()
+                        exitApplication()
+                    }
+                },
+                onQuit = ::exitApplication,
+                onStay = { quitPrompt = false },
+            )
         }
     }
 }

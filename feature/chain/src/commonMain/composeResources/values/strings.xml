@@ -35,6 +35,9 @@
     <string name="chain_change">Change</string>
     <string name="chain_connect">Connect</string>
     <string name="chain_disconnect">Disconnect</string>
+    <string name="chain_cancel">Cancel</string>
+    <string name="chain_unblock_network">Unblock network</string>
+    <string name="chain_network_blocked">Kill switch is blocking the network.</string>
     <string name="chain_cut_off">Nothing gets through your relay. It may be down, or this device was cut off. Still trying every few minutes.</string>
     <string name="chain_cut_off_entry_hop">Nothing gets through. Your entry hop may have expired, your relay may be down, or this device was cut off. Still trying every few minutes.</string>
     <string name="chain_connect_without_entry_hop">Connect without entry hop</string>
