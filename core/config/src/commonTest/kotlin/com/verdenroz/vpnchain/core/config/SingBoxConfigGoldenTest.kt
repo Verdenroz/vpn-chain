@@ -487,7 +487,7 @@ private val TUN_CHAIN = """
                 }
             },
             "packet_encoding": "xudp",
-            "connect_timeout": "3s",
+            "connect_timeout": "10s",
             "detour": "entry-hop"
         },
         {
@@ -641,7 +641,7 @@ private val TUN_CHAIN_WARP = """
                 }
             },
             "packet_encoding": "xudp",
-            "connect_timeout": "3s",
+            "connect_timeout": "10s",
             "detour": "entry-hop"
         },
         {
