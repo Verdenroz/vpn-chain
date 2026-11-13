@@ -19,6 +19,7 @@ import android.os.SystemClock
 import com.verdenroz.vpnchain.core.config.ProbeProxy
 import com.verdenroz.vpnchain.core.config.SingBoxConfigFactory
 import com.verdenroz.vpnchain.core.config.isLostPortRace
+import com.verdenroz.vpnchain.core.config.isUnreadableRuleSetCache
 import com.verdenroz.vpnchain.core.config.logsConnections
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
@@ -269,17 +270,30 @@ class VpnChainService : VpnService(), CommandServerHandler {
             return false
         }
         return runCatching {
-            // sing-box fails its whole start when a port this app picked was taken first.
             val started = runCatching { startEngine(config) }
-            val lost = started.exceptionOrNull()?.message?.let(::isLostPortRace) == true
+            val failure = started.exceptionOrNull()?.message.orEmpty()
+            val staleCache = isUnreadableRuleSetCache(failure)
             // A Disconnect that landed during the failed boot has to stick, not be undone by the retry.
-            val fresh = if (lost && owns(gen) && !tearingDown) TunnelBridge.renderConfig() else null
-            if (fresh != null && owns(gen) && !tearingDown) {
-                TunnelBridge.log("a local port was taken before sing-box could bind it, starting again with new ports")
+            val again = when {
+                !owns(gen) || tearingDown -> null
+                // sing-box fails its whole start when a port this app picked was taken first.
+                isLostPortRace(failure) -> TunnelBridge.renderConfig()
+                staleCache -> config
+                else -> null
+            }
+            if (again != null && owns(gen) && !tearingDown) {
+                TunnelBridge.log(
+                    if (staleCache) {
+                        "sing-box could not read a blocklist it had saved, downloading it again"
+                    } else {
+                        "a local port was taken before sing-box could bind it, starting again with new ports"
+                    },
+                )
                 cleanup()
+                if (staleCache) ruleSetCache.delete()
                 tearingDown = false
                 lockdownPoller.postDelayed(lockdownCheck, LOCKDOWN_POLL_MS)
-                startEngine(fresh)
+                startEngine(again)
             } else {
                 started.getOrThrow()
             }
@@ -459,13 +473,18 @@ class VpnChainService : VpnService(), CommandServerHandler {
         tunDescriptor = null
     }
 
+    private val workingDir get() = filesDir.resolve("sing-box")
+
+    /** sing-box's default `cache_file` path, relative to its working directory. */
+    private val ruleSetCache get() = workingDir.resolve("cache.db")
+
     private fun ensureSetup() {
         if (didSetup) return
-        val work = filesDir.resolve("sing-box").apply { mkdirs() }
+        workingDir.mkdirs()
         Libbox.setup(
             SetupOptions().apply {
                 basePath = filesDir.absolutePath
-                workingPath = work.absolutePath
+                workingPath = workingDir.absolutePath
                 tempPath = cacheDir.absolutePath
                 fixAndroidStack = false
             },

@@ -25,7 +25,27 @@ object SystemdRelay {
 
     /** Which render schema wrote [configFile]; see [RENDER_SCHEMA]. */
     val stampFile = File(runDir, "relay.render")
-    val cachePath = "$STATE_DIR/singbox-cache.db"
+
+    /**
+     * The newest rule-set cache in the state directory. Only the unit's user can
+     * delete a file there, so a cache sing-box cannot read is superseded by
+     * [nextCachePath] instead of removed.
+     */
+    val cachePath: String
+        get() = "$STATE_DIR/${cacheFileName(stateFiles())}"
+
+    val nextCachePath: String
+        get() = "$STATE_DIR/${cacheFileName(stateFiles(), step = 1)}"
+
+    private fun stateFiles(): List<String> = File(STATE_DIR).list().orEmpty().toList()
+
+    internal fun cacheFileName(existing: List<String>, step: Int = 0): String {
+        val newest = existing.mapNotNull { CACHE_FILE.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0
+        val generation = newest + step
+        return if (generation == 0) "singbox-cache.db" else "singbox-cache-$generation.db"
+    }
+
+    private val CACHE_FILE = Regex("singbox-cache(?:-(\\d+))?\\.db")
 
     /**
      * A packaged unit lives under `/usr/lib`; `/etc` covers a hand-installed or

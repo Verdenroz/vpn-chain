@@ -31,3 +31,10 @@ fun isLostPortRace(failure: String, fixedPort: Int? = null): Boolean =
     LOOPBACK_BIND_IN_USE.findAll(failure).any { it.groupValues[1].toInt() != fixedPort }
 
 private val LOOPBACK_BIND_IN_USE = Regex("listen tcp 127\\.0\\.0\\.1:(\\d+): bind: address already in use")
+
+/**
+ * Whether sing-box's start failure is a blocklist it cached and can no longer
+ * read. sing-box treats that as fatal instead of downloading the list again,
+ * so the cache file has to go before a start can succeed.
+ */
+fun isUnreadableRuleSetCache(failure: String): Boolean = "restore cached rule-set" in failure

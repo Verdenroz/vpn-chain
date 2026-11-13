@@ -5,6 +5,7 @@ import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.config.ClashApi
 import com.verdenroz.vpnchain.core.config.SystemdRelay
 import com.verdenroz.vpnchain.core.config.isLostPortRace
+import com.verdenroz.vpnchain.core.config.isUnreadableRuleSetCache
 import com.verdenroz.vpnchain.core.model.ChainStatus
 import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.KillSwitchState
@@ -28,6 +29,7 @@ import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_adopted_system_wide
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_kill_switch_no_mark
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_port_race_retry
+import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_rule_set_cache_retry
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_already_state
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_awaiting_traffic
 import com.verdenroz.vpnchain.core.tunnel.generated.resources.tunnel_log_chain_stalled
@@ -318,15 +320,21 @@ class DesktopTunnelController(
         _status.awaitConnected()
     }
 
-    /** Launches [configJson], then once more on a fresh render if sing-box lost a port race. */
+    /** Launches [configJson], then once more if the start died of something a second launch can fix. */
     private suspend fun launchRelay(configJson: String) {
         launchAttempt(configJson)
-        if (!lostPortRace()) return
-        val fresh = configProvider.current?.invoke() ?: return
-        emitLog(Res.string.tunnel_log_port_race_retry)
-        applyConfig(fresh)
+        val failure = launchFailure() ?: return
+        val again = when {
+            isLostPortRace(failure, fixedPort = proxyPort.takeUnless { tunMode }) ->
+                configProvider.current?.invoke()?.also { emitLog(Res.string.tunnel_log_port_race_retry) }
+            isUnreadableRuleSetCache(failure) ->
+                RelayConfig.withoutUnreadableCache(configJson, SystemdRelay.nextCachePath)
+                    ?.also { emitLog(Res.string.tunnel_log_rule_set_cache_retry) }
+            else -> null
+        } ?: return
+        applyConfig(again)
         _status.value = connecting()
-        launchAttempt(fresh)
+        launchAttempt(again)
     }
 
     private suspend fun launchAttempt(configJson: String) {
@@ -346,14 +354,15 @@ class DesktopTunnelController(
     }
 
     /**
-     * sing-box fails its whole start when a loopback port this app picked was
-     * taken before it bound, so that one failure is worth one fresh render.
+     * What sing-box logged when this launch died at start, null while it runs.
+     * sing-box fails its whole start on a loopback port taken before it bound
+     * or on a cached blocklist it cannot read, and each is worth one more launch.
      */
-    private suspend fun lostPortRace(): Boolean {
-        if (!launchedThisAttempt || process?.isAlive == true) return false
+    private suspend fun launchFailure(): String? {
+        if (!launchedThisAttempt || process?.isAlive == true) return null
         withTimeoutOrNull(EXIT_SETTLE_MS) { readerJob?.join() }
-        if (_status.value.state != TunnelState.Error) return false
-        return isLostPortRace(logSince(relayLog, launchLogOffset), fixedPort = proxyPort.takeUnless { tunMode })
+        if (_status.value.state != TunnelState.Error) return null
+        return logSince(relayLog, launchLogOffset)
     }
 
     private suspend fun startProxy(configJson: String) {
