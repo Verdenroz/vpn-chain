@@ -1,8 +1,10 @@
 package com.verdenroz.vpnchain.core.tunnel
 
 import com.verdenroz.vpnchain.core.config.SingBoxConfigFactory
+import java.io.File
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -118,6 +120,28 @@ internal object RelayConfig {
             .first { it["tag"]?.jsonPrimitive?.contentOrNull == SingBoxConfigFactory.DIRECT_TAG }
         listOf("--allow-mark", "0x%x".format(direct.getValue("routing_mark").jsonPrimitive.int))
     }.getOrDefault(emptyList())
+
+    fun cachePath(configJson: String): String? = runCatching {
+        Json.parseToJsonElement(configJson).jsonObject["experimental"]?.jsonObject
+            ?.get("cache_file")?.jsonObject?.get("path")?.jsonPrimitive?.contentOrNull
+    }.getOrNull()
+
+    /**
+     * [configJson] with a rule-set cache sing-box can start from: the one it
+     * could not read deleted, or [fallbackPath] in its place where the file
+     * belongs to the relay's own user. Null when the config names no cache.
+     */
+    fun withoutUnreadableCache(configJson: String, fallbackPath: String): String? {
+        val path = cachePath(configJson) ?: return null
+        return if (File(path).delete()) configJson else withCachePath(configJson, fallbackPath)
+    }
+
+    private fun withCachePath(configJson: String, path: String): String {
+        val root = Json.parseToJsonElement(configJson).jsonObject
+        val experimental = root.getValue("experimental").jsonObject
+        val cacheFile = JsonObject(experimental.getValue("cache_file").jsonObject + ("path" to JsonPrimitive(path)))
+        return JsonObject(root + ("experimental" to JsonObject(experimental + ("cache_file" to cacheFile)))).toString()
+    }
 
     private val LISTEN_PORT = Regex("\"listen_port\"\\s*:\\s*(\\d+)")
     private val TUN_INBOUND = Regex("\"type\"\\s*:\\s*\"tun\"")

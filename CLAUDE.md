@@ -110,6 +110,7 @@ invisible in testing.
 - SSH to the VPS rides the chain. Restarting xray kills a session that is mid-operation, so run restarts detached and reconnect to check.
 - xray users added through the HandlerService API (`adu`) live in memory only and vanish on restart unless also written to `config.json`.
 - sing-box 1.14.3 fails its whole start when any inbound cannot bind. Probe and clash API ports are picked just before bind, so a start that fails that way is rendered once more with fresh ports.
+- sing-box fails its whole start when a blocklist saved in its cache file cannot be read, and never downloads it again. The start is retried once without that cache: deleted, or under the systemd relay (whose state directory only the `sing-box` user can write) superseded by `singbox-cache-N.db`.
 - sing-box accepts one `experimental` block. Rendering the cache file and the clash API separately silently drops the first.
 - The systemd relay outlives the app, including an in-app update. Bump `SingBoxConfigFactory.RENDER_SCHEMA` whenever a render would route differently, or an adopted relay keeps the older build's routing.
 - Without the relay unit, a sing-box package upgrade drops its file capability and connect fails with `TUNSETIFF: operation not permitted`.

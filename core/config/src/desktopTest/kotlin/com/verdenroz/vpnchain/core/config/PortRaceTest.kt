@@ -25,4 +25,12 @@ class PortRaceTest {
     fun `any other start failure is not`() {
         assertFalse(isLostPortRace("start service: initialize outbound[entry-hop]: invalid key"))
     }
+
+    @Test
+    fun `a cached blocklist sing-box cannot read is told apart from other failures`() {
+        val failure = "initialize rule-set[0]: restore cached rule-set: read rule[0]: unknown rule item type: 112, last type: 10"
+
+        assertTrue(isUnreadableRuleSetCache(failure))
+        assertFalse(isUnreadableRuleSetCache("initialize rule-set[3]: open learned-warp.json: no such file or directory"))
+    }
 }
