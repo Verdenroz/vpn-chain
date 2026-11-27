@@ -12,10 +12,6 @@ import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -37,6 +33,7 @@ object SingBoxConfigFactory {
         clashApi: ClashApi? = null,
         warp: WarpExit? = null,
         warpMode: WarpMode = WarpMode.Off,
+        deviceExit: WireGuardEntry? = null,
         probe: ProbeProxy? = null,
         learnedWarpPath: String? = null,
         learnedDirectPath: String? = null,
@@ -52,7 +49,9 @@ object SingBoxConfigFactory {
             putLog(connectionLog)
             putExperimental(clashApi, cacheFile = false, cachePath = null)
             // The relay resolves its own names; WARP and direct would otherwise ask the local resolver.
-            if (tail != null || opensDirect) putJsonObject("dns") { putDnsServers(entry = null, remoteDetour = "proxy") }
+            if (tail != null || opensDirect || deviceExit != null) {
+                putJsonObject("dns") { putDnsServers(entry = null, remoteDetour = "proxy", exit = deviceExit) }
+            }
             putJsonArray("inbounds") {
                 addJsonObject {
                     put("type", "mixed")
@@ -63,8 +62,11 @@ object SingBoxConfigFactory {
                 }
                 probe?.let { addProbeInbounds(it, withWarp = tail != null, withFallback = false) }
             }
-            if (tail != null) {
-                putJsonArray("endpoints") { addWarpEndpoint(tail, detour = "proxy") }
+            if (tail != null || deviceExit != null) {
+                putJsonArray("endpoints") {
+                    tail?.let { addWarpEndpoint(it, detour = "proxy") }
+                    deviceExit?.let { addDeviceExitEndpoint(it, detour = "proxy") }
+                }
             }
             putJsonArray("outbounds") {
                 addVlessOutbound(profile, tag = "proxy", detour = null, tcpOnly = true)
@@ -75,11 +77,11 @@ object SingBoxConfigFactory {
                 putRuleSets(DnsFilter.Off, learnedPath, learnedOpenPath = null, learnedDirectPath = directPath)
                 putJsonArray("rules") {
                     addJsonObject { put("action", "sniff") }
-                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = "proxy", fallbackTag = null) }
+                    probe?.let { addProbeRules(withWarp = tail != null, relayTag = if (deviceExit != null) DEVICE_EXIT_TAG else "proxy", fallbackTag = null) }
                     learnedPath?.let { addLearnedRule(LEARNED_WARP_TAG, WARP_TAG) }
                     directPath?.let { addLearnedRule(LEARNED_DIRECT_TAG, DIRECT_TAG) }
                 }
-                put("final", if (tail != null && warpMode == WarpMode.AllTraffic) WARP_TAG else "proxy")
+                put("final", finalOutbound(tail != null && warpMode == WarpMode.AllTraffic, deviceExit != null, "proxy"))
             }
         }
     }
@@ -97,6 +99,7 @@ object SingBoxConfigFactory {
         cachePath: String? = null,
         warp: WarpExit? = null,
         warpMode: WarpMode = WarpMode.Off,
+        deviceExit: WireGuardEntry? = null,
         allowLocalNetworks: Boolean = false,
         logPath: String? = null,
         probe: ProbeProxy? = null,
@@ -126,24 +129,29 @@ object SingBoxConfigFactory {
             // runs; without the cache every connect re-downloads it.
             putExperimental(clashApi, cacheFile = filtering, cachePath = cachePath)
             putJsonObject("dns") {
-                putDnsServers(entry)
+                putDnsServers(entry, exit = deviceExit)
                 if (filtering) putBlocklistRules(dnsFilter)
             }
             putJsonArray("inbounds") {
-                // sing-box defaults to 9000. 1280 (or a lower entry MTU) nests inside the entry
-                // hop or a 1280 WARP tail; otherwise 1400 leaves VLESS/TLS headroom under 1500.
+                // sing-box defaults to 9000. 1280 (or a lower entry or exit MTU) nests inside a
+                // WireGuard hop; otherwise 1400 leaves VLESS/TLS headroom under 1500.
                 addTunInbound(
-                    mtu = if (entry != null || tail != null) (entry?.mtu?.coerceAtMost(1280) ?: 1280) else 1400,
+                    mtu = if (entry != null || tail != null || deviceExit != null) {
+                        listOfNotNull(entry?.mtu, deviceExit?.mtu, WIREGUARD_MTU).min()
+                    } else {
+                        1400
+                    },
                     allowLocalNetworks = allowLocalNetworks,
                 )
                 probe?.let { addProbeInbounds(it, withWarp = tail != null, withFallback = probesFallback) }
             }
-            if (entry != null || tail != null) {
+            if (entry != null || tail != null || deviceExit != null) {
                 putJsonArray("endpoints") {
                     entry?.let { addWireGuardEndpoint(it) }
                     // Dialled through the relay, so the tail is the last hop of
                     // the chain rather than a second path around it.
                     tail?.let { addWarpEndpoint(it, detour = VLESS_TAG) }
+                    deviceExit?.let { addDeviceExitEndpoint(it, detour = VLESS_TAG) }
                 }
             }
             putJsonArray("outbounds") {
@@ -165,7 +173,7 @@ object SingBoxConfigFactory {
                     probe?.let {
                         addProbeRules(
                             withWarp = tail != null,
-                            relayTag = VLESS_TAG,
+                            relayTag = if (deviceExit != null) DEVICE_EXIT_TAG else VLESS_TAG,
                             fallbackTag = ENTRY_HOP_TAG.takeIf { probesFallback },
                         )
                     }
@@ -173,10 +181,7 @@ object SingBoxConfigFactory {
                     openPath?.let { addLearnedRule(LEARNED_OPEN_TAG, ENTRY_HOP_TAG) }
                     directPath?.let { addLearnedRule(LEARNED_DIRECT_TAG, DIRECT_TAG) }
                 }
-                put(
-                    "final",
-                    if (tail != null && warpMode == WarpMode.AllTraffic) WARP_TAG else VLESS_TAG,
-                )
+                put("final", finalOutbound(tail != null && warpMode == WarpMode.AllTraffic, deviceExit != null, VLESS_TAG))
             }
         }
     }
@@ -219,6 +224,12 @@ object SingBoxConfigFactory {
         }
     }
 
+    private fun finalOutbound(warpCarriesAll: Boolean, hasDeviceExit: Boolean, relayTag: String): String = when {
+        warpCarriesAll -> WARP_TAG
+        hasDeviceExit -> DEVICE_EXIT_TAG
+        else -> relayTag
+    }
+
     private fun render(build: JsonObjectBuilder.() -> Unit): String =
         json.encodeToString(JsonElement.serializer(), buildJsonObject(build))
 
@@ -254,72 +265,6 @@ object SingBoxConfigFactory {
         }
     }
 
-    /**
-     * Upstream filtering's job, done client-side: reject the lookup rather than
-     * answer with an address. `refused` fails callers fast instead of leaving
-     * them to time out on a black-holed connection. One rule covers every
-     * rule-set of the level — a name is refused if any of them lists it.
-     */
-    private fun JsonObjectBuilder.putBlocklistRules(filter: DnsFilter) {
-        putJsonArray("rules") {
-            addJsonObject {
-                putJsonArray("rule_set") { blocklistsFor(filter).forEach { add(it.tag) } }
-                put("action", "reject")
-                put("method", "default")
-            }
-        }
-    }
-
-    private fun JsonObjectBuilder.putRuleSets(
-        filter: DnsFilter,
-        learnedWarpPath: String?,
-        learnedOpenPath: String?,
-        learnedDirectPath: String?,
-        detour: String = VLESS_TAG,
-    ) {
-        val blocklists = blocklistsFor(filter)
-        if (blocklists.isEmpty() && learnedWarpPath == null && learnedOpenPath == null && learnedDirectPath == null) return
-        putJsonArray("rule_set") {
-            blocklists.forEach { addBlocklistRuleSet(it, detour) }
-            learnedWarpPath?.let { addLearnedRuleSet(LEARNED_WARP_TAG, it) }
-            learnedOpenPath?.let { addLearnedRuleSet(LEARNED_OPEN_TAG, it) }
-            learnedDirectPath?.let { addLearnedRuleSet(LEARNED_DIRECT_TAG, it) }
-        }
-    }
-
-    /** Whether a rendered config routes by a learned rule-set; false for one that cannot be read. */
-    fun routesLearnedSites(configJson: String): Boolean = runCatching {
-        Json.parseToJsonElement(configJson).jsonObject["route"]?.jsonObject?.get("rule_set")?.jsonArray.orEmpty()
-            .any { it.jsonObject["tag"]?.jsonPrimitive?.contentOrNull in setOf(LEARNED_WARP_TAG, LEARNED_OPEN_TAG, LEARNED_DIRECT_TAG) }
-    }.getOrDefault(false)
-
-    private fun JsonArrayBuilder.addLearnedRuleSet(tag: String, path: String) = addJsonObject {
-        put("type", "local")
-        put("tag", tag)
-        put("format", "source")
-        put("path", path)
-    }
-
-    /**
-     * Downloaded through the chain, never around it — a blocklist fetched over
-     * the bare link would announce the app to the network it is hiding from.
-     * Binary `.srs` is the compiled form sing-box loads directly.
-     */
-    private fun JsonArrayBuilder.addBlocklistRuleSet(list: Blocklist, detour: String) = addJsonObject {
-        put("type", "remote")
-        put("tag", list.tag)
-        put("format", "binary")
-        put("url", list.url)
-        put("download_detour", detour)
-        put("update_interval", "168h")
-    }
-
-    private fun blocklistsFor(filter: DnsFilter): List<Blocklist> = when (filter) {
-        DnsFilter.Off -> emptyList()
-        DnsFilter.Malware -> listOf(THREATS_LIST)
-        DnsFilter.AdsAndTrackers -> listOf(THREATS_LIST, GEOSITE_ADS_LIST, ADS_TRACKERS_LIST)
-    }
-
     // Info records every connection and DNS answer, so it is opt-in.
     private fun JsonObjectBuilder.putLog(connectionLog: Boolean, output: String? = null) =
         putJsonObject("log") {
@@ -330,33 +275,8 @@ object SingBoxConfigFactory {
             if (output != null) put("output", output)
         }
 
-    /**
-     * A resolver on the entry peer's internal network — a provider's filtering
-     * resolver being the usual case — must be dialed through that peer. Routing
-     * it via the relay like the public fallback would make it unreachable, not
-     * merely unfiltered.
-     */
-    private fun JsonObjectBuilder.putDnsServers(entry: WireGuardEntry?, remoteDetour: String = VLESS_TAG) {
-        putJsonArray("servers") {
-            if (entry?.dns != null) {
-                addJsonObject {
-                    put("type", "udp")
-                    put("tag", "dns-entry")
-                    put("server", entry.dns)
-                    put("detour", ENTRY_HOP_TAG)
-                }
-            } else {
-                addJsonObject {
-                    put("type", "https")
-                    put("tag", "dns-remote")
-                    put("server", "1.1.1.1")
-                    put("detour", remoteDetour)
-                }
-            }
-        }
-        put("final", if (entry?.dns != null) "dns-entry" else "dns-remote")
-        put("strategy", "ipv4_only")
-    }
+    /** Whether a rendered config routes by a learned rule-set; false for one that cannot be read. */
+    fun routesLearnedSites(configJson: String): Boolean = configRoutesLearnedSites(configJson)
 
     private fun JsonArrayBuilder.addTunInbound(mtu: Int, allowLocalNetworks: Boolean) = addJsonObject {
         put("type", "tun")
@@ -394,8 +314,6 @@ object SingBoxConfigFactory {
         }
     }
 
-    private fun WireGuardEntry.addresses(): List<String> = address.split(',').map(String::trim)
-
     private fun JsonArrayBuilder.addDirectOutbound(mark: Int? = null) = addJsonObject {
         put("type", "direct")
         put("tag", DIRECT_TAG)
@@ -430,54 +348,6 @@ object SingBoxConfigFactory {
         put("connect_timeout", if (detour == null) DIRECT_DIAL_TIMEOUT else DETOURED_DIAL_TIMEOUT)
         if (detour != null) put("detour", detour)
     }
-
-    private fun JsonArrayBuilder.addWireGuardEndpoint(
-        entry: WireGuardEntry,
-        allowedIps: List<String> = listOf("0.0.0.0/0"),
-    ) = addJsonObject {
-        put("type", "wireguard")
-        put("tag", ENTRY_HOP_TAG)
-        put("mtu", entry.mtu ?: 1280)
-        putJsonArray("address") { entry.addresses().forEach { add(it) } }
-        put("private_key", entry.privateKey)
-        putJsonArray("peers") {
-            addJsonObject {
-                put("address", entry.endpointHost)
-                put("port", entry.endpointPort)
-                put("public_key", entry.peerPublicKey)
-                entry.presharedKey?.let { put("pre_shared_key", it) }
-                putJsonArray("allowed_ips") { allowedIps.forEach { add(it) } }
-                put("persistent_keepalive_interval", entry.keepaliveSeconds ?: 25)
-            }
-        }
-    }
-
-    /**
-     * The WARP tail: a WireGuard peer dialled *through* [detour], so packets
-     * leave Cloudflare's network instead of the relay's own datacenter address.
-     * Nothing upstream changes — the entry hop and relay still carry the
-     * traffic, and Cloudflare sees the relay's address, never the device's.
-     */
-    private fun JsonArrayBuilder.addWarpEndpoint(warp: WarpExit, detour: String) = addJsonObject {
-        put("type", "wireguard")
-        put("tag", WARP_TAG)
-        put("mtu", 1280)
-        putJsonArray("address") { add(warp.addressV4); add(warp.addressV6) }
-        put("private_key", warp.privateKey)
-        // Without this the handshake is dialled on the bare link, where the kill
-        // switch rejects it outright — and where it would bypass the chain anyway.
-        put("detour", detour)
-        putJsonArray("peers") {
-            addJsonObject {
-                put("address", warp.endpointHost)
-                put("port", warp.endpointPort)
-                put("public_key", warp.peerPublicKey)
-                putJsonArray("allowed_ips") { add("0.0.0.0/0"); add("::/0") }
-                put("persistent_keepalive_interval", 25)
-            }
-        }
-    }
-
     /** Loopback only: these accept any destination, so they must never face the network. */
     private fun JsonArrayBuilder.addProbeInbounds(probe: ProbeProxy, withWarp: Boolean, withFallback: Boolean) {
         addProbeInbound(ProbeProxy.RELAY_TAG, probe.relayPort, probe)
@@ -521,12 +391,6 @@ object SingBoxConfigFactory {
     private val LOCAL_ROUTE_EXCLUDES =
         listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16")
 
-    private const val VLESS_TAG = "vless-proxy"
-    private const val ENTRY_HOP_TAG = "entry-hop"
-    private const val WARP_TAG = "warp-exit"
-    private const val LEARNED_WARP_TAG = "learned-warp"
-    private const val LEARNED_OPEN_TAG = "learned-open"
-    private const val LEARNED_DIRECT_TAG = "learned-direct"
     const val DIRECT_TAG = "direct"
 
     /**
@@ -547,33 +411,5 @@ object SingBoxConfigFactory {
      * an older one's. A relay outlives the app under systemd, so on adoption a
      * config stamped with another schema is rendered again rather than reused.
      */
-    const val RENDER_SCHEMA = 4
-
-    private data class Blocklist(val tag: String, val url: String)
-
-    /**
-     * These files decide what the chain refuses to resolve, so each comes from
-     * a party we already trust: sing-box's own geosite mirror (the upstream
-     * that ships the binary we run), and our own `blocklists` release, where
-     * CI converts hagezi's lists with a pinned sing-box — no third-party
-     * conversion repo in between. See `.github/workflows/blocklists.yml`.
-     */
-    private const val BLOCKLISTS_RELEASE =
-        "https://github.com/Verdenroz/vpn-chain/releases/download/blocklists"
-
-    /** hagezi TIF medium: malware, phishing, and scam domains. */
-    private val THREATS_LIST = Blocklist("blocklist-threats", "$BLOCKLISTS_RELEASE/threats.srs")
-
-    /** hagezi Pro++: ads, trackers, telemetry. 99% on d3ward's adblock test. */
-    private val ADS_TRACKERS_LIST =
-        Blocklist("blocklist-ads-trackers", "$BLOCKLISTS_RELEASE/ads-trackers.srs")
-
-    /**
-     * v2fly's ad list, kept alongside hagezi's: it blocks apex domains hagezi
-     * deliberately spares (e.g. `doubleclick.net`), and it costs 8 KB.
-     */
-    private val GEOSITE_ADS_LIST = Blocklist(
-        "blocklist-ads",
-        "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs",
-    )
+    const val RENDER_SCHEMA = 5
 }

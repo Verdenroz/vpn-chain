@@ -529,6 +529,9 @@ private class FakeProfileRepository : ProfileRepository {
     override val profile: Flow<SavedProfile?> = stored
     override val profiles: Flow<List<SavedProfile>> = MutableStateFlow(emptyList())
     override val activeProfileId: Flow<String?> = MutableStateFlow(null)
+    override suspend fun saveRelay(relay: ChainProfile) = Unit
+    override suspend fun setEntryHop(entry: WireGuardEntry?) = Result.success(Unit)
+    override suspend fun setDeviceExit(exit: WireGuardEntry?) = Result.success(Unit)
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = Unit
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = "id"
     override suspend fun rename(id: String, name: String) = Unit

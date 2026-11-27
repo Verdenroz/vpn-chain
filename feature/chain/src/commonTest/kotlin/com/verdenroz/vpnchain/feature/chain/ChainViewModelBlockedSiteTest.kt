@@ -122,7 +122,7 @@ internal class ChainRig(
     val viewModel = ChainViewModel(
         connectChain = ConnectChainUseCase(chain),
         disconnectChain = DisconnectChainUseCase(chain),
-        observeChainRoute = ObserveChainRouteUseCase(profiles, settings, chain, StubOrigin(), StubGeolocator(), StubProbe()),
+        observeChainRoute = ObserveChainRouteUseCase(profiles, settings, chain, StubOrigin(), StubGeolocator(), StubProbe(), StubWarpRegistry()),
         chainRepository = chain,
         profileRepository = profiles,
         settingsRepository = settings,
@@ -184,6 +184,9 @@ internal class StubProfiles : ProfileRepository {
     override val profiles = MutableStateFlow(listOf(SavedProfile("r", "relay", relay = RELAY)))
     override val profile = MutableStateFlow<SavedProfile?>(profiles.value.first())
     override val activeProfileId = MutableStateFlow<String?>("r")
+    override suspend fun saveRelay(relay: ChainProfile) = Unit
+    override suspend fun setEntryHop(entry: WireGuardEntry?) = Result.success(Unit)
+    override suspend fun setDeviceExit(exit: WireGuardEntry?) = Result.success(Unit)
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = Unit
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = "x"
     override suspend fun rename(id: String, name: String) = Unit
@@ -236,4 +239,9 @@ internal class StubProbe : NetworkProbe {
 internal class StubConnectivity : ConnectivityRepository {
     override val online = MutableStateFlow(true)
     override val linkChanges = MutableSharedFlow<Unit>()
+}
+
+private class StubWarpRegistry : com.verdenroz.vpnchain.core.data.WarpRepository {
+    override val registered = MutableStateFlow(false)
+    override suspend fun exit(): com.verdenroz.vpnchain.core.model.WarpExit? = null
 }

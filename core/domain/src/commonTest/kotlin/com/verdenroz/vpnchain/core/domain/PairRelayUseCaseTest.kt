@@ -312,6 +312,9 @@ private class PairingProfiles(private val log: MutableList<String>) : ProfileRep
         return "new"
     }
 
+    override suspend fun saveRelay(relay: ChainProfile) = Unit
+    override suspend fun setEntryHop(entry: WireGuardEntry?) = Result.success(Unit)
+    override suspend fun setDeviceExit(exit: WireGuardEntry?) = Result.success(Unit)
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) {
         log += "save"
         profiles.value = profiles.value.map { if (it.id == activeProfileId.value) it.copy(relay = relay) else it }

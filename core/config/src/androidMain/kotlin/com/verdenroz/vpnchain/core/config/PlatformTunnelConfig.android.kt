@@ -25,6 +25,7 @@ actual fun renderPlatformTunnelConfig(
         dnsFilter = settings.dnsFilter,
         warp = warp,
         warpMode = settings.warpMode,
+        deviceExit = profile.deviceExit,
         probe = newProbeProxy(),
         learnedWarpPath = learned?.path(RuleSetKind.Warp),
         learnedOpenPath = learned?.path(RuleSetKind.Open),

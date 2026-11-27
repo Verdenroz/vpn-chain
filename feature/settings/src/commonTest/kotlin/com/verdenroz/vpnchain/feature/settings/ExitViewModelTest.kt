@@ -4,6 +4,9 @@ import com.verdenroz.vpnchain.core.domain.DevicesFailed
 import com.verdenroz.vpnchain.core.domain.ExitBoard as DomainExitBoard
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.relay.AgentExit
+import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
+import com.verdenroz.vpnchain.feature.settings.generated.resources.hops_file_too_large
+import com.verdenroz.vpnchain.feature.settings.generated.resources.hops_file_unreadable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -36,6 +39,7 @@ class ExitViewModelTest {
 
     private val log = mutableListOf<String>()
     private val relay = FakeDevices(log)
+    private val profiles = FakeProfiles(log)
 
     @BeforeTest
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -43,7 +47,7 @@ class ExitViewModelTest {
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel() = ExitViewModel(relay)
+    private fun viewModel() = ExitViewModel(relay, profiles)
 
     @Test
     fun `an admin on a direct exit sees the row`() {
@@ -64,6 +68,46 @@ class ExitViewModelTest {
 
         relay.exitBoard = Result.failure(DevicesFailed(DevicesFailed.Reason.Offline))
         assertEquals(ExitBoard.Hidden, viewModel().state.value.board)
+    }
+
+    @Test
+    fun `an admin whose relay is unreachable is told to connect`() {
+        profiles.profile.value = profiles.profile.value?.copy(relay = RELAY.copy(managementAdmin = true))
+        relay.exitBoard = Result.failure(DevicesFailed(DevicesFailed.Reason.Offline))
+
+        assertEquals(ExitBoard.Offline, viewModel().state.value.board)
+    }
+
+    @Test
+    fun `a chosen file is reviewed like a paste`() {
+        val model = viewModel()
+        model.startChange()
+
+        model.picked(PickedConf.Text(CONF))
+
+        assertEquals(ExitStep.ConfirmWireGuard(CONF, "203.0.113.9:51820"), model.state.value.step)
+    }
+
+    @Test
+    fun `a file that cannot be read or is too big is refused in place`() {
+        val model = viewModel()
+        model.startChange()
+
+        model.picked(PickedConf.TooLarge)
+        assertEquals(UiText.Resource(Res.string.hops_file_too_large), assertIs<ExitStep.Pasting>(model.state.value.step).error)
+
+        model.picked(PickedConf.Unreadable)
+        assertEquals(UiText.Resource(Res.string.hops_file_unreadable), assertIs<ExitStep.Pasting>(model.state.value.step).error)
+    }
+
+    @Test
+    fun `cancelling the file dialog changes nothing`() {
+        val model = viewModel()
+        model.startChange()
+
+        model.picked(null)
+
+        assertEquals(ExitStep.Pasting(), model.state.value.step)
     }
 
     @Test

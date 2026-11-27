@@ -6,7 +6,9 @@ import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
 import com.verdenroz.vpnchain.core.geoip.HopLocation
 import com.verdenroz.vpnchain.core.geoip.NetworkProbe
+import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.geoip.PublicIpSample
+import com.verdenroz.vpnchain.core.model.WarpExit
 import com.verdenroz.vpnchain.core.geoip.RouteGeolocator
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ChainStatus
@@ -85,6 +87,49 @@ class ObserveChainRouteUseCaseTest {
         world.probe.next = PublicIpSample(VPS_IP, elapsedMs = 300)
 
         assertEquals("vless · reality · tcp 443", world.resolve().hop(HopRole.Exit)?.via)
+    }
+
+    @Test
+    fun `the exit names the device exit and its provider once the measured address is not the relay`() = runTest {
+        val world = TestWorld(
+            status = connectedStatus(exitIp = null),
+            profile = profile().copy(deviceExit = defaultEntry().copy(dns = "10.64.0.1")),
+        )
+        world.probe.next = PublicIpSample("198.51.100.77", elapsedMs = 300)
+
+        val exit = world.resolve().hop(HopRole.Exit)
+
+        assertEquals("vless · reality → wireguard", exit?.via)
+        assertEquals("Mullvad", exit?.provider)
+    }
+
+    @Test
+    fun `the device exit is not named while warp carries all traffic or the exit is still the relay`() = runTest {
+        val exit = profile().copy(deviceExit = defaultEntry())
+        val allTraffic = TestWorld(
+            status = connectedStatus(exitIp = null),
+            profile = exit,
+            settings = UserSettings(warpMode = WarpMode.AllTraffic),
+        )
+        allTraffic.probe.next = PublicIpSample("104.28.194.140", elapsedMs = 300)
+        val stillRelay = TestWorld(status = connectedStatus(exitIp = null), profile = exit)
+        stillRelay.probe.next = PublicIpSample(VPS_IP, elapsedMs = 300)
+
+        assertEquals("vless · reality → warp", allTraffic.resolve().hop(HopRole.Exit)?.via)
+        assertEquals("vless · reality · tcp 443", stillRelay.resolve().hop(HopRole.Exit)?.via)
+    }
+
+    @Test
+    fun `all traffic without a registered tail still names the device exit`() = runTest {
+        val world = TestWorld(
+            status = connectedStatus(exitIp = null),
+            profile = profile().copy(deviceExit = defaultEntry()),
+            settings = UserSettings(warpMode = WarpMode.AllTraffic),
+            warpRegistered = false,
+        )
+        world.probe.next = PublicIpSample("198.51.100.77", elapsedMs = 300)
+
+        assertEquals("vless · reality → wireguard", world.resolve().hop(HopRole.Exit)?.via)
     }
 
     @Test
@@ -292,6 +337,7 @@ private class TestWorld(
     profile: SavedProfile? = profile(),
     lastOrigin: String? = null,
     settings: UserSettings = UserSettings(),
+    warpRegistered: Boolean = true,
 ) {
     var clock = 1_000_000L
     val status = MutableStateFlow(status)
@@ -305,10 +351,16 @@ private class TestWorld(
         originRepository = origins,
         geolocator = StubGeolocator,
         probe = probe,
+        warpRepository = FakeWarp(warpRegistered),
         now = { clock },
     )
 
     suspend fun resolve(): ChainRoute = useCase().first()
+}
+
+private class FakeWarp(registered: Boolean) : WarpRepository {
+    override val registered = MutableStateFlow(registered)
+    override suspend fun exit(): WarpExit? = null
 }
 
 private class FakeProbe : NetworkProbe {
@@ -335,6 +387,9 @@ private class FakeProfiles(profile: SavedProfile?) : ProfileRepository {
     override val profile: Flow<SavedProfile?> = MutableStateFlow(profile)
     override val profiles: Flow<List<SavedProfile>> = MutableStateFlow(emptyList())
     override val activeProfileId: Flow<String?> = MutableStateFlow(null)
+    override suspend fun saveRelay(relay: ChainProfile) = Unit
+    override suspend fun setEntryHop(entry: WireGuardEntry?) = Result.success(Unit)
+    override suspend fun setDeviceExit(exit: WireGuardEntry?) = Result.success(Unit)
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = Unit
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = "id"
     override suspend fun rename(id: String, name: String) = Unit

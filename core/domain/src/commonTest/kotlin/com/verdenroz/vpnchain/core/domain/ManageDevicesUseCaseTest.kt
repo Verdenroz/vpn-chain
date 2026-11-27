@@ -428,6 +428,9 @@ private class DevicesProfiles(keyed: Boolean) : ProfileRepository {
     }
 
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = error("unused")
+    override suspend fun saveRelay(relay: ChainProfile) = Unit
+    override suspend fun setEntryHop(entry: WireGuardEntry?) = Result.success(Unit)
+    override suspend fun setDeviceExit(exit: WireGuardEntry?) = Result.success(Unit)
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) {
         profile.value = profile.value?.copy(relay = relay, wireGuard = entryHop)
     }

@@ -57,6 +57,9 @@ internal class FakeProfileRepository(saved: List<SavedProfile>) : ProfileReposit
         activeProfileId.value = id
     }
 
+    override suspend fun saveRelay(relay: ChainProfile) = TODO()
+    override suspend fun setEntryHop(entry: WireGuardEntry?) = TODO()
+    override suspend fun setDeviceExit(exit: WireGuardEntry?) = TODO()
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = TODO()
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = TODO()
     override suspend fun rename(id: String, name: String) = TODO()

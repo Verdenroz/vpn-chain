@@ -126,8 +126,6 @@ class WireGuardConfigTest {
     )
 }
 
-private fun JsonObject.array(key: String): JsonArray = getValue(key).jsonArray
-
 private fun JsonObject.text(key: String): String = getValue(key).jsonPrimitive.content
 
 private fun JsonElement.obj(): JsonObject = jsonObject
