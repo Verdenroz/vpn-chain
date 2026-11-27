@@ -105,6 +105,9 @@ private class StubProfiles : ProfileRepository {
     override val profiles = MutableStateFlow(listOf(SavedProfile("r", "relay", relay = RELAY)))
     override val profile = MutableStateFlow<SavedProfile?>(profiles.value.first())
     override val activeProfileId = MutableStateFlow<String?>("r")
+    override suspend fun saveRelay(relay: ChainProfile) = Unit
+    override suspend fun setEntryHop(entry: WireGuardEntry?) = Result.success(Unit)
+    override suspend fun setDeviceExit(exit: WireGuardEntry?) = Result.success(Unit)
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = Unit
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = "x"
     override suspend fun rename(id: String, name: String) = Unit

@@ -18,41 +18,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-private fun profile() = ChainProfile(
-    vpsIp = "203.0.113.10",
-    vlessUuid = "uuid",
-    realityPublicKey = "pubkey",
-    shortId = "shortid",
-    serverPort = 443,
-    localProxyPort = 1080,
-)
-
-private fun entry(dns: String? = null) = WireGuardEntry(
-    privateKey = "priv",
-    address = "10.2.0.2/32",
-    peerPublicKey = "peer",
-    endpointHost = "198.51.100.20",
-    dns = dns,
-)
-
-private fun warp() = WarpExit(
-    privateKey = "warp-priv",
-    addressV4 = "172.16.0.2/32",
-    addressV6 = "2606:4700::2/128",
-    peerPublicKey = "warp-peer",
-)
-
-private fun probe() = ProbeProxy(relayPort = 41001, warpPort = 41002, fallbackPort = 41003, username = "u", password = "p")
-
-private fun parse(raw: String): JsonObject = Json.parseToJsonElement(raw).jsonObject
-
 private fun logLevel(raw: String): String =
     parse(raw).getValue("log").jsonObject.getValue("level").jsonPrimitive.content
-
-private fun JsonObject.array(key: String): JsonArray = getValue(key).jsonArray
-
-private fun JsonArray.taggedWith(tag: String): JsonObject? =
-    map { it.jsonObject }.firstOrNull { it["tag"]?.jsonPrimitive?.content == tag }
 
 class SingBoxConfigFactoryTest {
 

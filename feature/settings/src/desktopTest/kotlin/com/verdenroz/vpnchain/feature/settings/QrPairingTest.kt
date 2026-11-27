@@ -1,6 +1,10 @@
 package com.verdenroz.vpnchain.feature.settings
 
+import com.verdenroz.vpnchain.core.model.ChainProfile
+import com.verdenroz.vpnchain.core.model.SavedProfile
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -28,5 +32,22 @@ class QrPairingTest {
         val large = qrMatrix("VPS_IP=1.2.3.4\n" + "X".repeat(400))
 
         assertTrue(large.width > small.width, "expected a denser payload to add modules")
+    }
+
+    @Test
+    fun `the payload never carries this device's exit`() {
+        val exit = WireGuardEntry("exit-private-key", "10.5.0.2/32", "exit-peer", "198.51.100.30")
+        val profile = SavedProfile(
+            id = "p",
+            name = "p",
+            relay = ChainProfile("203.0.113.10", "uuid", "pubkey", "ab"),
+            deviceExit = exit,
+        )
+
+        val payload = pairingPayload(profile).orEmpty()
+
+        assertTrue("203.0.113.10" in payload)
+        assertFalse("exit-private-key" in payload)
+        assertFalse("198.51.100.30" in payload)
     }
 }

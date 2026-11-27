@@ -106,4 +106,8 @@ data class UserSettings(
  * must go through this, or a disabled entry hop would still be drawn.
  */
 fun SavedProfile.effectiveFor(settings: UserSettings): SavedProfile =
-    if (settings.entryHopEnabled || relay == null) this else copy(wireGuard = null)
+    when {
+        relay == null -> copy(deviceExit = null)
+        settings.entryHopEnabled -> this
+        else -> copy(wireGuard = null)
+    }

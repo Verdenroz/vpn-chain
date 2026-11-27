@@ -17,6 +17,11 @@ data class SavedProfile(
     val name: String,
     val relay: ChainProfile? = null,
     val wireGuard: WireGuardEntry? = null,
+    /**
+     * A WireGuard peer this device alone leaves through, dialled by way of the
+     * relay. Only meaningful with a relay, and never part of pairing.
+     */
+    val deviceExit: WireGuardEntry? = null,
 ) {
     init {
         require(relay != null || wireGuard != null) { "A connection needs a relay or a WireGuard peer" }

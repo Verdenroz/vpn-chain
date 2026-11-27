@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.core.domain.di
 import com.verdenroz.vpnchain.core.common.currentTimeMillis
 import com.verdenroz.vpnchain.core.data.di.dataModule
 import com.verdenroz.vpnchain.core.domain.ChainSupervisor
+import com.verdenroz.vpnchain.core.domain.ChangeHopsUseCase
 import com.verdenroz.vpnchain.core.domain.ChangeRoutingUseCase
 import com.verdenroz.vpnchain.core.domain.ConnectChainUseCase
 import com.verdenroz.vpnchain.core.domain.DisconnectChainUseCase
@@ -32,8 +33,9 @@ val domainModule = module {
     factory<RelayDevices> { ManageDevicesUseCase(get(), get(), get()) }
     factory { SwitchProfileUseCase(get(), get()) }
     factory { ChangeRoutingUseCase(get(), get()) }
+    factory { ChangeHopsUseCase(get(), get()) }
     // Singleton so origin-probe throttling holds across collectors.
-    single { ObserveChainRouteUseCase(get(), get(), get(), get(), get(), get()) }
+    single { ObserveChainRouteUseCase(get(), get(), get(), get(), get(), get(), get()) }
     single {
         ChainSupervisor(
             chain = get(),

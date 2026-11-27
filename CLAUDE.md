@@ -70,9 +70,9 @@ invisible in testing.
       probes) may assume one. Endpoints are told apart by tag, not by "a wireguard
       endpoint exists".
 
-**WARP tail** (`SingBoxConfigFactory.addWarpEndpoint`, `RelayConfig.exemptIps`, `SiteLearner`, `UserSettings.warpMode`)
-- [ ] The `warp-exit` endpoint always carries `detour` to the relay outbound.
-- [ ] It is never in the kill switch's exemption list.
+**WARP tail** (`SingBoxEndpoints.addWarpEndpoint`, `addDeviceExitEndpoint`, `RelayConfig.exemptIps`, `SiteLearner`, `UserSettings.warpMode`)
+- [ ] The `warp-exit` and `device-exit` endpoints always carry `detour` to the relay outbound.
+- [ ] They are never in the kill switch's exemption list.
 - [ ] Probe inbounds listen on loopback only, with per-config random port and credentials.
 - [ ] The bare link is never probed, and a site goes there only on the user's
       "Send direct" tap, matched by exact host. The order is relay, WARP, entry hop

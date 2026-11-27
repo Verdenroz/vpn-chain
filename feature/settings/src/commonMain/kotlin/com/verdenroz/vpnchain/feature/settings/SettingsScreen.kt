@@ -1,69 +1,58 @@
 package com.verdenroz.vpnchain.feature.settings
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.verdenroz.vpnchain.core.common.Platform
 import com.verdenroz.vpnchain.core.common.currentPlatform
 import com.verdenroz.vpnchain.core.common.systemTrayAvailable
-import com.verdenroz.vpnchain.core.config.SecretsEnvParser
-import com.verdenroz.vpnchain.core.config.WireGuardConfParser
-import com.verdenroz.vpnchain.core.designsystem.component.StatusDot
 import com.verdenroz.vpnchain.core.designsystem.component.ActionButton
 import com.verdenroz.vpnchain.core.designsystem.component.ActionTone
-import com.verdenroz.vpnchain.core.designsystem.component.ValueField
-import com.verdenroz.vpnchain.core.designsystem.component.VpnSwitch
 import com.verdenroz.vpnchain.core.designsystem.theme.VpnChainTheme
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ConnectionKind
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.WarpMode
-import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.ui.ScreenTitle
 import com.verdenroz.vpnchain.core.ui.SectionCard
 import com.verdenroz.vpnchain.core.ui.asString
 import com.verdenroz.vpnchain.feature.settings.component.AboutSection
+import com.verdenroz.vpnchain.feature.settings.component.AlwaysOnGuidance
+import com.verdenroz.vpnchain.feature.settings.component.ImportReview
+import com.verdenroz.vpnchain.feature.settings.component.ImportSection
+import com.verdenroz.vpnchain.feature.settings.component.QrPairingPanel
+import com.verdenroz.vpnchain.feature.settings.component.Reveal
+import com.verdenroz.vpnchain.feature.settings.component.SettingRow
+import com.verdenroz.vpnchain.feature.settings.component.WarpSection
 import com.verdenroz.vpnchain.feature.settings.component.DnsFilterPicker
 import com.verdenroz.vpnchain.feature.settings.component.PairingStatusPanel
-import com.verdenroz.vpnchain.feature.settings.component.QrImage
 import com.verdenroz.vpnchain.feature.settings.component.ProfileForm
 import com.verdenroz.vpnchain.feature.settings.component.ProfilePicker
 import com.verdenroz.vpnchain.feature.settings.component.ThemePicker
-import com.verdenroz.vpnchain.feature.settings.component.WarpModePicker
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_allow_local_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_allow_local_title
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_always_on_active
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_always_on_not_armed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_appearance_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_connect_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_auto_reconnect_detail
@@ -84,45 +73,24 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_dns_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_edit_fields
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_enter_manually
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_detail
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.hops_entry_title
+import com.verdenroz.vpnchain.feature.settings.generated.resources.hops_exit_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_fail_closed_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_fail_closed_title
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_fail_open_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_hide_fields
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_hide_import
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_hide_qr
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_from_disk
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_hint_android
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_hint_desktop
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_as_entry_hop
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profile_delete
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_wireguard_summary
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_pasted
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_cancel
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_save
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_use
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_detail
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_entry_hop
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_new
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_relay
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_review_relay_entry
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_kill_switch_title
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_learn_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_no_profile_yet
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_profiles_title
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_qr_warning
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_route_entire_system_detail
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_route_entire_system_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_routing_title
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_scan_qr
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_import_field_label
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_show_qr
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_title
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_all
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_detail
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_warp_title
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_window_title
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
@@ -184,7 +152,6 @@ fun SettingsRoute(
         pairing = pairing,
         onDismissPairing = viewModel::dismissPairing,
         onToggleSystemWide = viewModel::setSystemWideTun,
-        onToggleEntryHop = viewModel::setEntryHopEnabled,
         onToggleKillSwitch = viewModel::setKillSwitchEnabled,
         onToggleAllowLocalNetworks = viewModel::setAllowLocalNetworks,
         onSetDnsFilter = viewModel::setDnsFilter,
@@ -200,6 +167,8 @@ fun SettingsRoute(
         onDeleteProfile = viewModel::deleteProfile,
         onRenameProfile = viewModel::renameProfile,
         onOpenSystemVpnSettings = viewModel::openSystemVpnSettings,
+        entryHop = { EntryHopRoute() },
+        exitHop = { ExitHopRoute() },
         devices = { DevicesRoute() },
         modifier = modifier,
     )
@@ -210,7 +179,7 @@ fun SettingsScreen(
     uiState: SettingsUiState,
     snackbarHostState: SnackbarHostState,
     onSelectTheme: (ThemeConfig) -> Unit,
-    onSaveProfile: (ChainProfile, WireGuardEntry?) -> Unit,
+    onSaveProfile: (ChainProfile) -> Unit,
     onClearProfile: () -> Unit,
     onImportText: (String) -> Unit,
     onImportAsEntryHop: (String) -> Unit,
@@ -224,7 +193,6 @@ fun SettingsScreen(
     pairing: PairingStatus?,
     onDismissPairing: () -> Unit,
     onToggleSystemWide: (Boolean) -> Unit,
-    onToggleEntryHop: (Boolean) -> Unit,
     onToggleKillSwitch: (Boolean) -> Unit,
     onToggleAllowLocalNetworks: (Boolean) -> Unit,
     onSetDnsFilter: (DnsFilter) -> Unit,
@@ -240,6 +208,8 @@ fun SettingsScreen(
     onDeleteProfile: (String) -> Unit,
     onRenameProfile: (String, String) -> Unit,
     onOpenSystemVpnSettings: () -> Unit,
+    entryHop: @Composable () -> Unit,
+    exitHop: @Composable () -> Unit,
     devices: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -387,11 +357,13 @@ fun SettingsScreen(
                 }
                 Reveal(visible = qrExpanded && uiState.profile != null) {
                     Spacer(Modifier.height(16.dp))
-                    uiState.profile?.relay?.let { QrPairingPanel(it, uiState.profile?.wireGuard) }
+                    uiState.profile?.let(::pairingPayload)?.let { QrPairingPanel(it) }
                 }
             }
 
             if (uiState.profile?.relay != null) {
+                SectionCard(title = stringResource(Res.string.hops_entry_title)) { entryHop() }
+                SectionCard(title = stringResource(Res.string.hops_exit_title)) { exitHop() }
                 SectionCard(title = stringResource(Res.string.devices_title)) { devices() }
             }
 
@@ -446,7 +418,6 @@ fun SettingsScreen(
             // tail. A bare WireGuard peer has no routing choices.
             if (!wireGuardOnly) {
                 SectionCard(title = stringResource(Res.string.settings_routing_title)) {
-                    val profileHasEntry = uiState.profile?.kind == ConnectionKind.Chain
                     // Android has no proxy-only mode — the tunnel is always TUN —
                     // so this toggle would be a no-op there.
                     if (currentPlatform == Platform.Desktop) {
@@ -455,17 +426,6 @@ fun SettingsScreen(
                             detail = stringResource(Res.string.settings_route_entire_system_detail),
                             checked = uiState.settings.systemWideTun,
                             onCheckedChange = onToggleSystemWide,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                    }
-                    // Only for profiles that have an entry to disable; a profile
-                    // without one is single-hop with or without this.
-                    if (profileHasEntry) {
-                        SettingRow(
-                            title = stringResource(Res.string.settings_entry_hop_title),
-                            detail = stringResource(Res.string.settings_entry_hop_detail),
-                            checked = uiState.settings.entryHopEnabled,
-                            onCheckedChange = onToggleEntryHop,
                         )
                         Spacer(Modifier.height(16.dp))
                     }
@@ -548,239 +508,5 @@ fun SettingsScreen(
             AboutSection()
         }
         SnackbarHost(snackbarHostState)
-    }
-}
-
-@Composable
-private fun WarpSection(
-    mode: WarpMode,
-    learn: Boolean,
-    failOpen: Boolean,
-    onSetMode: (WarpMode) -> Unit,
-    onToggleLearn: (Boolean) -> Unit,
-    onToggleFailOpen: (Boolean) -> Unit,
-) {
-    val colors = VpnChainTheme.colors
-    Column {
-        Text(
-            stringResource(Res.string.settings_warp_title),
-            style = MaterialTheme.typography.bodyLarge,
-            color = colors.ink,
-        )
-        Spacer(Modifier.height(5.dp))
-        Text(
-            stringResource(Res.string.settings_warp_detail),
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.inkMuted,
-        )
-        Spacer(Modifier.height(12.dp))
-        WarpModePicker(selected = mode, onSelect = onSetMode)
-
-        Reveal(visible = mode == WarpMode.Automatic) {
-            Column {
-                Spacer(Modifier.height(14.dp))
-                SettingRow(
-                    title = stringResource(Res.string.settings_learn_title),
-                    detail = null,
-                    checked = learn,
-                    onCheckedChange = onToggleLearn,
-                )
-                Spacer(Modifier.height(16.dp))
-                SettingRow(
-                    title = stringResource(Res.string.settings_fail_open_title),
-                    detail = null,
-                    checked = failOpen,
-                    onCheckedChange = onToggleFailOpen,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingRow(
-    title: String,
-    detail: String?,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    val colors = VpnChainTheme.colors
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Column(Modifier.weight(1f).padding(end = 16.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.ink)
-            if (detail != null) {
-                Spacer(Modifier.height(5.dp))
-                SelectionContainer {
-                    Text(detail, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
-                }
-            }
-        }
-        VpnSwitch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun AlwaysOnGuidance(detected: Boolean, onOpenSystemVpnSettings: () -> Unit) {
-    val colors = VpnChainTheme.colors
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        StatusDot(if (detected) colors.connectedText else colors.rerouted)
-        SelectionContainer(Modifier.weight(1f)) {
-            Text(
-                if (detected) {
-                    stringResource(Res.string.settings_always_on_active)
-                } else {
-                    stringResource(Res.string.settings_always_on_not_armed)
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (detected) colors.ink else colors.inkMuted,
-                modifier = Modifier.padding(start = 4.dp, end = 12.dp),
-            )
-        }
-        // Android's own setting, not something this app can flip directly — the
-        // toggle mirrors real status, and either direction opens system VPN
-        // settings rather than changing anything here. Always visible (not just
-        // while unarmed) so there's a way back to turn it off too.
-        VpnSwitch(checked = detected, onCheckedChange = { onOpenSystemVpnSettings() })
-    }
-}
-
-@Composable
-private fun ImportReview(
-    pending: PendingImport,
-    activeName: String,
-    canSaveOnly: Boolean,
-    onUse: () -> Unit,
-    onSave: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    val colors = VpnChainTheme.colors
-    Column {
-        Text(
-            when (pending) {
-                is PendingImport.Conf -> {
-                    val endpoint = pending.entry.endpoint()
-                    if (pending.intoActive) {
-                        stringResource(Res.string.settings_import_review_entry_hop, activeName, endpoint)
-                    } else {
-                        stringResource(Res.string.settings_import_review_new, pending.entry.endpointHost, endpoint)
-                    }
-                }
-                is PendingImport.SecretsEnv -> pending.entryHop?.let {
-                    stringResource(Res.string.settings_import_review_relay_entry, pending.relay.vpsIp, it.endpoint())
-                } ?: stringResource(Res.string.settings_import_review_relay, pending.relay.vpsIp)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.ink,
-        )
-        Spacer(Modifier.height(5.dp))
-        Text(
-            stringResource(Res.string.settings_import_review_detail),
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.inkMuted,
-        )
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ActionButton(
-                text = stringResource(Res.string.settings_import_use),
-                onClick = onUse,
-                compact = true,
-                tone = ActionTone.Primary,
-            )
-            if (canSaveOnly) {
-                ActionButton(text = stringResource(Res.string.settings_import_save), onClick = onSave, compact = true)
-            }
-            ActionButton(text = stringResource(Res.string.settings_import_cancel), onClick = onCancel, compact = true)
-        }
-    }
-}
-
-private fun WireGuardEntry.endpoint() = "$endpointHost:$endpointPort"
-
-@Composable
-private fun ImportSection(
-    clearKey: Int,
-    onImportText: (String) -> Unit,
-    onImportAsEntryHop: ((String) -> Unit)?,
-    onImportDefault: () -> Unit,
-    onScanQr: () -> Unit,
-) {
-    val colors = VpnChainTheme.colors
-    var pasted by remember(clearKey) { mutableStateOf("") }
-
-    Column {
-        // Typing 12 secret fields on a phone keyboard is miserable — scanning the
-        // desktop app's QR is the path Android users actually want.
-        if (currentPlatform == Platform.Android) {
-            ActionButton(
-                compact = true,
-                text = stringResource(Res.string.settings_scan_qr),
-                onClick = onScanQr,
-                tone = ActionTone.Primary,
-            )
-            Spacer(Modifier.height(12.dp))
-        }
-        Text(
-            if (currentPlatform == Platform.Android) {
-                stringResource(Res.string.settings_import_hint_android)
-            } else {
-                stringResource(Res.string.settings_import_hint_desktop)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.inkMuted,
-        )
-        Spacer(Modifier.height(12.dp))
-        ValueField(
-            label = stringResource(Res.string.settings_import_field_label),
-            value = pasted,
-            minLines = 4,
-            sensitive = true,
-            onValueChange = { pasted = it },
-        )
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ActionButton(
-                compact = true,
-                text = stringResource(Res.string.settings_import_pasted),
-                onClick = { onImportText(pasted) },
-                enabled = pasted.isNotBlank(),
-                tone = if (currentPlatform == Platform.Desktop) ActionTone.Primary else ActionTone.Outlined,
-            )
-            if (onImportAsEntryHop != null && WireGuardConfParser.looksLikeConf(pasted)) {
-                ActionButton(
-                    text = stringResource(Res.string.settings_import_as_entry_hop),
-                    onClick = { onImportAsEntryHop(pasted) },
-                    compact = true,
-                )
-            }
-            if (currentPlatform == Platform.Desktop) {
-                ActionButton(text = stringResource(Res.string.settings_import_from_disk), onClick = onImportDefault, compact = true)
-            }
-        }
-    }
-}
-
-/** Renders the current profile as a scannable QR — desktop side of device pairing. */
-@Composable
-private fun QrPairingPanel(profile: ChainProfile, entryHop: WireGuardEntry?) {
-    val colors = VpnChainTheme.colors
-    Column {
-        Text(
-            stringResource(Res.string.settings_qr_warning),
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.reroutedText,
-        )
-        Spacer(Modifier.height(12.dp))
-        QrImage(SecretsEnvParser.format(SecretsEnvParser.Parsed(profile, entryHop)))
-    }
-}
-
-@Composable
-private fun Reveal(visible: Boolean, content: @Composable () -> Unit) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn() + expandVertically(),
-        exit = fadeOut() + shrinkVertically(),
-    ) {
-        Column { content() }
     }
 }

@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.feature.settings
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
+import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.domain.PairingStep
 import com.verdenroz.vpnchain.core.domain.PairedRelay
 import com.verdenroz.vpnchain.core.domain.RelayPairing
@@ -14,6 +15,7 @@ import com.verdenroz.vpnchain.core.model.SessionStats
 import com.verdenroz.vpnchain.core.model.ThemeConfig
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UserSettings
+import com.verdenroz.vpnchain.core.model.WarpExit
 import com.verdenroz.vpnchain.core.model.WarpMode
 import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.coroutines.CompletableDeferred
@@ -25,6 +27,17 @@ internal class FakeProfiles(private val log: MutableList<String>) : ProfileRepos
     override val profiles = MutableStateFlow(listOf(SavedProfile("a", "home", relay = RELAY)))
     override val profile = MutableStateFlow<SavedProfile?>(profiles.value.first())
     override val activeProfileId = MutableStateFlow<String?>("a")
+    override suspend fun saveRelay(relay: ChainProfile) = Unit
+    override suspend fun setEntryHop(entry: WireGuardEntry?): Result<Unit> {
+        log += "entry:${if (entry == null) "clear" else "set"}"
+        profile.value = profile.value?.copy(wireGuard = entry)
+        return Result.success(Unit)
+    }
+    override suspend fun setDeviceExit(exit: WireGuardEntry?): Result<Unit> {
+        log += "exit:${if (exit == null) "clear" else "set"}"
+        profile.value = profile.value?.copy(deviceExit = exit)
+        return Result.success(Unit)
+    }
     override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = Unit
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = "b"
     override suspend fun rename(id: String, name: String) {
@@ -41,6 +54,11 @@ internal class FakeProfiles(private val log: MutableList<String>) : ProfileRepos
         log += "import:$intoActive:$activate"
         return Result.success(WireGuardEntry("k", "10.0.0.2/32", "p", "198.51.100.7"))
     }
+}
+
+internal class FakeWarp(registered: Boolean = false) : WarpRepository {
+    override val registered = MutableStateFlow(registered)
+    override suspend fun exit(): WarpExit? = null
 }
 
 internal class FakeChain(state: TunnelState, private val log: MutableList<String>) : ChainRepository {
