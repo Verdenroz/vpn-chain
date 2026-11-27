@@ -9,7 +9,7 @@
     <string name="status_connecting">Connecting</string>
     <string name="status_unprotected">Not protected</string>
     <string name="update_available">Update %1$s</string>
-    <string name="update_downloading">Downloading %1$d%%</string>
+    <string name="update_downloading">Downloading %1$d%</string>
     <string name="update_installing">Installing</string>
     <string name="update_allow_installs">Allow installs to update</string>
     <string name="update_restart">Restart to finish</string>
