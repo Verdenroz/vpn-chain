@@ -3,8 +3,8 @@ use std::path::Path;
 use super::host::{put, run, systemctl};
 use crate::Error;
 
-/// The packaging files and the BBR sysctl, as `(destination, mode, contents)`.
-const FILES: [(&str, u32, &str); 11] = [
+/// The packaging files, the update script and the BBR sysctl, as `(destination, mode, contents)`.
+const FILES: [(&str, u32, &str); 12] = [
     (
         "/etc/sysusers.d/vpn-chain.conf",
         0o644,
@@ -49,6 +49,11 @@ const FILES: [(&str, u32, &str); 11] = [
         "/etc/systemd/system/vpn-chain-update.service",
         0o644,
         include_str!("../../../../packaging/systemd/vpn-chain-update.service"),
+    ),
+    (
+        "/usr/local/libexec/vpn-chain/relay-update",
+        0o755,
+        include_str!("../../../../packaging/relay-update.sh"),
     ),
     (
         "/etc/systemd/system/vpn-chain-update.timer",
