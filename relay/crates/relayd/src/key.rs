@@ -114,7 +114,8 @@ pub fn add_key(
 }
 
 /// [`add_key`] with the role the device holds now, so a role changed after its pairing link
-/// was issued still applies.
+/// was issued still applies. A key the device already holds is replaced, so a device whose
+/// app lost its pairing can pair again with the same key.
 pub fn add_device_key(
     state: &Path,
     secrets: &Path,
@@ -141,7 +142,9 @@ fn added_key(
         return Err(Error::missing(format!("no device named {device}")));
     };
     let key = Key::new(device, role.unwrap_or(held.role), public_key, now())?;
-    if relay.state.keys.iter().any(|held| held.id == key.id) {
+    let re_enrolling = role.is_none();
+    let taken = |held: &&Key| held.id == key.id && !(re_enrolling && held.device == device);
+    if relay.state.keys.iter().any(|held| taken(&held)) {
         return Err(Error::conflict(format!(
             "management key {} is already added",
             key.id
@@ -151,6 +154,7 @@ fn added_key(
         .state
         .keys
         .iter()
+        .filter(|held| held.id != key.id)
         .cloned()
         .chain([key.clone()])
         .collect();

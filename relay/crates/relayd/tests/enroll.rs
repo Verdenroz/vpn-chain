@@ -516,3 +516,17 @@ fn enrolling_takes_the_role_the_device_holds_not_the_one_in_the_token() {
     assert_eq!(reply.body["role"], "member");
     assert_eq!(rig.relay().state.keys.last().unwrap().role, Role::Member);
 }
+
+#[test]
+fn a_device_pairs_again_with_the_key_it_already_holds() {
+    let rig = Rig::start();
+    let laptop = rig.relay().state.devices[1].name.clone();
+    let first = rig.enroll(&rig.token_for(&laptop, Role::Member), 7);
+
+    let again = rig.enroll(&rig.token_for(&laptop, Role::Member), 7);
+
+    assert_eq!((first.status, again.status), (200, 200));
+    assert_eq!(first.body["keyId"], again.body["keyId"]);
+    let held = rig.relay().state.keys;
+    assert_eq!(held.iter().filter(|key| key.device == laptop).count(), 1);
+}
