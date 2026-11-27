@@ -54,18 +54,24 @@ add it first: setup turns off password sign-in. Port 22 stays open.
    relay's admin.
 
 4. Optional: for an entry hop, create a WireGuard config at your VPN provider for this
-   device alone, paste it in **Settings → Connection → Import**, and tap
-   **Use as entry hop**.
+   device alone. Paste it in **Settings → Entry hop**, or choose the `.conf` file
+   there. **Settings → Connection → Import** also offers **Use as entry hop**.
 
 Running the setup command again repairs the install and keeps your keys and devices.
 It also takes over a relay made by the old `server/deploy-server.sh`; add
 `--device laptop` to get a code for a device it already has. If you lose every admin
 device, `sudo relayd pair` prints a new first code.
 
-For an exit hop, open
-**Settings → Devices → Exit**, tap **Use a WireGuard exit** and paste the provider's
-`.conf`. The relay restarts, so every device drops for a few seconds. The same row
-switches back.
+For an exit hop, open **Settings → Exit hop**. It has two exits:
+
+- **This device** sends only this device's traffic out through a WireGuard config you
+  paste or choose. The relay does not restart, but this device reconnects, and the
+  config stays on this device.
+- **Every device** (admins, while connected) changes the relay's own exit. The relay
+  restarts, so every device drops for a few seconds. The same row switches back.
+
+When both are set, this device uses its own exit. With WARP set to all traffic, WARP
+carries everything and this exit only handles DNS.
 
 ## Devices
 
@@ -87,7 +93,8 @@ phone, also delete its WireGuard config at your VPN provider.
 | Setting | What it does |
 |---|---|
 | Settings → Profiles | Keeps several connections: your VPS, a plain WireGuard VPN, or both chained |
-| Settings → Routing → WireGuard entry hop | Hides your address from the VPS |
+| Settings → Entry hop | Hides your address from the VPS; the switch turns it off without removing it |
+| Settings → Exit hop | Where traffic leaves: **This device**'s own WireGuard exit, or **Every device**'s relay exit |
 | Settings → Routing → Cloudflare WARP | Sends sites that refuse your VPS through Cloudflare (automatic by default) |
 | Sites tab, **Use my connection** | Opens one site on your own address when nothing else reaches it |
 | Settings → DNS | Blocks malware and scam sites, and optionally ads and trackers |
