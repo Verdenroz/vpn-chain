@@ -58,9 +58,8 @@ add it first: setup turns off password sign-in. Port 22 stays open.
    there. **Settings → Connection → Import** also offers **Use as entry hop**.
 
 Running the setup command again repairs the install and keeps your keys and devices.
-The relay also checks for a new release once a day, between 04:00 and 05:00 server time,
-and updates relayd on its own. Devices stay connected; `systemctl list-timers
-vpn-chain-update.timer` shows the next check.
+The relay also checks for a new release every hour and updates relayd on its own. Devices
+stay connected. To update now, run `sudo systemctl start vpn-chain-update` on the VPS.
 It also takes over a relay made by the old `server/deploy-server.sh`; add
 `--device laptop` to get a code for a device it already has. If you lose every admin
 device, `sudo relayd pair` prints a new first code.
