@@ -153,6 +153,24 @@ class ProfileMigrationTest {
     }
 
     @Test
+    fun `a device exit survives a write and read`() = runTest {
+        val source = VpnChainPreferencesDataSource(newStore())
+        val withExit = SavedProfile(id = "a", name = "one", relay = profile("10.0.0.1"), deviceExit = entry())
+
+        source.setProfiles(listOf(withExit))
+
+        assertEquals(withExit, source.profiles.first().single())
+    }
+
+    @Test
+    fun `a profile saved before device exits reads as having none`() = runTest {
+        val store = newStore()
+        store.edit { it[LIST_KEY] = """[{"id":"a","name":"one","relay":${relayJson()}}]""" }
+
+        assertNull(VpnChainPreferencesDataSource(store).profiles.first().single().deviceExit)
+    }
+
+    @Test
     fun `one unreadable entry leaves the rest of the list readable`() = runTest {
         val store = newStore()
         store.edit { it[LIST_KEY] = """[{"id":"bad","name":"x"},{"id":"a","name":"one","relay":${relayJson()}}]""" }

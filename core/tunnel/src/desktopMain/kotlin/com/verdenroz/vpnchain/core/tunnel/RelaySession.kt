@@ -78,9 +78,9 @@ internal object RelayConfig {
      * sing-box's own uplink needs left open when everything else is blocked.
      * Getting this wrong strands the machine, so it returns only what it found.
      *
-     * The WARP tail is deliberately absent: it is dialled *through* the relay,
-     * so its packets are already inside the tunnel, and exempting Cloudflare's
-     * anycast address would punch a hole nothing needs.
+     * The WARP tail and the device exit are deliberately absent: both are
+     * dialled *through* the relay, so their packets are already inside the
+     * tunnel, and exempting their endpoints would punch a hole nothing needs.
      */
     fun exemptIps(configJson: String): List<String> =
         listOfNotNull(
