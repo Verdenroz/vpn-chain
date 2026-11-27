@@ -82,12 +82,10 @@
     <string name="settings_entry_hop_detail_android">Leave blank and the relay sees your IP. Android runs one VPN at a time, so the entry hop goes here.</string>
     <string name="settings_entry_hop_title_desktop">Entry hop (optional)</string>
     <string name="settings_entry_hop_detail_desktop">Leave blank to use your system VPN app instead. Filled in, that app and its kill switch aren't used.</string>
-    <string name="settings_field_wg_private_key">WireGuard private key</string>
-    <string name="settings_field_wg_address">WireGuard address</string>
-    <string name="settings_field_wg_peer_public_key">WireGuard peer public key</string>
-    <string name="settings_field_wg_endpoint_host">WireGuard endpoint host</string>
-    <string name="settings_field_wg_endpoint_port">WireGuard endpoint port</string>
-    <string name="settings_field_wg_dns">WireGuard DNS (optional)</string>
+    <string name="settings_entry_hop_conf_label">WireGuard .conf</string>
+    <string name="settings_entry_hop_replace_label">New WireGuard .conf (replaces the current one)</string>
+    <string name="settings_entry_hop_current">%1$s, endpoint %2$s</string>
+    <string name="settings_entry_hop_remove">Remove</string>
     <string name="settings_save">Save</string>
     <string name="settings_clear">Clear</string>
     <string name="settings_theme_system">System</string>

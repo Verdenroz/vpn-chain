@@ -13,10 +13,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.verdenroz.vpnchain.core.common.Platform
 import com.verdenroz.vpnchain.core.common.currentPlatform
+import com.verdenroz.vpnchain.core.config.WireGuardConfParser
 import com.verdenroz.vpnchain.core.designsystem.component.ActionButton
 import com.verdenroz.vpnchain.core.designsystem.component.ActionTone
 import com.verdenroz.vpnchain.core.designsystem.component.ValueField
@@ -27,8 +29,12 @@ import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import com.verdenroz.vpnchain.core.ui.SectionLabel
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_clear
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_conf_label
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_current
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_detail_android
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_detail_desktop
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_remove
+import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_replace_label
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_title_android
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_entry_hop_title_desktop
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_local_proxy_port
@@ -38,12 +44,6 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_fiel
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_sni
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_vless_uuid
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_vps_ip
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_address
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_dns
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_endpoint_host
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_endpoint_port
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_peer_public_key
-import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_field_wg_private_key
 import com.verdenroz.vpnchain.feature.settings.generated.resources.settings_save
 import org.jetbrains.compose.resources.stringResource
 
@@ -67,18 +67,9 @@ fun ProfileForm(
     var proxyPort by remember(initial) {
         mutableStateOf((initial?.relay?.localProxyPort ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT).toString())
     }
-    // Optional TUN-mode WireGuard entry hop, used on Android and on
-    // desktop when system-wide TUN is on. Empty = relay-only.
-    var wgPrivKey by remember(initial) { mutableStateOf(initial?.wireGuard?.privateKey ?: "") }
-    var wgAddress by remember(initial) { mutableStateOf(initial?.wireGuard?.address ?: "") }
-    var wgPeerKey by remember(initial) { mutableStateOf(initial?.wireGuard?.peerPublicKey ?: "") }
-    var wgHost by remember(initial) { mutableStateOf(initial?.wireGuard?.endpointHost ?: "") }
-    var wgPort by remember(initial) {
-        mutableStateOf(
-            (initial?.wireGuard?.endpointPort ?: WireGuardEntry.DEFAULT_ENDPOINT_PORT).toString(),
-        )
-    }
-    var wgDns by remember(initial) { mutableStateOf(initial?.wireGuard?.dns ?: "") }
+    var entry by remember(initial) { mutableStateOf(initial?.wireGuard) }
+    var conf by remember(initial) { mutableStateOf("") }
+    var confError by remember(initial) { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -118,20 +109,27 @@ fun ProfileForm(
             color = colors.inkMuted,
         )
 
-        ValueField(stringResource(Res.string.settings_field_wg_private_key), wgPrivKey, masked = true) {
-            wgPrivKey = it
+        entry?.let { current ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(Res.string.settings_entry_hop_current, current.provider ?: "WireGuard", current.endpointHost),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.ink,
+                    modifier = Modifier.weight(1f),
+                )
+                ActionButton(compact = true, text = stringResource(Res.string.settings_entry_hop_remove), onClick = { entry = null })
+            }
         }
-        ValueField(stringResource(Res.string.settings_field_wg_address), wgAddress) { wgAddress = it }
-        ValueField(stringResource(Res.string.settings_field_wg_peer_public_key), wgPeerKey, masked = true) {
-            wgPeerKey = it
-        }
-        ValueField(stringResource(Res.string.settings_field_wg_endpoint_host), wgHost) { wgHost = it }
         ValueField(
-            stringResource(Res.string.settings_field_wg_endpoint_port),
-            wgPort,
-            numeric = true,
-        ) { wgPort = it }
-        ValueField(stringResource(Res.string.settings_field_wg_dns), wgDns) { wgDns = it }
+            label = stringResource(if (entry == null) Res.string.settings_entry_hop_conf_label else Res.string.settings_entry_hop_replace_label),
+            value = conf,
+            sensitive = true,
+            minLines = 5,
+            onValueChange = { conf = it; confError = null },
+        )
+        confError?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = colors.unprotectedText)
+        }
 
         val valid = vpsIp.isNotBlank() && uuid.isNotBlank() &&
             pubKey.isNotBlank() && shortId.isNotBlank()
@@ -144,43 +142,35 @@ fun ProfileForm(
                 enabled = valid,
                 tone = ActionTone.Primary,
                 onClick = {
-                    val entry = if (
-                        wgPrivKey.isNotBlank() && wgAddress.isNotBlank() &&
-                        wgPeerKey.isNotBlank() && wgHost.isNotBlank()
-                    ) {
-                        WireGuardEntry(
-                            privateKey = wgPrivKey.trim(),
-                            address = wgAddress.trim(),
-                            peerPublicKey = wgPeerKey.trim(),
-                            endpointHost = wgHost.trim(),
-                            endpointPort = wgPort.toIntOrNull()
-                                ?: WireGuardEntry.DEFAULT_ENDPOINT_PORT,
-                            dns = wgDns.trim().ifBlank { null },
-                            presharedKey = initial?.wireGuard
-                                ?.takeIf { it.peerPublicKey == wgPeerKey.trim() }
-                                ?.presharedKey,
-                            mtu = initial?.wireGuard?.mtu,
-                            keepaliveSeconds = initial?.wireGuard?.keepaliveSeconds,
-                        )
+                    val pasted = conf.trim()
+                    val saved = if (pasted.isEmpty()) {
+                        entry
                     } else {
-                        null
+                        WireGuardConfParser.parse(pasted).getOrElse {
+                            confError = it.message
+                            return@ActionButton
+                        }
                     }
-                    onSave(
-                        ChainProfile(
-                            vpsIp = vpsIp.trim(),
-                            vlessUuid = uuid.trim(),
-                            realityPublicKey = pubKey.trim(),
-                            shortId = shortId.trim(),
-                            sni = sni.trim().ifBlank { ChainProfile.DEFAULT_SNI },
-                            serverPort = port.toIntOrNull() ?: ChainProfile.DEFAULT_SERVER_PORT,
-                            localProxyPort = proxyPort.toIntOrNull()
-                                ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT,
-                        ),
-                        entry,
+                    val edited = ChainProfile(
+                        vpsIp = vpsIp.trim(),
+                        vlessUuid = uuid.trim(),
+                        realityPublicKey = pubKey.trim(),
+                        shortId = shortId.trim(),
+                        sni = sni.trim().ifBlank { ChainProfile.DEFAULT_SNI },
+                        serverPort = port.toIntOrNull() ?: ChainProfile.DEFAULT_SERVER_PORT,
+                        localProxyPort = proxyPort.toIntOrNull() ?: ChainProfile.DEFAULT_LOCAL_PROXY_PORT,
                     )
+                    onSave(edited.keepingPairing(initial?.relay), saved)
                 },
             )
             ActionButton(text = stringResource(Res.string.settings_clear), onClick = onClear, compact = true)
         }
     }
 }
+
+/** The form does not show how this device was paired, so a save keeps it. */
+internal fun ChainProfile.keepingPairing(before: ChainProfile?) = copy(
+    managementKeyId = before?.managementKeyId,
+    managementAdmin = before?.managementAdmin ?: false,
+    managementDevice = before?.managementDevice,
+)
