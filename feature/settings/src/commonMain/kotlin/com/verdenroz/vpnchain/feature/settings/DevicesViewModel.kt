@@ -12,6 +12,8 @@ import com.verdenroz.vpnchain.core.relay.isDeviceName
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_action_failed
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_cut_off_done
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_made_admin
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_made_member
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_name_invalid
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_name_taken
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_renamed
@@ -49,6 +51,7 @@ sealed interface DevicesStep {
     data class Renaming(val name: String, val error: UiText? = null) : DevicesStep
     data class ConfirmCutOff(val name: String) : DevicesStep
     data class ConfirmNewCode(val name: String) : DevicesStep
+    data class ConfirmRole(val name: String, val role: DeviceRole) : DevicesStep
 
     /** Adding [then] first refills the spare pool, which restarts the relay. */
     data class ConfirmRestart(val then: String) : DevicesStep
@@ -57,7 +60,7 @@ sealed interface DevicesStep {
 }
 
 data class DevicePending(val name: String, val action: Action) {
-    enum class Action { CuttingOff, Renaming, NewCode }
+    enum class Action { CuttingOff, Renaming, NewCode, ChangingRole }
 }
 
 data class DevicesUiState(
@@ -93,6 +96,8 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
     fun askCutOff(name: String) = open(DevicesStep.ConfirmCutOff(name))
 
     fun askNewCode(name: String) = open(DevicesStep.ConfirmNewCode(name))
+
+    fun askRole(name: String, role: DeviceRole) = open(DevicesStep.ConfirmRole(name, role))
 
     fun dismiss() {
         entryHop = null
@@ -164,6 +169,17 @@ class DevicesViewModel(private val devices: RelayDevices) : ViewModel() {
         act(DevicePending(name, DevicePending.Action.CuttingOff)) {
             devices.cutOff(name).fold(
                 onSuccess = { showNotice(UiText.Resource(Res.string.devices_cut_off_done, listOf(name))) },
+                onFailure = ::fail,
+            )
+        }
+    }
+
+    fun setRole() {
+        val step = _state.value.step as? DevicesStep.ConfirmRole ?: return
+        val done = if (step.role == DeviceRole.Admin) Res.string.devices_made_admin else Res.string.devices_made_member
+        act(DevicePending(step.name, DevicePending.Action.ChangingRole)) {
+            devices.setRole(step.name, step.role).fold(
+                onSuccess = { showNotice(UiText.Resource(done, listOf(step.name))) },
                 onFailure = ::fail,
             )
         }

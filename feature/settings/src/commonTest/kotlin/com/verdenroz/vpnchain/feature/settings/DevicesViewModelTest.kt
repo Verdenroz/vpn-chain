@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.verdenroz.vpnchain.feature.settings.generated.resources.Res
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_cut_off_done
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_made_admin
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_renamed
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -282,6 +283,36 @@ class DevicesViewModelTest {
     }
 
     @Test
+    fun `a role change waits for the confirm, marks the row and says what changed`() {
+        val gate = CompletableDeferred<Unit>().also { relay.gate = it }
+        val model = viewModel()
+
+        model.askRole("phone", DeviceRole.Admin)
+        assertEquals(DevicesStep.ConfirmRole("phone", DeviceRole.Admin), model.state.value.step)
+        assertFalse("role:phone:admin" in log)
+        model.setRole()
+
+        assertEquals(DevicePending("phone", DevicePending.Action.ChangingRole), model.state.value.pending)
+        gate.complete(Unit)
+
+        assertNull(model.state.value.pending)
+        assertEquals(listOf("load", "role:phone:admin", "load"), log)
+        assertEquals(UiText.Resource(Res.string.devices_made_admin, listOf("phone")), model.state.value.notice)
+    }
+
+    @Test
+    fun `a refused role change shows the relay's reason`() {
+        relay.roleResult = Result.failure(DevicesFailed(DevicesFailed.Reason.Refused, "laptop is the last admin"))
+        val model = viewModel()
+
+        model.askRole("laptop", DeviceRole.Member)
+        model.setRole()
+
+        assertNull(model.state.value.step)
+        assertEquals(UiText.Dynamic("laptop is the last admin"), model.state.value.error)
+    }
+
+    @Test
     fun `a new code waits for the confirm and then shows`() {
         val model = viewModel()
 
@@ -459,6 +490,7 @@ internal class FakeDevices(private val log: MutableList<String>) : RelayDevices 
     var refillResult = Result.success(Unit)
     var cutOffResult = Result.success(Unit)
     var renameResult = Result.success(Unit)
+    var roleResult = Result.success(Unit)
     var newCodeResult = Result.success(CODE)
     var gate: CompletableDeferred<Unit>? = null
     var exitBoard = Result.success(ExitBoard(admin = true, exit = AgentExit.Direct))
@@ -484,6 +516,12 @@ internal class FakeDevices(private val log: MutableList<String>) : RelayDevices 
         log += "rename:$name:$to"
         gate?.await()
         return renameResult
+    }
+
+    override suspend fun setRole(name: String, role: DeviceRole): Result<Unit> {
+        log += "role:$name:${role.name.lowercase()}"
+        gate?.await()
+        return roleResult
     }
 
     override suspend fun cutOff(name: String): Result<Unit> {

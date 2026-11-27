@@ -232,6 +232,12 @@ fn the_store_keeps_a_hash_and_is_private() {
 #[test]
 fn enrolling_registers_the_key_burns_the_token_and_rekeys_the_device() {
     let rig = Rig::start();
+    let name = rig.relay().state.devices[1].name.clone();
+    rig.relay()
+        .with_admin(&name)
+        .unwrap()
+        .save_state(&rig.state())
+        .unwrap();
     let before = rig.relay().state.devices[1].clone();
     let token = rig.token_for(&before.name, Role::Admin);
 
@@ -495,4 +501,32 @@ fn the_audit_log_and_refusals_never_hold_the_entry_hop() {
             "{text}"
         );
     }
+}
+
+#[test]
+fn enrolling_takes_the_role_the_device_holds_not_the_one_in_the_token() {
+    let rig = Rig::start();
+    let member = rig.relay().state.devices[1].clone();
+    assert_eq!(member.role, Role::Member);
+    let token = rig.token_for(&member.name, Role::Admin);
+
+    let reply = rig.enroll(&token, 7);
+
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    assert_eq!(reply.body["role"], "member");
+    assert_eq!(rig.relay().state.keys.last().unwrap().role, Role::Member);
+}
+
+#[test]
+fn a_device_pairs_again_with_the_key_it_already_holds() {
+    let rig = Rig::start();
+    let laptop = rig.relay().state.devices[1].name.clone();
+    let first = rig.enroll(&rig.token_for(&laptop, Role::Member), 7);
+
+    let again = rig.enroll(&rig.token_for(&laptop, Role::Member), 7);
+
+    assert_eq!((first.status, again.status), (200, 200));
+    assert_eq!(first.body["keyId"], again.body["keyId"]);
+    let held = rig.relay().state.keys;
+    assert_eq!(held.iter().filter(|key| key.device == laptop).count(), 1);
 }

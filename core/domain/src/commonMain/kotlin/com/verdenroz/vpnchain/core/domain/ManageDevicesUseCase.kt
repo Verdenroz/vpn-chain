@@ -3,11 +3,13 @@ package com.verdenroz.vpnchain.core.domain
 import com.verdenroz.vpnchain.core.config.WireGuardConfParser
 import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
+import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.relay.AgentDevice
 import com.verdenroz.vpnchain.core.relay.AgentException
 import com.verdenroz.vpnchain.core.relay.AgentExit
 import com.verdenroz.vpnchain.core.relay.AgentUnreachable
+import com.verdenroz.vpnchain.core.relay.DeviceRole
 import com.verdenroz.vpnchain.core.relay.ExitChange
 import com.verdenroz.vpnchain.core.relay.JobState
 import com.verdenroz.vpnchain.core.relay.PairingCode
@@ -52,6 +54,9 @@ interface RelayDevices {
 
     suspend fun rename(name: String, to: String): Result<Unit>
 
+    /** Makes [name] an admin or a member. A refusal to demote the last admin is [DevicesFailed.Reason.Refused]. */
+    suspend fun setRole(name: String, role: DeviceRole): Result<Unit>
+
     /** Removes [name] and waits out the xray restart, which drops every device briefly. */
     suspend fun cutOff(name: String): Result<Unit>
 
@@ -83,7 +88,7 @@ class ManageDevicesUseCase(
     override suspend fun load() = call {
         val relay = keyed()
         val devices = agent.devices()
-        DeviceBoard(devices, relay.managementDevice, relay.managementAdmin, poolEmpty = agent.status().pool == 0)
+        DeviceBoard(devices, relay.managementDevice, admin(relay, devices), poolEmpty = agent.status().pool == 0)
     }
 
     override suspend fun checkEntryHop(conf: String) = call {
@@ -105,6 +110,11 @@ class ManageDevicesUseCase(
         takenIs409 { agent.rename(name, to) }
     }
 
+    override suspend fun setRole(name: String, role: DeviceRole) = call {
+        keyed()
+        agent.setRole(name, role)
+    }
+
     override suspend fun cutOff(name: String) = call {
         keyed()
         agent.revoke(name).job?.let { finish(it) }
@@ -124,7 +134,8 @@ class ManageDevicesUseCase(
 
     override suspend fun loadExit() = call {
         val relay = keyed()
-        ExitBoard(relay.managementAdmin, if (relay.managementAdmin) agent.exit() else null)
+        val admin = admin(relay, agent.devices())
+        ExitBoard(admin, if (admin) agent.exit() else null)
     }
 
     override suspend fun setExit(change: ExitChange) = call {
@@ -135,6 +146,19 @@ class ManageDevicesUseCase(
 
     private suspend fun keyed() =
         profiles.profile.first()?.relay?.takeIf { it.managementKeyId != null } ?: throw DevicesFailed(DevicesFailed.Reason.NoKey)
+
+    /**
+     * This device's role as the relay lists it, which another admin may have changed since it
+     * paired. The saved profile is brought in line so the next start shows the right controls.
+     */
+    private suspend fun admin(relay: ChainProfile, devices: List<AgentDevice>): Boolean {
+        val listed = devices.firstOrNull { it.name == relay.managementDevice }?.role ?: return relay.managementAdmin
+        val admin = listed == DeviceRole.Admin
+        if (admin != relay.managementAdmin) {
+            profiles.save(relay.copy(managementAdmin = admin), profiles.profile.first()?.wireGuard)
+        }
+        return admin
+    }
 
     private suspend fun takenIs409(request: suspend () -> Unit) {
         try {

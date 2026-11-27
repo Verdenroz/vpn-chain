@@ -136,6 +136,8 @@
     <string name="devices_rename">Rename</string>
     <string name="devices_cut_off">Cut off</string>
     <string name="devices_new_code">New code</string>
+    <string name="devices_make_admin">Make admin</string>
+    <string name="devices_make_member">Make member</string>
     <string name="devices_cancel">Cancel</string>
     <string name="devices_done">Done</string>
     <string name="devices_name_label">Device name</string>
@@ -150,13 +152,18 @@
     <string name="devices_action_failed">That did not go through. Nothing was changed.</string>
     <string name="devices_confirm_cut_off">Cut off %1$s? Its app stops connecting right away. The relay restarts, so everyone connected, including you, drops for a few seconds. To use that device again, add it as a new device.</string>
     <string name="devices_confirm_new_code">Make a new code for %1$s? Its app is signed out until it scans the new code.</string>
+    <string name="devices_confirm_make_admin">Make %1$s an admin? It can add, cut off and change every device, including this one, and switch the exit.</string>
+    <string name="devices_confirm_make_member">Make %1$s a member? It keeps connecting but can no longer manage the relay.</string>
     <string name="devices_confirm_restart">Adding %1$s needs the relay to restart. Everyone connected, including you, drops for a few seconds.</string>
     <string name="devices_restart_and_add">Restart and add</string>
     <string name="devices_working">Working on it</string>
     <string name="devices_pending_cut_off">Cutting off… The relay is restarting, so everyone drops for a few seconds.</string>
     <string name="devices_pending_rename">Renaming…</string>
     <string name="devices_pending_new_code">Making a new code…</string>
+    <string name="devices_pending_role">Changing role…</string>
     <string name="devices_cut_off_done">%1$s is cut off. Its app can’t connect anymore.</string>
+    <string name="devices_made_admin">%1$s is now an admin.</string>
+    <string name="devices_made_member">%1$s is now a member.</string>
     <string name="devices_renamed">%1$s is now %2$s.</string>
     <string name="devices_dismiss_notice">Dismiss</string>
     <string name="devices_code_intro">Scan this with the vpn-chain app on %1$s, or send it the link. It works once.</string>

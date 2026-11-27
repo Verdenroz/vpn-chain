@@ -16,7 +16,7 @@ use super::reply::ApiError;
 use super::{LOCK_WAIT, Service};
 use crate::clock::seconds;
 use crate::enroll::{Enrollments, Verdict};
-use crate::{Error, Key, add_key};
+use crate::{Error, Key, add_device_key};
 
 const FAILURES_PER_MINUTE: usize = 5;
 const MINUTE: u64 = 60;
@@ -98,12 +98,8 @@ fn claim(service: &Service, body: &[u8]) -> Result<serde_json::Value, ApiError> 
         .enroll
         .tokens
         .claim(&service.lock, LOCK_WAIT, &request.token, now)?;
-    let (device, role, entry) = match verdict {
-        Verdict::Claimed {
-            device,
-            role,
-            entry,
-        } => (device, role, entry),
+    let (device, entry) = match verdict {
+        Verdict::Claimed { device, entry, .. } => (device, entry),
         Verdict::Unknown => return Err(refuse(ApiError::unauthorized(), "unknown token")),
         Verdict::Expired => {
             return Err(refuse(
@@ -112,13 +108,12 @@ fn claim(service: &Service, body: &[u8]) -> Result<serde_json::Value, ApiError> 
             ));
         }
     };
-    let key = add_key(
+    let key = add_device_key(
         &service.state,
         &service.secrets,
         &service.lock,
         LOCK_WAIT,
         &device,
-        role,
         &public_key,
     )
     .inspect_err(|_| service.audit.record("-", "enroll", Some(&device), "failed"))?;
@@ -130,7 +125,7 @@ fn claim(service: &Service, body: &[u8]) -> Result<serde_json::Value, ApiError> 
                 .record(&key.id, "enroll", Some(&device), "failed")
         })?;
     service.audit.record(&key.id, "enroll", Some(&device), "ok");
-    let mut reply = json!({ "identity": identity, "keyId": key.id, "role": role });
+    let mut reply = json!({ "identity": identity, "keyId": key.id, "role": key.role });
     if let Some(entry) = entry {
         reply["entryHop"] = entry.expose().into();
     }

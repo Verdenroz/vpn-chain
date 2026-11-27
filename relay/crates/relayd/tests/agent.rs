@@ -756,3 +756,73 @@ fn the_audit_log_names_an_exit_change_and_holds_no_key() {
     assert!(log.contains(r#""action":"exit.set","target":"wireguard","result":"ok""#));
     assert!(log.contains(r#""action":"exit.set","target":"wireguard","result":"forbidden""#));
 }
+
+#[test]
+fn an_admin_promotes_a_member_whose_key_then_manages_the_relay() {
+    let rig = Rig::start(false, SPARES);
+
+    let before = rig.member("POST", "/v1/devices", r#"{"name":"tablet"}"#);
+    let reply = rig.admin("PATCH", "/v1/devices/shared", r#"{"role":"admin"}"#);
+    let after = rig.member("POST", "/v1/devices", r#"{"name":"tablet"}"#);
+
+    assert_eq!(before.status, 403);
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.body, json!({ "name": "shared", "role": "admin" }));
+    assert_eq!(after.status, 201);
+    assert!(rig.audit_text().contains("devices.role"));
+}
+
+#[test]
+fn an_admin_may_demote_itself_only_while_another_admin_remains() {
+    let rig = Rig::start(false, SPARES);
+
+    let alone = rig.admin("PATCH", "/v1/devices/laptop", r#"{"role":"member"}"#);
+    rig.admin("PATCH", "/v1/devices/shared", r#"{"role":"admin"}"#);
+    let demoted = rig.admin("PATCH", "/v1/devices/laptop", r#"{"role":"member"}"#);
+    let now_member = rig.admin("GET", "/v1/audit", "");
+
+    assert_eq!(alone.status, 409);
+    assert_eq!(demoted.status, 200);
+    assert_eq!(now_member.status, 403);
+}
+
+#[test]
+fn a_member_cannot_change_roles() {
+    let rig = Rig::start(false, SPARES);
+
+    let reply = rig.member("PATCH", "/v1/devices/shared", r#"{"role":"admin"}"#);
+
+    assert_eq!(reply.status, 403);
+    assert_eq!(rig.relay().state.keys[1].role, Role::Member);
+}
+
+#[test]
+fn a_change_takes_a_name_or_a_role_but_not_both_or_neither() {
+    let rig = Rig::start(false, SPARES);
+
+    let both = rig.admin(
+        "PATCH",
+        "/v1/devices/shared",
+        r#"{"name":"tab","role":"admin"}"#,
+    );
+    let neither = rig.admin("PATCH", "/v1/devices/shared", "{}");
+    let unknown = rig.admin("PATCH", "/v1/devices/shared", r#"{"role":"owner"}"#);
+
+    assert_eq!(
+        (both.status, neither.status, unknown.status),
+        (400, 400, 400)
+    );
+    assert_eq!(rig.relay().state.devices[0].name, "shared");
+}
+
+#[test]
+fn a_pairing_link_issued_before_a_role_change_enrolls_with_the_new_role() {
+    let rig = Rig::start(false, SPARES);
+
+    let paired = rig.admin("POST", "/v1/devices/shared/pair", "");
+    rig.admin("PATCH", "/v1/devices/shared", r#"{"role":"admin"}"#);
+    let enrolled = rig.enroll(token_of(&paired.body["link"]), 9);
+
+    assert_eq!(enrolled.status, 200);
+    assert_eq!(enrolled.body["role"], "admin");
+}

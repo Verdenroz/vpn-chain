@@ -25,6 +25,7 @@ const USAGE: &str = "usage: relayd install [--name <device> | --device <device>]
        relayd device add <name> --out <identity.json> [--role member|admin] [--allow-restart] <target>
        relayd device rename <old> <new> <target>
        relayd device rekey <name> --out <identity.json> <target>
+       relayd device role <name> admin|member [--force] <target>
        relayd device revoke <name> [--force] <target>
        relayd maintenance refill-pool <target>
        relayd keys add <device> --public-key <file> [--role member|admin] --state <state.json> [--secrets <secrets.json>] [--lock <file>]

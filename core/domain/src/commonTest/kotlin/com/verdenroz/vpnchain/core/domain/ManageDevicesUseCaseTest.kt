@@ -85,6 +85,38 @@ class ManageDevicesUseCaseTest {
     }
 
     @Test
+    fun `a device demoted by another admin loses its admin controls and the profile follows`() = runTest {
+        agent.devices = listOf(LAPTOP.copy(role = DeviceRole.Member))
+
+        val board = useCase().load().getOrThrow()
+
+        assertEquals(false, board.admin)
+        assertEquals(false, profiles.profile.value?.relay?.managementAdmin)
+    }
+
+    @Test
+    fun `a member promoted by an admin is told the exit`() = runTest {
+        profiles.set(admin = false, device = "phone")
+        agent.devices = listOf(PHONE.copy(role = DeviceRole.Admin))
+
+        val exit = useCase().loadExit().getOrThrow()
+
+        assertEquals(ExitBoard(admin = true, exit = AgentExit.Direct), exit)
+        assertEquals(true, profiles.profile.value?.relay?.managementAdmin)
+    }
+
+    @Test
+    fun `setting a role asks the relay and a refusal keeps its words`() = runTest {
+        useCase().setRole("phone", DeviceRole.Admin).getOrThrow()
+        agent.refuse = AgentException(409, "laptop is the last admin")
+        val refused = useCase().setRole("laptop", DeviceRole.Member)
+
+        assertEquals(listOf("role:phone:admin", "role:laptop:member"), log)
+        assertEquals(DevicesFailed.Reason.Refused, reason(refused))
+        assertEquals("laptop is the last admin", refused.exceptionOrNull()?.message)
+    }
+
+    @Test
     fun `a connection without a management key asks the relay nothing`() = runTest {
         profiles.set(keyed = false)
 
@@ -317,6 +349,11 @@ private class DevicesAgent(private val log: MutableList<String>) : RelayAgent {
         log += "rename:$name:$to"
     }
 
+    override suspend fun setRole(name: String, role: DeviceRole) {
+        log += "role:$name:${role.name.lowercase()}"
+        gate()
+    }
+
     override suspend fun revoke(name: String): Revoked {
         log += "revoke:$name"
         return Revoked(countersLost = false, job = revokeJob)
@@ -391,7 +428,9 @@ private class DevicesProfiles(keyed: Boolean) : ProfileRepository {
     }
 
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?) = error("unused")
-    override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) = error("unused")
+    override suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?) {
+        profile.value = profile.value?.copy(relay = relay, wireGuard = entryHop)
+    }
     override suspend fun delete(id: String) = error("unused")
     override suspend fun setActive(id: String) = error("unused")
     override suspend fun rename(id: String, name: String) = error("unused")

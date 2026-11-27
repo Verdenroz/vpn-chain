@@ -32,6 +32,7 @@ private class ScriptedAgent(private val script: ArrayDeque<Any>) : RelayAgent {
     override suspend fun devices() = error("unused")
     override suspend fun add(name: String, role: DeviceRole) = error("unused")
     override suspend fun rename(name: String, to: String) = error("unused")
+    override suspend fun setRole(name: String, role: DeviceRole) = error("unused")
     override suspend fun revoke(name: String) = error("unused")
     override suspend fun rekey(name: String) = error("unused")
     override suspend fun pair(name: String, entryHop: String?) = error("unused")

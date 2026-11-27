@@ -277,6 +277,7 @@ private class PairingAgent(private val enroll: () -> Enrolled) : RelayAgent {
     override suspend fun devices(): List<AgentDevice> = error("unused")
     override suspend fun add(name: String, role: DeviceRole) = error("unused")
     override suspend fun rename(name: String, to: String) = error("unused")
+    override suspend fun setRole(name: String, role: DeviceRole) = error("unused")
     override suspend fun revoke(name: String) = error("unused")
     override suspend fun rekey(name: String) = error("unused")
     override suspend fun pair(name: String, entryHop: String?) = error("unused")

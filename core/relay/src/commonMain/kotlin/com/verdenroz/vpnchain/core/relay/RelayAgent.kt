@@ -17,6 +17,9 @@ interface RelayAgent {
 
     suspend fun rename(name: String, to: String)
 
+    /** Makes [name] an admin or a member, along with its management keys. The relay keeps its last admin. */
+    suspend fun setRole(name: String, role: DeviceRole)
+
     suspend fun revoke(name: String): Revoked
 
     /** Tops up the spare short IDs, which restarts xray: follow [Refilled.job] with [awaitJob]. */
