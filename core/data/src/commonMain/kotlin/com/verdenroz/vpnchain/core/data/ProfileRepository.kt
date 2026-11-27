@@ -30,6 +30,18 @@ interface ProfileRepository {
      */
     suspend fun save(relay: ChainProfile, entryHop: WireGuardEntry?)
 
+    /**
+     * Replaces only the relay of the active profile, keeping its entry hop and
+     * device exit. Without an active relay profile it is added as a connection.
+     */
+    suspend fun saveRelay(relay: ChainProfile)
+
+    /** Sets or clears the active profile's entry hop; fails when it has no relay. */
+    suspend fun setEntryHop(entry: WireGuardEntry?): Result<Unit>
+
+    /** Sets or clears the active profile's device exit; fails when it has no relay. */
+    suspend fun setDeviceExit(exit: WireGuardEntry?): Result<Unit>
+
     /** @return the id of the newly added profile, which becomes active. */
     suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?): String
     suspend fun rename(id: String, name: String)
@@ -70,6 +82,32 @@ internal class DefaultProfileRepository(
         )
     }
 
+    override suspend fun saveRelay(relay: ChainProfile) {
+        val active = preferences.profile.first()
+        if (active?.relay == null) {
+            add(name = relay.vpsIp, relay = relay, wireGuard = null)
+            return
+        }
+        updateActive(active.id) { it.copy(relay = relay) }
+    }
+
+    override suspend fun setEntryHop(entry: WireGuardEntry?): Result<Unit> =
+        updateActiveRelayProfile { it.copy(wireGuard = entry) }
+
+    override suspend fun setDeviceExit(exit: WireGuardEntry?): Result<Unit> =
+        updateActiveRelayProfile { it.copy(deviceExit = exit) }
+
+    private suspend fun updateActiveRelayProfile(change: (SavedProfile) -> SavedProfile): Result<Unit> {
+        val active = preferences.profile.first()
+        if (active?.relay == null) return Result.failure(IllegalStateException("No relay connection is active"))
+        updateActive(active.id, change)
+        return Result.success(Unit)
+    }
+
+    private suspend fun updateActive(id: String, change: (SavedProfile) -> SavedProfile) {
+        preferences.setProfiles(preferences.profiles.first().map { if (it.id == id) change(it) else it })
+    }
+
     override suspend fun add(name: String, relay: ChainProfile?, wireGuard: WireGuardEntry?): String =
         insert(name, relay, wireGuard, activate = true)
 
@@ -108,13 +146,16 @@ internal class DefaultProfileRepository(
             .map { it.relay }
 
     override suspend fun importWireGuardConf(text: String, intoActive: Boolean, activate: Boolean): Result<WireGuardEntry> =
-        WireGuardConfParser.parse(text).onSuccess { entry ->
-            val relay = preferences.profile.first()?.relay
+        WireGuardConfParser.parse(text).mapCatching { entry ->
+            val active = preferences.profile.first()
+            val relay = active?.relay
             if (intoActive && activate && relay != null) {
+                require(active.deviceExit?.privateKey != entry.privateKey) { SAME_AS_EXIT }
                 save(relay, entry)
             } else {
                 insert(name = entry.endpointHost, relay = null, wireGuard = entry, activate = activate)
             }
+            entry
         }
 }
 
@@ -125,5 +166,6 @@ internal class DefaultProfileRepository(
 private fun randomProfileId(): String =
     (1..ID_LENGTH).map { HEX[Random.nextInt(HEX.length)] }.joinToString("")
 
+private const val SAME_AS_EXIT = "That is this device's exit config. The entry hop needs its own."
 private const val ID_LENGTH = 12
 private const val HEX = "0123456789abcdef"

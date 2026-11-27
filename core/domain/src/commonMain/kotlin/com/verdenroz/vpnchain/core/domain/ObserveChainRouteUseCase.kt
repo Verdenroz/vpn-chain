@@ -5,6 +5,7 @@ import com.verdenroz.vpnchain.core.data.ChainRepository
 import com.verdenroz.vpnchain.core.data.OriginRepository
 import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.data.SettingsRepository
+import com.verdenroz.vpnchain.core.data.WarpRepository
 import com.verdenroz.vpnchain.core.geoip.NetworkProbe
 import com.verdenroz.vpnchain.core.geoip.RouteGeolocator
 import com.verdenroz.vpnchain.core.model.ChainStatus
@@ -18,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.transformLatest
@@ -35,6 +37,7 @@ class ObserveChainRouteUseCase(
     private val originRepository: OriginRepository,
     private val geolocator: RouteGeolocator,
     private val probe: NetworkProbe,
+    private val warpRepository: WarpRepository,
     private val now: () -> Long = ::currentTimeMillis,
 ) {
     /** What the last probe saw, and the path it saw it over. */
@@ -188,6 +191,10 @@ class ObserveChainRouteUseCase(
         // a hop that isn't carrying must never be drawn as though it were.
         val tailCarrying = settings.warpMode != WarpMode.Off &&
             measured != null && measured != profile?.relay?.vpsIp
+        // All-traffic WARP wins the final route, so an exit set beside it only carries DNS.
+        val warpCarriesAll = settings.warpMode == WarpMode.AllTraffic && warpRepository.registered.first()
+        val exitCarrying = profile?.deviceExit != null && !warpCarriesAll &&
+            measured != null && measured != profile.relay?.vpsIp
         return ChainHop(
             role = HopRole.Exit,
             ip = ip,
@@ -195,8 +202,13 @@ class ObserveChainRouteUseCase(
             evidence = if (measured != null) HopEvidence.Measured else HopEvidence.Configured,
             carrying = connected,
             via = profile?.relay?.let {
-                if (tailCarrying) "vless · reality → warp" else "vless · reality · tcp ${it.serverPort}"
+                when {
+                    exitCarrying -> "vless · reality → wireguard"
+                    tailCarrying -> "vless · reality → warp"
+                    else -> "vless · reality · tcp ${it.serverPort}"
+                }
             },
+            provider = profile?.deviceExit?.provider.takeIf { exitCarrying },
         )
     }
 

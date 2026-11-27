@@ -3,9 +3,11 @@ package com.verdenroz.vpnchain.core.data
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import com.verdenroz.vpnchain.core.config.WireGuardConfParser
 import com.verdenroz.vpnchain.core.datastore.VpnChainPreferencesDataSource
 import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.ConnectionKind
+import com.verdenroz.vpnchain.core.model.WireGuardEntry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -119,6 +121,90 @@ class DefaultProfileRepositoryTest {
     }
 
     @Test
+    fun `saving a relay keeps the entry hop and the device exit`() = runTest {
+        val repository = repository()
+        repository.add("relay", RELAY, ENTRY)
+        repository.setDeviceExit(EXIT)
+
+        repository.saveRelay(RELAY.copy(sni = "www.example.com"))
+
+        val active = repository.profile.first()
+        assertEquals("www.example.com", active?.relay?.sni)
+        assertEquals(ENTRY, active?.wireGuard)
+        assertEquals(EXIT, active?.deviceExit)
+        assertEquals(1, repository.profiles.first().size)
+    }
+
+    @Test
+    fun `saving a relay cannot attach it to a wireguard only profile either`() = runTest {
+        val repository = repository()
+        repository.importWireGuardConf(CONF, intoActive = false)
+
+        repository.saveRelay(RELAY)
+
+        assertEquals(listOf(ConnectionKind.WireGuard, ConnectionKind.Relay), repository.profiles.first().map { it.kind })
+    }
+
+    @Test
+    fun `a device exit can be set and cleared on a relay connection`() = runTest {
+        val repository = repository()
+        repository.add("relay", RELAY, null)
+
+        assertTrue(repository.setDeviceExit(EXIT).isSuccess)
+        assertEquals(EXIT, repository.profile.first()?.deviceExit)
+
+        assertTrue(repository.setDeviceExit(null).isSuccess)
+        assertNull(repository.profile.first()?.deviceExit)
+    }
+
+    @Test
+    fun `an exit is refused on a wireguard only connection`() = runTest {
+        val repository = repository()
+        repository.importWireGuardConf(CONF, intoActive = false)
+
+        assertTrue(repository.setDeviceExit(EXIT).isFailure)
+        assertTrue(repository.setEntryHop(EXIT).isFailure)
+        assertNull(repository.profile.first()?.deviceExit)
+    }
+
+    @Test
+    fun `setting the entry hop keeps the device exit`() = runTest {
+        val repository = repository()
+        repository.add("relay", RELAY, null)
+        repository.setDeviceExit(EXIT)
+
+        repository.setEntryHop(ENTRY)
+
+        assertEquals(ENTRY, repository.profile.first()?.wireGuard)
+        assertEquals(EXIT, repository.profile.first()?.deviceExit)
+    }
+
+    @Test
+    fun `using a conf as the entry hop keeps the device exit`() = runTest {
+        val repository = repository()
+        repository.add("relay", RELAY, null)
+        repository.setDeviceExit(EXIT)
+
+        repository.importWireGuardConf(CONF, intoActive = true)
+
+        assertEquals("203.0.113.9", repository.profile.first()?.wireGuard?.endpointHost)
+        assertEquals(EXIT, repository.profile.first()?.deviceExit)
+    }
+
+    @Test
+    fun `a conf with the device exit's key cannot become the entry hop`() = runTest {
+        val repository = repository()
+        repository.add("relay", RELAY, null)
+        val key = WireGuardConfParser.parse(CONF).getOrThrow().privateKey
+        repository.setDeviceExit(EXIT.copy(privateKey = key))
+
+        val result = repository.importWireGuardConf(CONF, intoActive = true)
+
+        assertEquals("That is this device's exit config. The entry hop needs its own.", result.exceptionOrNull()?.message)
+        assertNull(repository.profile.first()?.wireGuard)
+    }
+
+    @Test
     fun `a bad conf changes nothing`() = runTest {
         val repository = repository()
 
@@ -150,6 +236,10 @@ private val RELAY = ChainProfile(
     realityPublicKey = "key",
     shortId = "ab",
 )
+
+private val ENTRY = WireGuardEntry("entry-priv", "10.2.0.2/32", "entry-peer", "198.51.100.20")
+
+private val EXIT = WireGuardEntry("exit-priv", "10.5.0.2/32", "exit-peer", "198.51.100.30")
 
 private val CONF = """
     [Interface]
