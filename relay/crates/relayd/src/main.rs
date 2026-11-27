@@ -18,6 +18,7 @@ use args::Args;
 use target::XRAY_GROUP;
 
 const USAGE: &str = "usage: relayd install [--name <device> | --device <device>] [--sni <host>] [--port <n>] [--host <address>] [--wireguard <wg-quick file>] [--entry <wg-quick file>]
+       relayd install --update
        relayd import --config <config.json> [--devices <devices.json>] --out <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>]
        relayd adopt --config <config.json> [--devices <devices.json>] --state <state.json> [--secrets <secrets.json>] [--lock <file>] [--admin <name>] [--xray <path>] [--group <name>] [--restart]
        relayd render --state <state.json> [--secrets <secrets.json>] --out <config.json> [--group <name>] [--swap [--xray <path>]]

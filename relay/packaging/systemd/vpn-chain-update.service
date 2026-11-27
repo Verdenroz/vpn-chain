@@ -1,0 +1,9 @@
+[Unit]
+Description=Update the vpn-chain relay to the latest release
+Documentation=https://github.com/Verdenroz/vpn-chain
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'set -o pipefail; curl -fsSL https://github.com/Verdenroz/vpn-chain/releases/latest/download/setup.sh | bash -s -- --update'

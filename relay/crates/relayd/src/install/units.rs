@@ -4,7 +4,7 @@ use super::host::{put, run, systemctl};
 use crate::Error;
 
 /// The packaging files and the BBR sysctl, as `(destination, mode, contents)`.
-const FILES: [(&str, u32, &str); 9] = [
+const FILES: [(&str, u32, &str); 11] = [
     (
         "/etc/sysusers.d/vpn-chain.conf",
         0o644,
@@ -44,6 +44,16 @@ const FILES: [(&str, u32, &str); 9] = [
         "/etc/systemd/system/vpn-chain-egress.service",
         0o644,
         include_str!("../../../../packaging/systemd/vpn-chain-egress.service"),
+    ),
+    (
+        "/etc/systemd/system/vpn-chain-update.service",
+        0o644,
+        include_str!("../../../../packaging/systemd/vpn-chain-update.service"),
+    ),
+    (
+        "/etc/systemd/system/vpn-chain-update.timer",
+        0o644,
+        include_str!("../../../../packaging/systemd/vpn-chain-update.timer"),
     ),
     (
         "/etc/sysctl.d/99-vpn-chain-bbr.conf",
