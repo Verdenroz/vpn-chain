@@ -39,6 +39,10 @@ internal class HttpRelayAgent(
         send("PATCH", "/v1/devices/${segment(name)}", buildJsonObject { put("name", to) }.toString())
     }
 
+    override suspend fun setRole(name: String, role: DeviceRole) {
+        send("PATCH", "/v1/devices/${segment(name)}", buildJsonObject { put("role", role.name.lowercase()) }.toString())
+    }
+
     override suspend fun revoke(name: String) = send("DELETE", "/v1/devices/${segment(name)}").decode<Revoked>()
 
     override suspend fun rekey(name: String) = send("POST", "/v1/devices/${segment(name)}/rekey").field<AgentIdentity>("identity")

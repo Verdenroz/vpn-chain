@@ -196,22 +196,8 @@ impl Manager<'_> {
     pub fn revoke(&self, name: &str, force: bool) -> Result<bool, Error> {
         let _held = store::lock_within(self.lock, self.lock_wait)?;
         let (relay, counters_lost) = self.begin_lenient()?;
-        let device = find(&relay, name)?;
-        let admins = relay
-            .state
-            .devices
-            .iter()
-            .filter(|device| device.role == Role::Admin)
-            .count();
-        let admin_keys = relay
-            .state
-            .keys
-            .iter()
-            .filter(|key| key.role == Role::Admin);
-        let held = admin_keys.clone().filter(|key| key.device == name).count();
-        let last_admin = device.role == Role::Admin && admins == 1;
-        let last_admin_key = held > 0 && held == admin_keys.count();
-        if (last_admin || last_admin_key) && !force {
+        find(&relay, name)?;
+        if is_last_admin(&relay, name) && !force {
             return Err(Error::conflict(format!(
                 "{name} is the last admin; revoking it leaves no one to manage the relay (--force to revoke it anyway)"
             )));
@@ -234,6 +220,41 @@ impl Manager<'_> {
         self.write_out(&relay, &with_keys(changed(&relay, devices, spares), keys))?;
         self.restart_xray()?;
         Ok(counters_lost)
+    }
+
+    /// Makes the device and its management keys `role`. xray's config holds no roles, so
+    /// nothing restarts. Demoting the last admin is refused unless `force`.
+    pub fn set_role(&self, name: &str, role: Role, force: bool) -> Result<(), Error> {
+        let _held = store::lock_within(self.lock, self.lock_wait)?;
+        let relay = Relay::load(self.state, self.secrets)?;
+        let device = find(&relay, name)?;
+        if role == Role::Member && is_last_admin(&relay, name) && !force {
+            return Err(Error::conflict(format!(
+                "{name} is the last admin; making it a member leaves no one to manage the relay (--force to do it anyway)"
+            )));
+        }
+        let changed_device = Device {
+            role,
+            ..device.clone()
+        };
+        let keys = relay
+            .state
+            .keys
+            .iter()
+            .map(|key| Key {
+                role: if key.device == name { role } else { key.role },
+                ..key.clone()
+            })
+            .collect();
+        with_keys(
+            changed(
+                &relay,
+                replacing(&relay.state.devices, name, changed_device),
+                relay.state.spare_short_ids.clone(),
+            ),
+            keys,
+        )
+        .save_state(self.state)
     }
 
     /// Fills the pool back to its size and restarts xray to load the saved config, which also
@@ -392,6 +413,19 @@ fn find<'a>(relay: &'a Relay, name: &str) -> Result<&'a Device, Error> {
         .iter()
         .find(|device| device.name == name)
         .ok_or_else(|| Error::missing(format!("no device named {name}")))
+}
+
+/// Whether `name` holds the relay's only admin role, or every admin management key.
+fn is_last_admin(relay: &Relay, name: &str) -> bool {
+    let state = &relay.state;
+    let admins = state
+        .devices
+        .iter()
+        .filter(|device| device.role == Role::Admin);
+    let admin_keys = state.keys.iter().filter(|key| key.role == Role::Admin);
+    let is_admin = admins.clone().any(|device| device.name == name);
+    let held = admin_keys.clone().filter(|key| key.device == name).count();
+    (is_admin && admins.count() == 1) || (held > 0 && held == admin_keys.count())
 }
 
 fn with_keys(relay: Relay, keys: Vec<Key>) -> Relay {

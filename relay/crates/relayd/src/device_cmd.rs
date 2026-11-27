@@ -42,6 +42,7 @@ pub fn device(args: &[&str]) -> Option<Result<(), Error>> {
         ["add", rest @ ..] => add(rest),
         ["rename", rest @ ..] => rename(rest),
         ["rekey", rest @ ..] => rekey(rest),
+        ["role", rest @ ..] => role(rest),
         ["revoke", rest @ ..] => revoke(rest),
         _ => None,
     }
@@ -104,6 +105,21 @@ fn rekey(args: &[&str]) -> Option<Result<(), Error>> {
     let target = Target::from_or_installed(&mut args)?;
     let rekeyed = target.manage(|manager| manager.rekey(&name, &out));
     Some(rekeyed.map(|()| println!("rekeyed {name}; its new identity is in {}", out.display())))
+}
+
+fn role(args: &[&str]) -> Option<Result<(), Error>> {
+    let mut args = Args::parse(args, &valued(&[]), &["force"])?;
+    let [name, role] = args.words()?;
+    let name = name.to_owned();
+    let (role, label) = match role {
+        "admin" => (Role::Admin, "an admin"),
+        "member" => (Role::Member, "a member"),
+        _ => return None,
+    };
+    let force = args.has("force");
+    let target = Target::from_or_installed(&mut args)?;
+    let set = target.manage(|manager| manager.set_role(&name, role, force));
+    Some(set.map(|()| println!("{name} is now {label}")))
 }
 
 fn revoke(args: &[&str]) -> Option<Result<(), Error>> {

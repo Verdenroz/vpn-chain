@@ -48,6 +48,8 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_code_
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_code_intro
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_code_warning
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_confirm_cut_off
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_confirm_make_admin
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_confirm_make_member
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_confirm_new_code
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_confirm_restart
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_copy_link
@@ -62,11 +64,14 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_last_
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_loading
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_name_label
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_never_seen
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_make_admin
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_make_member
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_new_code
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_no_key
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_offline
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_pending_cut_off
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_pending_new_code
+import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_pending_role
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_pending_rename
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_rename
 import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_restart_and_add
@@ -90,10 +95,12 @@ internal class DevicesActions(
     val onRestartAndAdd: () -> Unit,
     val onCutOff: () -> Unit,
     val onNewCode: () -> Unit,
+    val onSetRole: () -> Unit,
     val onStartAdd: () -> Unit,
     val onStartRename: (String) -> Unit,
     val onAskCutOff: (String) -> Unit,
     val onAskNewCode: (String) -> Unit,
+    val onAskRole: (String, DeviceRole) -> Unit,
     val onDismiss: () -> Unit,
     val onDismissNotice: () -> Unit,
 )
@@ -193,6 +200,7 @@ private fun DeviceRowView(device: DeviceRow, canManage: Boolean, pending: Device
                         DevicePending.Action.CuttingOff -> Res.string.devices_pending_cut_off
                         DevicePending.Action.Renaming -> Res.string.devices_pending_rename
                         DevicePending.Action.NewCode -> Res.string.devices_pending_new_code
+                        DevicePending.Action.ChangingRole -> Res.string.devices_pending_role
                     },
                 ),
             )
@@ -201,6 +209,11 @@ private fun DeviceRowView(device: DeviceRow, canManage: Boolean, pending: Device
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionButton(compact = true, text = stringResource(Res.string.devices_rename), onClick = { actions.onStartRename(device.name) })
                 ActionButton(compact = true, text = stringResource(Res.string.devices_new_code), onClick = { actions.onAskNewCode(device.name) })
+                if (device.role == DeviceRole.Admin) {
+                    ActionButton(compact = true, text = stringResource(Res.string.devices_make_member), onClick = { actions.onAskRole(device.name, DeviceRole.Member) })
+                } else {
+                    ActionButton(compact = true, text = stringResource(Res.string.devices_make_admin), onClick = { actions.onAskRole(device.name, DeviceRole.Admin) })
+                }
                 ActionButton(compact = true, text = stringResource(Res.string.devices_cut_off), onClick = { actions.onAskCutOff(device.name) })
             }
         }
@@ -243,6 +256,17 @@ private fun StepPanel(step: DevicesStep, busy: Boolean, actions: DevicesActions)
             tone = ActionTone.Rerouted,
             busy = busy,
             onConfirm = actions.onNewCode,
+            onCancel = actions.onDismiss,
+        )
+        is DevicesStep.ConfirmRole -> Confirm(
+            question = stringResource(
+                if (step.role == DeviceRole.Admin) Res.string.devices_confirm_make_admin else Res.string.devices_confirm_make_member,
+                step.name,
+            ),
+            action = stringResource(if (step.role == DeviceRole.Admin) Res.string.devices_make_admin else Res.string.devices_make_member),
+            tone = ActionTone.Rerouted,
+            busy = busy,
+            onConfirm = actions.onSetRole,
             onCancel = actions.onDismiss,
         )
         is DevicesStep.ConfirmRestart -> Confirm(

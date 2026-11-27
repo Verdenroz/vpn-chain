@@ -741,3 +741,71 @@ fn revoke_keeps_the_device_that_holds_the_last_admin_key_unless_forced() {
     lab.manager().revoke("shared", true).unwrap();
     assert!(lab.relay().state.keys.is_empty());
 }
+
+#[test]
+fn set_role_changes_the_device_and_its_keys_without_touching_xray() {
+    let lab = Lab::new(SPARES);
+    lab.add_key("shared", 9);
+    let mut relay = lab.relay();
+    relay.state.keys[0].role = Role::Member;
+    relay.save_state(&lab.state).unwrap();
+
+    lab.manager()
+        .set_role("shared", Role::Admin, false)
+        .unwrap();
+
+    let relay = lab.relay();
+    assert_eq!(relay.state.devices[0].role, Role::Admin);
+    assert_eq!(relay.state.keys[0].role, Role::Admin);
+    assert!(lab.live.calls().is_empty());
+    assert_eq!(lab.restart.count(), 0);
+}
+
+#[test]
+fn set_role_keeps_the_last_admin_unless_forced() {
+    let lab = Lab::new(SPARES);
+
+    let error = lab
+        .manager()
+        .set_role("laptop", Role::Member, false)
+        .unwrap_err();
+
+    assert!(error.to_string().contains("last admin"), "{error}");
+    assert_eq!(lab.relay().state.devices[1].role, Role::Admin);
+
+    lab.manager()
+        .set_role("laptop", Role::Member, true)
+        .unwrap();
+    assert_eq!(lab.relay().state.devices[1].role, Role::Member);
+}
+
+#[test]
+fn set_role_keeps_the_only_admin_key_even_when_another_device_is_admin() {
+    let lab = Lab::new(SPARES);
+    lab.add_key("laptop", 7);
+    lab.manager()
+        .set_role("shared", Role::Admin, false)
+        .unwrap();
+
+    let error = lab
+        .manager()
+        .set_role("laptop", Role::Member, false)
+        .unwrap_err();
+
+    assert!(error.to_string().contains("last admin"), "{error}");
+}
+
+#[test]
+fn set_role_of_an_unknown_device_is_missing() {
+    let lab = Lab::new(SPARES);
+
+    let error = lab
+        .manager()
+        .set_role("ghost", Role::Admin, false)
+        .unwrap_err();
+
+    assert!(
+        error.to_string().contains("no device named ghost"),
+        "{error}"
+    );
+}

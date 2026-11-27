@@ -75,10 +75,12 @@ In **Settings → Devices** on the admin device:
 - **Add device** shows a code that works once, for 15 minutes.
 - **Cut off** stops a device connecting right away.
 - **New code** signs a device out until it scans a fresh code.
+- **Make admin** and **Make member** set what a device can manage. The relay keeps at
+  least one admin.
 
-On the VPS the same is `sudo relayd pair --new phone`, `sudo relayd device list` and
-`sudo relayd device revoke phone`. For a lost phone, also delete its WireGuard config
-at your VPN provider.
+On the VPS the same is `sudo relayd pair --new phone`, `sudo relayd device list`,
+`sudo relayd device role phone admin` and `sudo relayd device revoke phone`. For a lost
+phone, also delete its WireGuard config at your VPN provider.
 
 ## Settings
 

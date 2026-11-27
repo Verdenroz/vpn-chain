@@ -102,12 +102,45 @@ pub fn add_key(
     role: Role,
     public_key: &[u8],
 ) -> Result<Key, Error> {
+    added_key(
+        state,
+        secrets,
+        lock,
+        lock_wait,
+        device,
+        Some(role),
+        public_key,
+    )
+}
+
+/// [`add_key`] with the role the device holds now, so a role changed after its pairing link
+/// was issued still applies.
+pub fn add_device_key(
+    state: &Path,
+    secrets: &Path,
+    lock: &Path,
+    lock_wait: Duration,
+    device: &str,
+    public_key: &[u8],
+) -> Result<Key, Error> {
+    added_key(state, secrets, lock, lock_wait, device, None, public_key)
+}
+
+fn added_key(
+    state: &Path,
+    secrets: &Path,
+    lock: &Path,
+    lock_wait: Duration,
+    device: &str,
+    role: Option<Role>,
+    public_key: &[u8],
+) -> Result<Key, Error> {
     let _held = store::lock_within(lock, lock_wait)?;
     let relay = Relay::load(state, secrets)?;
-    if !relay.state.devices.iter().any(|held| held.name == device) {
+    let Some(held) = relay.state.devices.iter().find(|held| held.name == device) else {
         return Err(Error::missing(format!("no device named {device}")));
-    }
-    let key = Key::new(device, role, public_key, now())?;
+    };
+    let key = Key::new(device, role.unwrap_or(held.role), public_key, now())?;
     if relay.state.keys.iter().any(|held| held.id == key.id) {
         return Err(Error::conflict(format!(
             "management key {} is already added",

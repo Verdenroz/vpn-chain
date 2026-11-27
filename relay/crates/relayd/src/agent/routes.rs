@@ -29,7 +29,7 @@ pub fn router(service: Arc<Service>) -> Router {
         .route("/v1/devices", get(list_devices).post(add_device))
         .route(
             "/v1/devices/{name}",
-            patch(rename_device).delete(revoke_device),
+            patch(change_device).delete(revoke_device),
         )
         .route("/v1/devices/{name}/rekey", post(rekey_device))
         .route("/v1/devices/{name}/pair", post(pair_device))
@@ -61,8 +61,9 @@ struct AddDevice {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Rename {
-    name: String,
+struct ChangeDevice {
+    name: Option<String>,
+    role: Option<Role>,
 }
 
 /// The `entry_hop` holds a WireGuard private key, so this has no `Debug`.
@@ -237,23 +238,40 @@ async fn add_device(
     Ok((StatusCode::CREATED, Json(json!({ "identity": identity }))).into_response())
 }
 
-async fn rename_device(
+/// Renames a device or sets its role, one per request, so a refusal never leaves half a change.
+async fn change_device(
     State(service): State<Arc<Service>>,
     Extension(who): Extension<Principal>,
     Path(name): Path<String>,
     body: Bytes,
 ) -> Outcome {
-    let call = Call::new(service, who, "devices.rename", known(name.clone()));
+    let request = parsed::<ChangeDevice>(&body);
+    let action = match &request {
+        Ok(ChangeDevice { role: Some(_), .. }) => "devices.role",
+        _ => "devices.rename",
+    };
+    let call = Call::new(service, who, action, known(name.clone()));
     let admin = call.is_admin();
-    let request = parsed::<Rename>(&body);
-    let renamed = call
-        .run(admin, move |service, _| {
-            let request = request?;
-            service.operate(|manager| manager.rename(&name, &request.name))?;
-            Ok(request.name)
+    let changed = call
+        .run(admin, move |service, _| match request? {
+            ChangeDevice {
+                name: Some(new),
+                role: None,
+            } => {
+                service.operate(|manager| manager.rename(&name, &new))?;
+                Ok(json!({ "name": new }))
+            }
+            ChangeDevice {
+                name: None,
+                role: Some(role),
+            } => {
+                service.operate(|manager| manager.set_role(&name, role, false))?;
+                Ok(json!({ "name": name, "role": role }))
+            }
+            _ => Err(Error::invalid("give either a name or a role")),
         })
         .await?;
-    Ok(Json(json!({ "name": renamed })).into_response())
+    Ok(Json(changed).into_response())
 }
 
 async fn revoke_device(
