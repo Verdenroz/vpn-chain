@@ -26,12 +26,16 @@ pub fn harden() -> Result<(), Error> {
         );
         return Ok(());
     }
-    if !reads_drop_ins()? {
-        warn("sshd_config does not read /etc/ssh/sshd_config.d, so password login stays on");
-        return Ok(());
-    }
     // sshd -t and -T need the directory the service creates, and socket activation has not.
     fs::create_dir_all(RUN_DIR).map_err(|error| Error::at(Path::new(RUN_DIR), error))?;
+    if !reads_drop_ins()? {
+        if key_only(&output(SSHD, &["-T"])?) {
+            say("SSH login is key-only; port 22 is unchanged");
+        } else {
+            warn("sshd_config does not read /etc/ssh/sshd_config.d, so password login stays on");
+        }
+        return Ok(());
+    }
     if put(Path::new(DROP_IN), SETTINGS.as_bytes(), 0o644)? {
         if !succeeds(SSHD, &["-t"]) {
             fs::remove_file(DROP_IN).map_err(|error| Error::at(Path::new(DROP_IN), error))?;
@@ -40,11 +44,7 @@ pub fn harden() -> Result<(), Error> {
         }
         reload();
     }
-    let effective = output(SSHD, &["-T"])?;
-    if effective
-        .lines()
-        .any(|line| line.eq_ignore_ascii_case("passwordauthentication no"))
-    {
+    if key_only(&output(SSHD, &["-T"])?) {
         say("SSH login is key-only; port 22 is unchanged");
     } else {
         warn("another sshd setting keeps password login on");
@@ -64,6 +64,20 @@ fn reload() {
             return;
         }
     }
+}
+
+/// Whether `sshd -T` output turns off both ways a password is typed in.
+fn key_only(effective: &str) -> bool {
+    [
+        "passwordauthentication no",
+        "kbdinteractiveauthentication no",
+    ]
+    .iter()
+    .all(|wanted| {
+        effective
+            .lines()
+            .any(|line| line.trim().eq_ignore_ascii_case(wanted))
+    })
 }
 
 fn reads_drop_ins() -> Result<bool, Error> {
@@ -98,6 +112,16 @@ fn login_home(line: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn key_only_needs_both_password_paths_off() {
+        let both = "port 22\npasswordauthentication no\nkbdinteractiveauthentication no\n";
+        let keyboard_on = "passwordauthentication no\nkbdinteractiveauthentication yes\n";
+
+        assert!(key_only(both));
+        assert!(!key_only(keyboard_on));
+        assert!(!key_only("passwordauthentication yes\n"));
+    }
 
     #[test]
     fn only_root_and_ordinary_accounts_with_a_shell_count() {

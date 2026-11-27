@@ -49,10 +49,11 @@ const POLL: Duration = Duration::from_millis(250);
 const XRAY_GROUP: &str = "xray";
 const XRAY_LOGS: &str = "/var/log/xray";
 const RELAYD: &str = "relayd";
+const UPDATE_TIMER: &str = "vpn-chain-update.timer";
 const EGRESS_UNIT: &str = "vpn-chain-egress.service";
 
 /// What the person asked for. Everything else is fixed.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 pub struct Options {
     /// The first device on a fresh relay, or a new admin device on an adopted one.
     pub name: Option<String>,
@@ -68,6 +69,8 @@ pub struct Options {
     pub wireguard: Option<PathBuf>,
     /// A `wg-quick` file for the first device's WireGuard entry hop.
     pub entry: Option<PathBuf>,
+    /// Only refresh an installed relay: no questions, no pairing code. The update timer runs this.
+    pub update: bool,
 }
 
 struct Site {
@@ -83,6 +86,11 @@ struct Created {
 }
 
 pub fn run_install(options: &Options) -> Result<(), Error> {
+    if options.update {
+        check_update_options(options)?;
+        check_host()?;
+        return run_update();
+    }
     check_host()?;
     check_options(options)?;
     let asked = ask::ask(options, needs(options)?)?;
@@ -106,7 +114,7 @@ pub fn run_install(options: &Options) -> Result<(), Error> {
         refuse_new_relay_flags(options, &site)?;
     }
     if Public::beside(&site.state).exists() {
-        return refresh(&site, changed, &asked);
+        return refresh(&site, changed, Some(&asked));
     }
     let created = if site.state.exists() {
         Created {
@@ -195,7 +203,7 @@ fn binaries() -> Result<bool, Error> {
 
 /// Brings an installed relay up to date with this relayd: its files, the egress rules and the
 /// services. xray keeps running until it restarts, which loads a changed unit.
-fn refresh(site: &Site, changed: bool, asked: &Asked) -> Result<(), Error> {
+fn refresh(site: &Site, changed: bool, asked: Option<&Asked>) -> Result<(), Error> {
     if changed {
         units::reload()?;
     }
@@ -209,19 +217,61 @@ fn refresh(site: &Site, changed: bool, asked: &Asked) -> Result<(), Error> {
         "relay-privileged.path",
         "xray.service",
         "relayd.service",
+        UPDATE_TIMER,
     ])?;
     if changed {
         systemctl(&["restart", "relayd"])?;
         say("updated relayd and its units");
     }
     ssh::harden()?;
-    if relay.state.keys.is_empty() {
-        say("already installed; no device is set up yet, so here is a new code");
-        print_first_code(site, None, asked.entry.as_ref())
-    } else {
-        say("already set up; add devices from the app (Settings → Devices)");
-        Ok(())
+    match asked {
+        Some(asked) if relay.state.keys.is_empty() => {
+            say("already installed; no device is set up yet, so here is a new code");
+            print_first_code(site, None, asked.entry.as_ref())
+        }
+        None if relay.state.keys.is_empty() => {
+            say("no device is set up yet; run the setup command by hand for a code");
+            Ok(())
+        }
+        _ => {
+            say("already set up; add devices from the app (Settings → Devices)");
+            Ok(())
+        }
     }
+}
+
+fn check_update_options(options: &Options) -> Result<(), Error> {
+    let only_update = Options {
+        update: true,
+        ..Options::default()
+    };
+    if *options == only_update {
+        Ok(())
+    } else {
+        Err(Error::invalid("--update takes no other options"))
+    }
+}
+
+/// [`run_install`] for the update timer: brings an installed relay's files and services up to
+/// date and refuses anything else, so an unattended run never creates a relay or prints a code.
+fn run_update() -> Result<(), Error> {
+    let state = PathBuf::from(layout::STATE);
+    if !Public::beside(&state).exists() {
+        return Err(Error::invalid(
+            "no relay is installed here; run the setup command by hand first",
+        ));
+    }
+    require(&[("curl", "curl"), ("unzip", "unzip"), ("nft", "nftables")])?;
+    let mut changed = units::install()?;
+    units::accounts()?;
+    changed |= binaries()?;
+    let site = Site {
+        secrets: secrets_path(&state),
+        config: PathBuf::from(layout::XRAY_CONFIG),
+        xray: pinned::ensure(Path::new(layout::XRAY_ROOT))?,
+        state,
+    };
+    refresh(&site, changed, None)
 }
 
 /// The questions this run has left, by what the machine already has. A name only matters for a
@@ -485,7 +535,7 @@ fn start(site: &Site, created: &Created) -> Result<(), Error> {
     } else {
         systemctl(&["enable", "--now", "xray.service"])?;
     }
-    systemctl(&["enable", "--now", "relayd.service"])?;
+    systemctl(&["enable", "--now", "relayd.service", UPDATE_TIMER])?;
     if created.restart {
         say(
             "restarting xray to load the new config; a session that runs through this relay will drop, so reconnect and run the setup command again for the code",
@@ -597,6 +647,21 @@ fn valid_host_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn update_takes_no_other_options() {
+        let update = Options {
+            update: true,
+            ..Options::default()
+        };
+        let named = Options {
+            name: Some("phone".to_owned()),
+            ..update.clone()
+        };
+
+        assert!(check_update_options(&update).is_ok());
+        assert!(check_update_options(&named).is_err());
+    }
 
     #[test]
     fn host_names_follow_the_dns_label_rules() {

@@ -15,7 +15,7 @@ pub fn install(args: &[&str]) -> Option<Result<(), Error>> {
             "wireguard",
             "entry",
         ],
-        &[],
+        &["update"],
     )?;
     let [] = args.words()?;
     let options = Options {
@@ -29,6 +29,7 @@ pub fn install(args: &[&str]) -> Option<Result<(), Error>> {
         host: args.value("host"),
         wireguard: args.path("wireguard"),
         entry: args.path("entry"),
+        update: args.has("update"),
     };
     Some(install::run_install(&options))
 }
