@@ -3,6 +3,7 @@ package com.verdenroz.vpnchain.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.verdenroz.vpnchain.core.config.WireGuardConfParser
+import com.verdenroz.vpnchain.core.data.ProfileRepository
 import com.verdenroz.vpnchain.core.domain.DevicesFailed
 import com.verdenroz.vpnchain.core.domain.RelayDevices
 import com.verdenroz.vpnchain.core.model.UiText
@@ -13,11 +14,15 @@ import com.verdenroz.vpnchain.feature.settings.generated.resources.devices_actio
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 sealed interface ExitBoard {
     data object Hidden : ExitBoard
+
+    /** An admin whose relay cannot be reached, so the exit can be neither read nor changed. */
+    data object Offline : ExitBoard
     data class Ready(val exit: AgentExit) : ExitBoard
 }
 
@@ -42,7 +47,10 @@ data class ExitUiState(
 /**
  * A pasted conf lives only in [ExitUiState.step]; it is never saved or logged.
  */
-class ExitViewModel(private val devices: RelayDevices) : ViewModel() {
+class ExitViewModel(
+    private val devices: RelayDevices,
+    private val profiles: ProfileRepository,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(ExitUiState())
     val state: StateFlow<ExitUiState> = _state.asStateFlow()
@@ -60,6 +68,14 @@ class ExitViewModel(private val devices: RelayDevices) : ViewModel() {
     fun dismiss() {
         _state.update { it.copy(step = null, error = null) }
         viewModelScope.launch { refresh() }
+    }
+
+    fun picked(picked: PickedConf?) {
+        when (picked) {
+            null -> Unit
+            is PickedConf.Text -> review(picked.text)
+            else -> open(ExitStep.Pasting(picked.problem()))
+        }
     }
 
     fun review(text: String) {
@@ -101,8 +117,12 @@ class ExitViewModel(private val devices: RelayDevices) : ViewModel() {
     private suspend fun refresh() {
         val board = devices.loadExit().fold(
             onSuccess = { board -> board.exit?.let { ExitBoard.Ready(it) } ?: ExitBoard.Hidden },
-            onFailure = { ExitBoard.Hidden },
+            onFailure = { if (it.isOfflineAdmin()) ExitBoard.Offline else ExitBoard.Hidden },
         )
         _state.update { it.copy(board = board) }
     }
+
+    private suspend fun Throwable.isOfflineAdmin() =
+        (this as? DevicesFailed)?.reason == DevicesFailed.Reason.Offline &&
+            profiles.profile.first()?.relay?.managementAdmin == true
 }

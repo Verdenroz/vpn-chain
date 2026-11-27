@@ -1,6 +1,8 @@
 package com.verdenroz.vpnchain.feature.settings
 
 import androidx.compose.runtime.Composable
+import com.verdenroz.vpnchain.core.config.SecretsEnvParser
+import com.verdenroz.vpnchain.core.model.SavedProfile
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.dp
 
@@ -30,3 +32,10 @@ expect fun rememberQrScanLauncher(onResult: (String?) -> Unit): () -> Unit
 /** Null where there is no share sheet. */
 @Composable
 expect fun rememberTextSharer(): ((String) -> Unit)?
+
+/**
+ * The pairing payload for [profile]: its relay and entry hop. The device exit is
+ * this device's alone, so it is never part of what another device scans.
+ */
+internal fun pairingPayload(profile: SavedProfile): String? =
+    profile.relay?.let { SecretsEnvParser.format(SecretsEnvParser.Parsed(it, profile.wireGuard)) }

@@ -37,13 +37,6 @@ class RoutingRestartTest {
     }
 
     @Test
-    fun `turning the entry hop off moves a live tunnel without stopping it`() {
-        viewModel(TunnelState.Connected).setEntryHopEnabled(false)
-
-        assertEquals(listOf("restart"), log)
-    }
-
-    @Test
     fun `changing the WARP mode moves a live tunnel without stopping it`() {
         viewModel(TunnelState.Connected).setWarpMode(WarpMode.Off)
 

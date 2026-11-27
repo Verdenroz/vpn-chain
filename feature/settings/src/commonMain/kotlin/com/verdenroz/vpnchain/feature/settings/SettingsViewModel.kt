@@ -18,7 +18,6 @@ import com.verdenroz.vpnchain.core.model.ChainProfile
 import com.verdenroz.vpnchain.core.model.DnsFilter
 import com.verdenroz.vpnchain.core.model.SavedProfile
 import com.verdenroz.vpnchain.core.model.ThemeConfig
-import com.verdenroz.vpnchain.core.model.TunnelState
 import com.verdenroz.vpnchain.core.model.UiText
 import com.verdenroz.vpnchain.core.model.UserSettings
 import com.verdenroz.vpnchain.core.model.WarpMode
@@ -163,10 +162,6 @@ class SettingsViewModel(
         settingsRepository.setDnsFilter(filter)
     }
 
-    fun setEntryHopEnabled(enabled: Boolean) = viewModelScope.launch {
-        changeRouting.setEntryHopEnabled(enabled).reportReconnect()
-    }
-
     fun setWarpMode(mode: WarpMode) = viewModelScope.launch {
         changeRouting.setWarpMode(mode).reportReconnect()
     }
@@ -232,8 +227,8 @@ class SettingsViewModel(
         profileRepository.delete(id)
     }
 
-    fun saveProfile(relay: ChainProfile, entryHop: WireGuardEntry?) = viewModelScope.launch {
-        profileRepository.save(relay, entryHop)
+    fun saveProfile(relay: ChainProfile) = viewModelScope.launch {
+        profileRepository.saveRelay(relay)
         _message.value = SettingsMessage.Info(UiText.Resource(Res.string.settings_profile_saved))
     }
 
